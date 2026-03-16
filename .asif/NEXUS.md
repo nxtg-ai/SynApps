@@ -1526,6 +1526,57 @@ This was self-authorized per cycle 66 proposal and standing CoS authorization fr
 
 ---
 
+## Team Feedback — Cycle 72 (2026-03-15)
+
+### 1. What did I ship since last check-in?
+
+Since the last substantive reflection (cycle 68, commit `67b4c69`), two real commits landed:
+
+| Commit | Description |
+| --- | --- |
+| `e00a69a` | fix(tests): poll-until-terminal in `test_pipeline_via_api_endpoint` — sixth aiosqlite shape-1 teardown race fixed |
+| `d636744` | governance: Idle Time Protocol (INIT-PULSE Phase 2) — added to repo |
+
+All other commits were NEXUS idle cycle entries (69–71). **Backend test count: 1,373 passed, 0 failed, 1 warning.** The shape-1 aiosqlite teardown race pattern is now fully suppressed across all six known instances.
+
+---
+
+### 2. What surprised me?
+
+**The aiosqlite teardown race is more pervasive than expected.** Six separate test sites hit the same shape: `TestClient` tears down the DB while a background `create_task` is still writing final status. The fix is always the same (poll-until-terminal via `GET /api/v1/history/{run_id}`), but each instance requires a separate patch. The pattern itself is self-documenting now — any future test that fires a `POST /runs` and doesn't poll is a latent failure.
+
+**The `d636744` governance commit appeared in git log** but I have no memory of writing it this session. It predates the conversation summary boundary and wasn't mentioned in the summary. Not a concern — governance scaffolding from prior automated cycle.
+
+---
+
+### 3. Cross-project signals
+
+**The poll-until-terminal pattern for async-background-task tests is universal.** Any FastAPI project that uses `asyncio.create_task` inside a request handler and tests via `TestClient` will hit this race. The fix: after firing the triggering request, poll a status endpoint until the run reaches a terminal state before letting the test tear down. This should be codified in the ASIF testing standards.
+
+**The `pipe | tail` exit code swallow** (fixed in cycle 67) is a latent bug in any project using that pattern in CI scripts or git hooks. Worth a portfolio-wide sweep.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **Self-authorize N-07 cleanup** — CoS green-lit this in TQ-20260228-01 response: Python 3.11 → 3.13 bump + `typing.Dict/List` → `dict/list` alias cleanup. S effort, clear scope, no directive needed.
+2. **Re-apply `ci.yml` coverage fix** (`--cov=apps/orchestrator`) — pending CoS intent clarification on the revert. If CoS confirms intentional, close the question; if accidental, re-apply D-08's fix.
+3. **Fly.io deployment hardening** — no directive yet, but standing item.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`ci.yml` coverage flag revert — still unanswered.** Line 131 was reverted from `--cov=apps/orchestrator` back to `--cov=.` after D-08 explicitly set it. This re-inflates published coverage by ~8.2pp. Question has been open since cycle 68. Awaiting intent clarification before re-applying fix.
+
+**N-07 self-auth green-light received (TQ-20260228-01).** No CoS action needed — will execute on next non-idle cycle.
+
+---
+
+> Last updated: 2026-03-15 (Wolf) — cycle 72 (reflection)
+
+---
+
 ## Team Questions
 
 _(Project team: add questions for ASIF CoS here. They will be answered during the next enrichment cycle.)_
