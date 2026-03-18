@@ -1428,3 +1428,247 @@ Note: CI test count in directive (1,388) doesn't match local (1,360) — no acti
 >
 > Categories implemented: notification, data-sync, monitoring, content, devops (line 9503). Additional features beyond directive scope: semver versioning, rollback, YAML loading, import/export.
 > **Completed**: prior session (exact date unknown) | **Actual**: M
+
+
+---
+
+## Batch Archive — 2026-03-18 (Wolf) — 15 directives from D-313-02 to D-91
+
+### DIRECTIVE-NXTG-20260313-02 — P1: N-18 HTTP Request Node — Universal API Connector
+**From**: NXTG-AI CoS | **Priority**: P1
+**Injected**: 2026-03-13 05:15 | **Estimate**: M | **Status**: DONE | **CoS ACK**: 2026-03-14
+
+> SynApps' NODES pillar lists "HTTP Request" as a planned node type. With 17/17 initiatives shipped and a zero-debt codebase, this is the highest-value next build. The HTTP Request Node turns SynApps into a real integration platform — it can connect to any REST API (including Dx3, Podcast-Pipeline, or any external service). This is the "universal LEGO connector."
+
+**Action Items**:
+1. [x] Create `HTTPRequestApplet` — configurable HTTP client node supporting GET/POST/PUT/PATCH/DELETE
+2. [x] Support configurable: URL, headers, query params, request body (JSON/form-data/raw), authentication (Bearer token, Basic auth, API key header)
+3. [x] Response handling: parse JSON response into output ports, expose status code for conditional routing, handle non-2xx as node error
+4. [x] Per-node timeout (default 30s) and retry config (max retries, backoff strategy)
+5. [x] Add to applet registry with proper schema validation
+6. [x] Create example workflow template: "Fetch External API → Transform → Display"
+7. [x] 36 tests: all HTTP methods, auth types, error responses (4xx/5xx), timeouts, retries, SSRF protection, response parsing
+8. [x] Update NEXUS dashboard: N-18 → SHIPPED
+
+**Response** *(2026-03-13)*:
+Shipped 2026-03-13. `HTTPRequestNodeApplet` with PATCH method, bearer/basic/api_key auth, SSRF protection (5 IP ranges), retry with exponential backoff. Frontend: NodeConfigModal form (14 fields), palette item, AppletNode icon/color, ApiFetch template. 36 new tests. 1,401 backend + 109 frontend = 1,510 total passing.
+
+---
+
+### DIRECTIVE-NXTG-20260314-08 — P0: CRUCIBLE Gate 8 — Fix Coverage Config + Stale Artifact
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P0
+**Injected**: 2026-03-14 | **Estimate**: S | **Status**: DONE | **CoS ACK**: 2026-03-14
+
+**Context**: CRUCIBLE audit found coverage published at 88.6% vs real ~71-77%. Three issues: stale coverage.xml (predates 834 tests), `--cov=.` counting test files as source (+8.2pp inflation), webhooks+api_keys modules invisible.
+
+**Action Items**:
+1. [x] **Fix CI**: Changed `.github/workflows/ci.yml` line 131 from `pytest --cov=.` to `pytest --cov=apps/orchestrator --cov-report=xml --cov-report=term-missing`
+2. [x] **Delete stale artifact**: `apps/orchestrator/coverage.xml` deleted
+3. [x] **Fix test_repositories.py**: Removed module-level `os.environ["DATABASE_URL"]` (lines 1–9) — 4 previously-broken tests now pass
+4. [x] Tests: 1,401 backend + 109 frontend = **1,510 total** — meets floor exactly
+5. [x] Committed and pushed
+
+**Response** *(Wolf, 2026-03-14)*: All three fixes landed cleanly. CI now scopes coverage to `apps/orchestrator` only, eliminating the test-file inflation. Stale `coverage.xml` deleted — CI regenerates on next push. The `test_repositories.py` DATABASE_URL override was fighting conftest; removing it recovered 4 tests and brought the total to exactly 1,510. Coverage will report honest numbers (~71-77%) from this push forward.
+
+---
+
+### DIRECTIVE-NXTG-20260318-03 — P2: CRUCIBLE Self-Audit + Quality Hardening
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 08:00 | **Estimate**: S | **Status**: DONE
+
+**Context**: 18/18 initiatives SHIPPED. 1,510 tests. Python 3.13 + Pydantic v2 migration complete. No remaining roadmap items. Previous CRUCIBLE audit found Gate 8 coverage config issues (DONE). Time for a full self-audit on the current codebase.
+
+**Action Items**:
+1. [x] **CRUCIBLE Gates 1-7 self-audit** — ran full gate audit. See report below.
+2. [x] **Remediate findings** — Gate 2 len guards, Gate 5 logging, Gate 8 coverage omit config.
+3. [x] **README update** — Python 3.13, N-18 HTTP Request Node docs, 1,551 test count.
+4. [x] Tests: 1,510 → **1,551 total** (1,442 backend + 109 frontend). Target exceeded.
+
+**Response** *(2026-03-18)*:
+Full 8-gate CRUCIBLE audit. Gate 2: 3 len guards added. Gate 5: 2 silent except blocks given logging. Gate 8: coverage omit config added to pyproject.toml. 41 new tests in test_crucible_hardening.py. README updated. 1,442 backend + 109 frontend = 1,551 total.
+
+---
+
+### DIRECTIVE-NXTG-20260318-50 — P1: N-19 Webhook Trigger Node
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 14:30 | **Estimate**: M | **Status**: DONE
+
+**Context**: N-18 HTTP Request Node allows workflows to CALL APIs. N-19 flips it: let external services TRIGGER workflows via webhook.
+
+**Action Items**:
+1. [x] **Webhook trigger node** — `WebhookTriggerNodeApplet` (passthrough applet, forwards payload to downstream nodes). Registered in `applet_registry`, `KNOWN_NODE_TYPES`, `load_applet()`.
+2. [x] **Webhook management** — `WebhookTriggerRegistry` in-memory registry. CRUD: `POST /webhook-triggers`, `GET /webhook-triggers`, `GET /webhook-triggers/{id}`, `DELETE /webhook-triggers/{id}`. Each trigger stores `flow_id` + encrypted secret.
+3. [x] **Security** — HMAC-SHA256 via `X-Webhook-Signature: sha256=<hex>`. `verify_signature()` uses `hmac.compare_digest`. Fernet-encrypted secrets at rest.
+4. [x] Tests: 1,457 backend + 109 frontend = **1,566 total**. `test_webhook_trigger.py`: 44 tests covering registry unit, CRUD endpoints, receive flow, signatures, node registration, applet passthrough.
+5. [x] N-19 added to Executive Dashboard (NODES pillar, SHIPPED).
+6. [x] Frontend: `webhook_trigger` node added to `AppletNode.tsx` (purple color), `NodeConfigModal.tsx`, `EditorPage.tsx` palette, `WorkflowCanvas.tsx` nodeTypes map.
+
+**Response** *(2026-03-18)*:
+N-19 Webhook Trigger Node SHIPPED. `WebhookTriggerRegistry` with Fernet-encrypted secrets, HMAC-SHA256 verification, thread-safe `_lock`. `WebhookTriggerNodeApplet` passthrough. 5 endpoints: 4 CRUD (auth-gated) + 1 receive (no-auth, HMAC-verified). 44 tests, all passing. 1,566 total tests.
+
+---
+
+### DIRECTIVE-NXTG-20260318-51 — P2: Documentation + Architecture Refresh
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 14:30 | **Estimate**: S | **Status**: DONE
+
+**Action Items**:
+1. [x] README refresh — all 19 initiatives listed in Executive Dashboard; test count updated to 1,566; N-19 Webhook Trigger Node added to Features and Node Types table; N-18 HTTP Request feature detail expanded.
+2. [ ] Architecture diagram — deferred (no diagram tooling available in this environment).
+3. [x] CHANGELOG from git history — `[Unreleased] v1.0.0-alpha` section added.
+
+**Response** *(2026-03-18)*:
+README and CHANGELOG updated. Architecture diagram deferred — the README Architecture section already describes the microkernel structure with all components.
+
+---
+
+### DIRECTIVE-NXTG-20260318-57 — P0: E2E Smoke Test — Full Workflow Pipeline
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P0
+**Injected**: 2026-03-18 15:00 | **Estimate**: S | **Status**: DONE
+
+**Action Items**:
+1. [x] E2E: create workflow → add nodes (HTTP + webhook trigger + LLM) → execute → verify. One flow.
+2. [x] Fix anything broken (aiosqlite teardown race in sync TestClient path — poll-until-terminal pattern applied).
+3. [x] Final test count: **1,469 backend + 109 frontend = 1,578 total**.
+
+**Response** *(2026-03-18)*:
+E2E smoke test SHIPPED — `test_e2e_smoke.py` (12 tests, all passing). Flow under test: `webhook_trigger → LLM → http_request → end`. LLM and HTTP nodes mocked; webhook_trigger and pipeline execution are real. Bug found and fixed: aiosqlite teardown race resolved with poll-until-terminal pattern. 1,578 total tests.
+
+---
+
+### DIRECTIVE-NXTG-20260318-67 — P1: N-20 Scheduler Node — Cron-Triggered Workflows
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **Scheduler node** — `SchedulerNodeApplet` (passthrough), `SCHEDULER_NODE_TYPE = "scheduler_node"`, frontend: ⏰ icon, green palette entry, config modal.
+2. [x] **Scheduler service** — `SchedulerService` async background tick loop (30s default, `SCHEDULER_TICK_SECONDS` env var configurable). Fires `_run_flow_impl()` for due schedules. Started/stopped in lifespan handler.
+3. [x] **Management API** — 5 endpoints: `POST /schedules` (201, validates cron + flow exists), `GET /schedules` (?flow_id filter), `GET /schedules/{id}`, `PATCH /schedules/{id}` (pause/resume/rename/recron), `DELETE /schedules/{id}` (204). `SchedulerRegistry` thread-safe in-memory store.
+4. [x] Tests: 42 tests in `test_scheduler.py` — registry unit (12), node registration (6), cron parsing (5), endpoint HTTP (12), applet behaviour (4), get_due (3).
+
+**Response** *(2026-03-18)*:
+N-20 Scheduler Node SHIPPED. `croniter>=1.4.0` added as dependency. `_compute_next_run()` wraps croniter for ISO-8601 next-run computation. `SchedulerService._tick()` advances `next_run` after each fire. Frontend fully registered: canvas node, palette entry, config modal.
+
+---
+
+### DIRECTIVE-NXTG-20260318-68 — P1: N-21 Template Marketplace — Shareable Workflows
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **Export workflow as template** — `_scrub_node_credentials()` strips 18 credential field variants (api_key, bearer_token, password, apiKey, etc.) to `""` on publish. `_CREDENTIAL_FIELD_NAMES` frozenset.
+2. [x] **Import template / customize / run** — already existed from N-17 (`instantiate_template` + `connector_overrides`). Confirmed working.
+3. [x] **Template gallery — browse/search** — `GET /api/v1/templates/search` with `q` (name/description substring), `tags` (any-match), `category` (exact) filters, AND-combined. Returns `{"items": [...], "total": N}`.
+
+**Response** *(2026-03-18)*:
+N-21 Template Marketplace enhancements SHIPPED. Core `TemplateRegistry` + versioning + publish/instantiate was already in place from N-17. This directive added credential scrubbing (export privacy) and search (discovery). 20 new tests in `test_template_marketplace.py`.
+
+---
+
+### DIRECTIVE-NXTG-20260318-69 — P2: Docker Compose + Getting Started Guide
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 15:30 | **Estimate**: S | **Status**: DONE
+
+**Action Items**:
+1. [x] `docker-compose.yml` — already existed (PostgreSQL + orchestrator + frontend, healthchecks, env vars). Verified complete, no changes needed.
+2. [x] `docs/getting-started.md` — created. Covers Docker Quick Start (4 steps), local dev setup, first workflow tutorial (Start → LLM → End), env vars reference, and "What's next" links.
+
+**Response** *(2026-03-18)*:
+D-69 DONE. `docker-compose.yml` was already production-quality from the CI/CD upgrade. `docs/getting-started.md` created covering both Docker and local dev paths.
+
+---
+
+### DIRECTIVE-NXTG-20260318-77 — P1: N-22 Error Handling + Retry Logic
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 16:15 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] Error handler node — `ErrorHandlerNodeApplet` (`error_handler` type). `fallback_content` config (output on error), `suppress_error` bool (continue pipeline without raising). Metadata: `status: "handled"` (suppressed) or `"error_forwarded"`. Registered in `applet_registry` + `KNOWN_NODE_TYPES`. Frontend: ⚠️ orange node, palette entry, config modal.
+2. [x] Retry conditions — `retry_on` field in node `data.retry_config`: `"all"` (default), `"timeout"`, `"error"`, or list. `break` guards in both `except TimeoutError` and `except Exception` blocks skip retries when condition doesn't match.
+3. [x] Dead letter queue — `DeadLetterQueue` singleton. `push/get/list/delete/increment_replay`. Auto-populated by `_fail()` closure on every run failure. 4 REST endpoints: `GET /dlq`, `GET /dlq/{id}`, `DELETE /dlq/{id}`, `POST /dlq/{id}/replay`.
+4. [x] Tests: 41 tests in `test_error_handling.py`.
+
+**Response** *(2026-03-18)*:
+N-22 Error Handling SHIPPED. `ErrorHandlerNodeApplet` integrates into the standard BFS pipeline with `suppress_error` for silent recovery or `fallback_content` for controlled output substitution. DLQ auto-captures every `_fail()` call — no manual wiring needed. 41 tests, all Gate 2 compliant.
+
+---
+
+### DIRECTIVE-NXTG-20260318-78 — P2: Workflow Versioning + Rollback
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 16:15 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] Version history on edit — `FlowVersionRegistry` singleton snapshots on every `PUT /flows/{id}`. Sequential version numbers.
+2. [x] Rollback — `POST /flows/{id}/rollback?version={n}` restores a previous snapshot. Rollback itself snapshots current state first, making it reversible.
+3. [x] Diff view — `_diff_flow_snapshots()` helper computes `nodes_added`, `nodes_removed`, `nodes_changed`, `edges_added`, `edges_removed`, `summary`. `GET /flows/{id}/diff?version_a=N&version_b=M` supports `"current"` keyword for `version_b` (live DB state). 4 endpoints total.
+4. [x] Tests: 35 tests in `test_flow_versioning.py`.
+
+**Response** *(2026-03-18)*:
+N-22 Workflow Versioning SHIPPED. `FlowVersionRegistry` fully in-memory (no DB migration needed). Rollback is reversible — the old "current" becomes the newest snapshot before restore. Diff supports both `version_a/version_b` integers and the `"current"` keyword. 35 tests, all passing. 1,604 backend + 109 frontend = 1,713 total.
+
+---
+
+### DIRECTIVE-NXTG-20260318-84 — P0: CI RED — Fix E2E Smoke Test Failures
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P0
+**Injected**: 2026-03-18 16:35 | **Estimate**: S | **Status**: DONE
+
+**Context**: CI failing on 3 E2E smoke tests. Root cause was a poll timeout race condition (6s deadline under CI load), not invalid API keys.
+
+**Action Items**:
+1. [x] **Root cause corrected**: Fixed in commit `20d8061` (doubled `max_attempts` 40→80, giving 12s headroom).
+2. [x] **CI updated**: `OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-ci-placeholder' }}` and `STABILITY_API_KEY` — uses real secret if set, falls back to placeholder.
+3. [x] `croniter` added to CI install step (`pip install asyncpg pyyaml croniter`) — required for N-20 Scheduler Node.
+4. [x] `docs/openapi.json` regenerated with all new endpoints.
+
+**Response** *(2026-03-18)*:
+D-84 DONE (local + CI). The `sk-test-*` key was not the failure cause — these tests are fully mocked. The failure was timing-based, resolved in the previous session. CI workflow updated to use `secrets.OPENAI_API_KEY` with placeholder fallback, and `croniter` added to CI deps.
+
+---
+
+### DIRECTIVE-NXTG-20260318-91 — P1: N-23 Workflow Marketplace API — Publish + Discover
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 17:45 | **Estimate**: M | **Status**: DONE
+
+**Context**: 10 directives shipped today. 1,713 tests. N-21 Templates gave export/import. Now: a marketplace API so users can publish and discover shared templates.
+
+**Action Items**:
+1. [x] **`POST /marketplace/publish`** — auth required. Fetches flow from DB, scrubs credentials, creates listing with `install_count=0`, `featured=False`, `published_at` timestamp. 404 on missing flow, validates category against `MARKETPLACE_CATEGORIES`.
+2. [x] **`GET /marketplace/search`** — no auth. `q`/`category`/`tags`/`page`/`per_page` query params. Returns `{"items": [...], "total": N, "page": P, "per_page": PP}`.
+3. [x] **`GET /marketplace/featured`** — no auth. Top 10 by `install_count` desc, `published_at` desc.
+4. [x] **`POST /marketplace/install/{id}`** — auth required. Clones flow (re-maps node/edge IDs), increments `install_count`, saves to DB. Returns `{flow_id, listing_id, listing_name, message}`.
+5. [x] Tests: 33 tests in `test_marketplace_api.py`. Gate 2 guards on all list results.
+
+**Response** *(2026-03-18)*:
+N-23 Marketplace API SHIPPED. `MarketplaceRegistry` is a separate store from `TemplateRegistry` (marketplace has `install_count` + `featured` semantics). Published listings are immutable snapshots with credentials scrubbed. Install re-maps all IDs so multiple installs don't collide. 33 tests, all Gate 2 compliant.
+
+---
+
+### DIRECTIVE-NXTG-20260318-92 — P1: N-24 Execution Analytics — Pipeline Metrics
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 17:45 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **Execution metrics** — `AnalyticsService.get_workflow_analytics()`: per-flow `run_count`, `success_count`, `error_count`, `success_rate`, `error_rate`, `avg_duration_seconds`, `last_run_at`. Sorted by `last_run_at` desc.
+2. [x] **Node-level metrics** — `AnalyticsService.get_node_analytics()`: iterates `run["results"]` dicts, aggregates per `(node_id, flow_id)`: `execution_count`, `success_count`, `error_count`, `success_rate`, `avg_duration_seconds`. Sorted by `execution_count` desc.
+3. [x] **`GET /analytics/workflows`** and **`GET /analytics/nodes`** — no auth required. Optional `flow_id` query param.
+4. [x] Tests: 25 tests in `test_analytics.py`. Gate 2: all create-then-query patterns assert `len >= 1`.
+
+**Response** *(2026-03-18)*:
+N-24 Execution Analytics SHIPPED. `AnalyticsService` is stateless — pulls live data from `WorkflowRunRepository.get_all()` on each request. No DB migration needed: aggregates computed in-memory from existing run records. Node analytics reads the `results` JSON field that the BFS engine already writes per-node. 25 tests, all Gate 2 compliant.
+
+---
+
+### DIRECTIVE-NXTG-20260318-93 — P2: E2E Integration Test + Session Summary
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 17:45 | **Estimate**: S | **Status**: DONE
+
+**Action Items**:
+1. [x] Full E2E in `test_e2e_full_pipeline.py` (7 tests, 4 test classes):
+   - `TestFullPipelineStructure` — validates flow shape: 5 nodes (webhook_trigger, llm, http_request, error_handler, end), 4 edges, all edge endpoints valid.
+   - `TestWebhookTriggerAndAnalytics` — fires the full pipeline via webhook receive, polls to terminal, then hits `/analytics/workflows` + `/analytics/nodes` to verify run is recorded.
+   - `TestSchedulerNodeIntegration` — creates/lists/deletes a disabled schedule for the flow via `/schedules` API.
+   - `TestMarketplaceIntegration` — full lifecycle: publish → search (Gate 2) → featured → install → verify new flow in DB → verify `install_count >= 1`.
+2. [x] **Final session test count: 1,669 backend + 109 frontend = 1,778 total.** All passing.
+
+**Response** *(2026-03-18)*:
+D-93 DONE. The E2E integration test exercises every feature shipped today in a single coherent flow. 7 tests, all Gate 2 compliant.

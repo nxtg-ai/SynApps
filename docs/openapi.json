@@ -5237,7 +5237,7 @@
           "Runs"
         ],
         "summary": "Create Flow Run",
-        "description": "RESTful run creation endpoint for a flow.",
+        "description": "RESTful run creation endpoint for a flow.\n\nPass ``?debug=true`` to block until the run reaches a terminal state and\nreturn the full per-node execution log inline with the response.",
         "operationId": "create_flow_run_api_v1_flows__flow_id__runs_post",
         "parameters": [
           {
@@ -5248,6 +5248,18 @@
               "type": "string",
               "title": "Flow Id"
             }
+          },
+          {
+            "name": "debug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "When true, poll until terminal then return execution logs inline",
+              "default": false,
+              "title": "Debug"
+            },
+            "description": "When true, poll until terminal then return execution logs inline"
           },
           {
             "name": "Authorization",
@@ -5669,6 +5681,80 @@
               "title": "Other Run Id"
             },
             "description": "Run ID to compare against"
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/executions/{run_id}/logs": {
+      "get": {
+        "tags": [
+          "v1",
+          "Executions"
+        ],
+        "summary": "Get Execution Logs",
+        "description": "Fetch the full per-node execution log for a run.\n\nReturns an ordered list of log entries, one per event:\n``node_start``, ``node_retry``, ``node_success``, ``node_fallback``, ``node_error``.\nReturns 404 if the run has no recorded logs.",
+        "operationId": "get_execution_logs_api_v1_executions__run_id__logs_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
           },
           {
             "name": "Authorization",

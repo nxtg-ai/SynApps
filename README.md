@@ -102,6 +102,38 @@ SynApps follows a microkernel architecture:
 | **ForEach** | Iterate over collections |
 | **Memory** | Store/retrieve context using SQLite FTS or ChromaDB vector store |
 
+## Initiatives
+
+All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
+
+| # | Initiative | Pillar | Description |
+|---|-----------|--------|-------------|
+| N-01 | Visual Workflow Editor MVP | VISUAL | React Flow canvas with drag-and-drop node creation, WebSocket execution feedback, status indicators |
+| N-02 | Writer Applet (GPT-4o) | NODES | GPT-4o text generation with system prompt configuration |
+| N-03 | Artist Applet (Stable Diffusion) | NODES | Stable Diffusion image generation with model selection |
+| N-04 | Memory Applet (SQLite FTS + ChromaDB) | NODES | Persistent memory with dual backends: SQLite FTS5 full-text search and ChromaDB vector store |
+| N-05 | Sequential Execution Engine | EXECUTION | Single-threaded node execution, basic error handling — foundation for parallel engine |
+| N-06 | Database Persistence | STACK | SQLAlchemy async ORM, Alembic migrations, workflow/node/edge/run storage |
+| N-07 | Backend Stack Upgrade | STACK | Python 3.13, FastAPI 0.115+, Pydantic v2, SQLAlchemy 2.0 — full modernization from Python 3.9/Pydantic v1 |
+| N-08 | Frontend Stack Migration | STACK | CRA → Vite 6, CSS modules → Tailwind 4 + shadcn/ui, Zustand state, TypeScript strict, @xyflow/react v12 |
+| N-09 | Universal LLM Node | NODES | OpenAI, Anthropic, Google, Ollama, Custom endpoints — per-node provider/model selection, streaming via SSE |
+| N-10 | Parallel Execution Engine | EXECUTION | Topological sort with parallel group detection, fan-out/fan-in, configurable concurrency limits |
+| N-11 | Conditional Routing (If/Else) | EXECUTION | If/Else node with equals/contains/regex/json_path operations, negate flag, template expression evaluation |
+| N-12 | JWT Authentication | SECURITY | Email/password + refresh tokens, bcrypt password hashing, Fernet-encrypted API key storage, rate limiting |
+| N-13 | Code Node with Sandboxing | NODES | Python/JavaScript execution in subprocess with resource limits, filesystem restrictions, timeout enforcement |
+| N-14 | Execution Visualization | VISUAL | CSS-driven node glow, animated edge particles, progress spinners, success/error badges, mini-output preview |
+| N-15 | Comprehensive Test Suite | STACK | pytest + pytest-asyncio (backend), Vitest + React Testing Library (frontend), Playwright E2E, GitHub Actions CI |
+| N-16 | 2Brain Dogfood Template | DOGFOOD | "2Brain Inbox Triage" template: Start → LLM classifier → Code structurer → Memory store → End |
+| N-17 | Workflow Export/Import + UX Polish | VISUAL | Export/import workflows as portable JSON, run button UX fix, version strings updated to v1.0 |
+| N-18 | HTTP Request Node | NODES | GET/POST/PUT/PATCH/DELETE, bearer/basic/API-key auth, SSRF protection, retry with exponential backoff |
+| N-19 | Webhook Trigger Node | NODES | Inbound event trigger — unique URL per trigger, HMAC-SHA256 signature verification, Fernet-encrypted secrets |
+| N-20 | Scheduler Node | NODES | Cron-triggered workflows — 5-field cron expression, pause/resume, 30s tick loop via croniter |
+| N-21 | Template Marketplace Enhancements | PLATFORM | Credential scrubbing on export (18 field variants), `GET /templates/search` with q/tags/category filters |
+| N-22 | Error Handling + Retry Logic + Workflow Versioning | EXECUTION | ErrorHandlerNode, DeadLetterQueue, retry_on conditions, FlowVersionRegistry snapshots, rollback, diff |
+| N-23 | Workflow Marketplace API | PLATFORM | Publish, search (paginated), featured listings, install with ID remapping — `POST/GET /marketplace/...` |
+| N-24 | Execution Analytics | PLATFORM | Per-workflow and per-node metrics — run count, success/error rates, avg duration — `GET /analytics/...` |
+| N-25 | Execution Logs + Debug Console | PLATFORM | Structured per-node logs (input, output, duration, errors, retry attempts), `GET /executions/:id/logs`, debug mode |
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -134,7 +166,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,778 tests** (1,669 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,797 tests** (1,688 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 

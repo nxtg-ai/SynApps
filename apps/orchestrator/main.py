@@ -7796,6 +7796,54 @@ dead_letter_queue = DeadLetterQueue()
 
 
 # ---------------------------------------------------------------------------
+# Execution Log Store — Structured per-node execution logs (D-108 / N-25)
+# ---------------------------------------------------------------------------
+
+
+class ExecutionLogStore:
+    """Append-only per-run execution log store.
+
+    Captures structured log entries during flow execution — one entry per node
+    event (start, retry, success, error, fallback).  Keyed by run_id.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._logs: dict[str, list[dict[str, Any]]] = {}
+
+    def append(self, run_id: str, entry: dict[str, Any]) -> None:
+        """Append a log entry for *run_id*."""
+        with self._lock:
+            self._logs.setdefault(run_id, []).append(entry)
+
+    def get(self, run_id: str) -> list[dict[str, Any]]:
+        """Return all log entries for *run_id* (empty list if none)."""
+        with self._lock:
+            return list(self._logs.get(run_id, []))
+
+    def delete(self, run_id: str) -> bool:
+        """Remove the log for *run_id*. Returns True if it existed."""
+        with self._lock:
+            return self._logs.pop(run_id, None) is not None
+
+    def has(self, run_id: str) -> bool:
+        with self._lock:
+            return run_id in self._logs
+
+    def size(self) -> int:
+        with self._lock:
+            return len(self._logs)
+
+    def reset(self) -> None:
+        """Clear all logs (test teardown)."""
+        with self._lock:
+            self._logs.clear()
+
+
+execution_log_store = ExecutionLogStore()
+
+
+# ---------------------------------------------------------------------------
 # Flow Version Registry — Snapshot history for workflow rollback
 # ---------------------------------------------------------------------------
 
@@ -8847,6 +8895,18 @@ class Orchestrator:
                     "ended_at": None,
                     "duration_ms": None,
                 }
+                execution_log_store.append(run_id, {
+                    "timestamp": node_started_at,
+                    "run_id": run_id,
+                    "node_id": node_id,
+                    "node_type": node.get("type"),
+                    "event": "node_start",
+                    "attempt": 1,
+                    "input": None,
+                    "output": None,
+                    "error": None,
+                    "duration_ms": None,
+                })
 
                 # -- merge gate: defer if not all inputs arrived --
                 if node_type == MERGE_NODE_TYPE:
@@ -8912,6 +8972,18 @@ class Orchestrator:
                     if isinstance(trace_nodes, list):
                         trace_nodes.append(node_trace)
                     _ensure_trace_in_context_results()
+                    execution_log_store.append(run_id, {
+                        "timestamp": node_trace["ended_at"],
+                        "run_id": run_id,
+                        "node_id": node_id,
+                        "node_type": node_trace["node_type"],
+                        "event": "node_success",
+                        "attempt": 1,
+                        "input": node_trace["input"],
+                        "output": node_trace["output"],
+                        "error": None,
+                        "duration_ms": node_trace["duration_ms"],
+                    })
 
                     for tid in next_targets:
                         scheduled_nodes.add(tid)
@@ -8956,6 +9028,18 @@ class Orchestrator:
                             logger.info(
                                 f"Retrying node {node_id} (attempt {attempts}/{max_retries}) after {wait_time}s"
                             )
+                            execution_log_store.append(run_id, {
+                                "timestamp": time.time(),
+                                "run_id": run_id,
+                                "node_id": node_id,
+                                "node_type": node_trace["node_type"],
+                                "event": "node_retry",
+                                "attempt": attempts + 1,
+                                "input": None,
+                                "output": None,
+                                "error": node_trace["errors"][-1] if node_trace.get("errors") else None,
+                                "duration_ms": None,
+                            })
                             await asyncio.sleep(wait_time)
                         attempt_number = attempts + 1
 
@@ -9037,6 +9121,18 @@ class Orchestrator:
                         trace_nodes = execution_trace.setdefault("nodes", [])
                         if isinstance(trace_nodes, list):
                             trace_nodes.append(node_trace)
+                        execution_log_store.append(run_id, {
+                            "timestamp": node_ended_at,
+                            "run_id": run_id,
+                            "node_id": node_id,
+                            "node_type": node_trace["node_type"],
+                            "event": "node_success",
+                            "attempt": attempt_number,
+                            "input": node_trace.get("input"),
+                            "output": node_trace.get("output"),
+                            "error": None,
+                            "duration_ms": node_trace.get("duration_ms"),
+                        })
                         _ensure_trace_in_context_results()
                         await emit_event("step_completed", {
                             "run_id": run_id, "node_id": node_id,
@@ -9117,6 +9213,18 @@ class Orchestrator:
                         trace_nodes = execution_trace.setdefault("nodes", [])
                         if isinstance(trace_nodes, list):
                             trace_nodes.append(node_trace)
+                        execution_log_store.append(run_id, {
+                            "timestamp": node_ended_at,
+                            "run_id": run_id,
+                            "node_id": node_id,
+                            "node_type": node_trace["node_type"],
+                            "event": "node_fallback",
+                            "attempt": attempts,
+                            "input": node_trace.get("input"),
+                            "output": node_trace.get("output"),
+                            "error": error_payload,
+                            "duration_ms": node_trace.get("duration_ms"),
+                        })
                         _append_trace_error({"node_id": node_id, "error": error_payload})
                         _ensure_trace_in_context_results()
                         if node_id not in memory_completed_applets:
@@ -9150,6 +9258,18 @@ class Orchestrator:
                     trace_nodes = execution_trace.setdefault("nodes", [])
                     if isinstance(trace_nodes, list):
                         trace_nodes.append(node_trace)
+                    execution_log_store.append(run_id, {
+                        "timestamp": node_ended_at,
+                        "run_id": run_id,
+                        "node_id": node_id,
+                        "node_type": node_trace["node_type"],
+                        "event": "node_error",
+                        "attempt": attempts,
+                        "input": node_trace.get("input"),
+                        "output": None,
+                        "error": error_payload,
+                        "duration_ms": node_trace.get("duration_ms"),
+                    })
                     _ensure_trace_in_context_results()
                     err_msg = (
                         f"Error in applet '{node['type']}': "
@@ -11651,10 +11771,32 @@ async def _run_flow_impl(
 async def create_flow_run(
     flow_id: str,
     body: RunFlowRequest,
+    debug: bool = Query(False, description="When true, poll until terminal then return execution logs inline"),
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
-    """RESTful run creation endpoint for a flow."""
-    return await _run_flow_impl(flow_id, body, current_user)
+    """RESTful run creation endpoint for a flow.
+
+    Pass ``?debug=true`` to block until the run reaches a terminal state and
+    return the full per-node execution log inline with the response.
+    """
+    result = await _run_flow_impl(flow_id, body, current_user)
+    if not debug:
+        return result
+    run_id = result["run_id"]
+    # Poll until terminal (max 60 s)
+    deadline = time.time() + 60.0
+    run = None
+    while time.time() < deadline:
+        await asyncio.sleep(0.1)
+        run = await WorkflowRunRepository.get_by_run_id(run_id)
+        if run and run.get("status") in ("success", "error"):
+            break
+    logs = execution_log_store.get(run_id)
+    return {
+        "run_id": run_id,
+        "status": run.get("status") if run else "unknown",
+        "logs": logs,
+    }
 
 
 @v1.post("/flows/{flow_id}/run", deprecated=True, tags=["Runs"])
@@ -11723,6 +11865,23 @@ async def get_run_diff(
     diff_payload = _build_run_diff(base_run, compare_run)
     diff_payload["same_flow"] = base_run.get("flow_id") == compare_run.get("flow_id")
     return diff_payload
+
+
+@v1.get("/executions/{run_id}/logs", tags=["Executions"])
+async def get_execution_logs(
+    run_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Fetch the full per-node execution log for a run.
+
+    Returns an ordered list of log entries, one per event:
+    ``node_start``, ``node_retry``, ``node_success``, ``node_fallback``, ``node_error``.
+    Returns 404 if the run has no recorded logs.
+    """
+    if not execution_log_store.has(run_id):
+        raise HTTPException(status_code=404, detail="No execution logs found for this run")
+    logs = execution_log_store.get(run_id)
+    return {"run_id": run_id, "count": len(logs), "logs": logs}
 
 
 @v1.post("/runs/{run_id}/rerun", status_code=202, tags=["Runs"])
