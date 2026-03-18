@@ -251,6 +251,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-108 — P1: N-25 Execution Logs + Debug Console
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 19:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Structured execution logs** — per-node: input, output, duration, errors, retry attempts. Stored per-run.
+2. [ ] **`GET /executions/:id/logs`** — fetch full execution trace.
+3. [ ] **Debug mode** — `?debug=true` on execute endpoint returns logs inline with results.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-109.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-109 — P2: Final NEXUS Archive + README Showcase
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 19:15 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Archive DONE directives. 2. [ ] README — all 25 initiatives. 3. [ ] Final test count (1,778+).
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-91 — P1: N-23 Workflow Marketplace API — Publish + Discover
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 17:45 | **Estimate**: M | **Status**: DONE
