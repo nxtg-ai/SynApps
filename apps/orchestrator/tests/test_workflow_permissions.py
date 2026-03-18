@@ -6,6 +6,7 @@ Tests for WorkflowPermissionStore, _check_flow_permission, and all permission en
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
@@ -13,7 +14,6 @@ from apps.orchestrator.main import (
     app,
     workflow_permission_store,
 )
-from fastapi import HTTPException
 
 # ---------------------------------------------------------------------------
 # Fixtures
