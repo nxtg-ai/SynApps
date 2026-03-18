@@ -9,7 +9,6 @@ Covers:
   - HTTP node: edge-case config and response handling
   - LLM provider registry structure invariants
 """
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,7 +22,6 @@ from apps.orchestrator.main import (
     _get_fernet_encrypt,
     applet_registry,
 )
-
 
 # ============================================================
 # Gate 2: registry and catalog non-empty invariants

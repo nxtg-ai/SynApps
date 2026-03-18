@@ -549,6 +549,25 @@ class ${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}Applet(BaseApplet):
                     <span className="node-icon">🌐</span>
                     <span className="node-label">HTTP Request</span>
                   </div>
+                  <div
+                    className="node-item webhook_trigger"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        'application/reactflow',
+                        JSON.stringify({
+                          type: 'webhook_trigger',
+                          data: {
+                            label: 'Webhook Trigger',
+                          },
+                        })
+                      );
+                    }}
+                    onClick={() => handleNodeClick(generateId(), 'webhook_trigger')}
+                  >
+                    <span className="node-icon">🔗</span>
+                    <span className="node-label">Webhook Trigger</span>
+                  </div>
                 </div>
               </div>
               

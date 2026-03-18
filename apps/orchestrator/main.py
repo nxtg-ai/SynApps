@@ -194,6 +194,7 @@ TRANSFORM_NODE_TYPE = "transform"
 IF_ELSE_NODE_TYPE = "if_else"
 MERGE_NODE_TYPE = "merge"
 FOR_EACH_NODE_TYPE = "for_each"
+WEBHOOK_TRIGGER_NODE_TYPE = "webhook_trigger"
 ENGINE_MAX_CONCURRENCY = int(os.environ.get("ENGINE_MAX_CONCURRENCY", "10"))
 TRACE_RESULTS_KEY = "__trace__"
 TRACE_SCHEMA_VERSION = 1
@@ -1428,6 +1429,121 @@ async def emit_event(event: str, data: dict[str, Any]) -> None:
     """Fire-and-forget delivery to all webhooks registered for *event*."""
     await emit_webhook_event(event, data, webhook_registry)
 
+
+# ============================================================
+# Webhook Trigger Registry (N-19 — inbound webhook triggers)
+# ============================================================
+
+class WebhookTriggerRegistry:
+    """In-memory registry for inbound webhook trigger endpoints (N-19).
+
+    Each trigger is tied to a specific flow.  When the unique ``/receive``
+    URL is called with a POST, the flow is started with the request body as
+    its input.  An optional HMAC-SHA256 secret can be configured to verify
+    that the request originates from a trusted sender.
+    """
+
+    def __init__(self, encrypt_fn=None, decrypt_fn=None) -> None:
+        self._lock = threading.Lock()
+        # trigger_id -> stored record (raw secret never stored; only encrypted)
+        self._triggers: dict[str, dict[str, Any]] = {}
+        # Optional Fernet helpers (injected after app startup)
+        self._encrypt: Any = encrypt_fn or (lambda s: s)
+        self._decrypt: Any = decrypt_fn or (lambda s: s)
+
+    # ------------------------------------------------------------------
+    # CRUD helpers
+    # ------------------------------------------------------------------
+
+    def register(self, flow_id: str, secret: str | None = None) -> dict[str, Any]:
+        """Register a new inbound webhook trigger for *flow_id*."""
+        trigger_id = str(uuid.uuid4())
+        enc_secret: str | None = None
+        if secret:
+            enc_secret = self._encrypt(secret)
+        record: dict[str, Any] = {
+            "id": trigger_id,
+            "flow_id": flow_id,
+            "_enc_secret": enc_secret,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        with self._lock:
+            self._triggers[trigger_id] = record
+        return self._public_view(record)
+
+    def list_triggers(self, flow_id: str | None = None) -> list[dict[str, Any]]:
+        """Return all triggers, optionally filtered by *flow_id*."""
+        with self._lock:
+            records = list(self._triggers.values())
+        if flow_id:
+            records = [r for r in records if r["flow_id"] == flow_id]
+        return [self._public_view(r) for r in records]
+
+    def get(self, trigger_id: str) -> dict[str, Any] | None:
+        """Return a single trigger by ID, or None if not found."""
+        with self._lock:
+            record = self._triggers.get(trigger_id)
+        return self._public_view(record) if record else None
+
+    def delete(self, trigger_id: str) -> bool:
+        """Remove a trigger.  Returns True if it existed."""
+        with self._lock:
+            return self._triggers.pop(trigger_id, None) is not None
+
+    # ------------------------------------------------------------------
+    # Signature verification
+    # ------------------------------------------------------------------
+
+    def verify_signature(
+        self, trigger_id: str, body_bytes: bytes, sig_header: str | None
+    ) -> bool:
+        """Verify the HMAC-SHA256 ``X-Webhook-Signature`` header.
+
+        Returns True if:
+        - the trigger has no secret configured (no verification required), OR
+        - the header matches ``sha256=<hex_digest>`` computed with the stored secret.
+
+        Returns False on any mismatch or if a secret is required but no header
+        was supplied.
+        """
+        with self._lock:
+            record = self._triggers.get(trigger_id)
+        if not record:
+            return False
+        enc_secret = record.get("_enc_secret")
+        if enc_secret is None:
+            # No secret configured — accept all
+            return True
+        if not sig_header:
+            return False
+        plain_secret = self._decrypt(enc_secret)
+        if not plain_secret:
+            return False
+        expected = "sha256=" + hmac.new(
+            plain_secret.encode("utf-8"), body_bytes, hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, sig_header)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _public_view(record: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of *record* with the encrypted secret stripped."""
+        return {k: v for k, v in record.items() if k != "_enc_secret"}
+
+
+# Global inbound webhook trigger registry (Fernet re-injected at startup)
+webhook_trigger_registry = WebhookTriggerRegistry()
+
+
+def _init_webhook_trigger_registry() -> None:
+    """Re-initialise webhook_trigger_registry with Fernet encryption."""
+    global webhook_trigger_registry
+    enc, dec = _get_fernet_encrypt()
+    webhook_trigger_registry = WebhookTriggerRegistry(encrypt_fn=enc, decrypt_fn=dec)
+
 # ============================================================
 # Async Task Queue
 # ============================================================
@@ -2633,6 +2749,7 @@ FERNET_CIPHER = Fernet(_derive_fernet_key())
 
 # Now that FERNET_CIPHER is ready, re-init the webhook manager with encryption.
 _init_webhook_manager()
+_init_webhook_trigger_registry()
 
 
 def _encrypt_api_key(plain_value: str) -> str:
@@ -7337,6 +7454,39 @@ class ForEachNodeApplet(BaseApplet):
         return list(await asyncio.gather(*tasks))
 
 
+# ============================================================
+# Webhook Trigger Node Applet (N-19)
+# ============================================================
+
+class WebhookTriggerNodeApplet(BaseApplet):
+    """Inbound webhook trigger — starts a workflow when a unique URL is POSTed.
+
+    The applet itself is a passthrough: during normal flow execution it
+    simply forwards its input context so the downstream nodes receive the
+    webhook payload that was submitted via
+    ``POST /api/v1/webhook-triggers/{id}/receive``.
+    """
+
+    VERSION = "1.0.0"
+    CAPABILITIES = [
+        "webhook-trigger",
+        "hmac-sha256-verification",
+        "flow-start",
+    ]
+
+    async def on_message(self, message: AppletMessage) -> AppletMessage:
+        """Pass through — the trigger fires the flow from the HTTP endpoint."""
+        return AppletMessage(
+            content=message.content,
+            context=message.context,
+            metadata={
+                **message.metadata,
+                "applet": WEBHOOK_TRIGGER_NODE_TYPE,
+                "status": "triggered",
+            },
+        )
+
+
 applet_registry["llm"] = LLMNodeApplet
 applet_registry[IMAGE_NODE_TYPE] = ImageGenNodeApplet
 applet_registry[MEMORY_NODE_TYPE] = MemoryNodeApplet
@@ -7346,6 +7496,7 @@ applet_registry[TRANSFORM_NODE_TYPE] = TransformNodeApplet
 applet_registry[IF_ELSE_NODE_TYPE] = IfElseNodeApplet
 applet_registry[MERGE_NODE_TYPE] = MergeNodeApplet
 applet_registry[FOR_EACH_NODE_TYPE] = ForEachNodeApplet
+applet_registry[WEBHOOK_TRIGGER_NODE_TYPE] = WebhookTriggerNodeApplet
 
 
 # ============================================================
@@ -7438,6 +7589,15 @@ class Orchestrator:
         }:
             applet_registry[FOR_EACH_NODE_TYPE] = ForEachNodeApplet
             return ForEachNodeApplet()
+
+        if normalized_type in {
+            WEBHOOK_TRIGGER_NODE_TYPE,
+            "webhook-trigger",
+            "webhook_trigger_node",
+            "webhook-trigger-node",
+        }:
+            applet_registry[WEBHOOK_TRIGGER_NODE_TYPE] = WebhookTriggerNodeApplet
+            return WebhookTriggerNodeApplet()
 
         try:
             module_path = f"apps.applets.{normalized_type}.applet"
@@ -9023,7 +9183,7 @@ async def probe_single_connector(
 
 KNOWN_NODE_TYPES = frozenset({
     "start", "end", "llm", "image", "image_gen", "memory", "http_request",
-    "code", "transform", "if_else", "merge", "for_each", "custom",
+    "code", "transform", "if_else", "merge", "for_each", "webhook_trigger", "custom",
 })
 
 
@@ -9183,6 +9343,17 @@ async def validate_template_endpoint(
 # Webhook CRUD endpoints
 # ---------------------------------------------------------------------------
 
+class RegisterWebhookTriggerRequest(StrictRequestModel):
+    """Request body for registering an inbound webhook trigger (N-19)."""
+
+    flow_id: str = Field(..., min_length=1, description="Flow to trigger on receipt")
+    secret: str | None = Field(
+        None,
+        description="Optional HMAC-SHA256 signing secret. "
+        "When set, callers must send X-Webhook-Signature: sha256=<hex>",
+    )
+
+
 class RegisterWebhookRequest(StrictRequestModel):
     """Request body for webhook registration."""
     url: str = Field(..., min_length=1, description="Delivery URL")
@@ -9230,6 +9401,115 @@ async def delete_webhook(
     if not webhook_registry.delete(hook_id):
         raise HTTPException(status_code=404, detail=f"Webhook '{hook_id}' not found")
     return {"message": "Webhook deleted", "id": hook_id}
+
+
+# ---------------------------------------------------------------------------
+# Webhook Trigger Endpoints — N-19 (inbound triggers)
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/webhook-triggers", status_code=201, tags=["Webhook Triggers"])
+async def register_webhook_trigger(
+    payload: RegisterWebhookTriggerRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Register a new inbound webhook trigger tied to a flow.
+
+    Returns a trigger record with an ``id`` that forms the unique receive URL:
+    ``POST /api/v1/webhook-triggers/{id}/receive``.
+    Secrets are stored encrypted and never returned in subsequent calls.
+    """
+    # Verify the target flow exists
+    flow = await FlowRepository.get_by_id(payload.flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{payload.flow_id}' not found")
+    trigger = webhook_trigger_registry.register(
+        flow_id=payload.flow_id,
+        secret=payload.secret,
+    )
+    return trigger
+
+
+@v1.get("/webhook-triggers", tags=["Webhook Triggers"])
+async def list_webhook_triggers(
+    flow_id: str | None = Query(None, description="Filter by flow ID"),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all registered inbound webhook triggers (secrets not returned)."""
+    triggers = webhook_trigger_registry.list_triggers(flow_id=flow_id)
+    return {"triggers": triggers, "total": len(triggers)}
+
+
+@v1.get("/webhook-triggers/{trigger_id}", tags=["Webhook Triggers"])
+async def get_webhook_trigger(
+    trigger_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get a single webhook trigger by ID (secret not returned)."""
+    trigger = webhook_trigger_registry.get(trigger_id)
+    if not trigger:
+        raise HTTPException(status_code=404, detail=f"Trigger '{trigger_id}' not found")
+    return trigger
+
+
+@v1.delete("/webhook-triggers/{trigger_id}", tags=["Webhook Triggers"])
+async def delete_webhook_trigger(
+    trigger_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete a webhook trigger by ID."""
+    if not webhook_trigger_registry.delete(trigger_id):
+        raise HTTPException(status_code=404, detail=f"Trigger '{trigger_id}' not found")
+    return {"message": "Webhook trigger deleted", "id": trigger_id}
+
+
+@v1.post(
+    "/webhook-triggers/{trigger_id}/receive",
+    status_code=202,
+    tags=["Webhook Triggers"],
+)
+async def receive_webhook_trigger(
+    trigger_id: str,
+    request: Request,
+    x_webhook_signature: str | None = Header(None, alias="X-Webhook-Signature"),
+):
+    """Receive an inbound webhook and trigger the associated flow.
+
+    No session auth is required — the caller is authenticated via HMAC-SHA256
+    signature when a secret is configured on the trigger.  Unsigned requests
+    are accepted only when the trigger has no secret.
+
+    The raw request body is passed as the flow's ``input`` dict under the key
+    ``payload``.  If the body is valid JSON it is inlined directly; otherwise
+    it is wrapped as ``{"raw": "<body_text>"}``.
+    """
+    body_bytes = await request.body()
+
+    if not webhook_trigger_registry.verify_signature(
+        trigger_id, body_bytes, x_webhook_signature
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing webhook signature",
+        )
+
+    trigger = webhook_trigger_registry.get(trigger_id)
+    if not trigger:
+        raise HTTPException(status_code=404, detail=f"Trigger '{trigger_id}' not found")
+
+    # Parse body → flow input
+    try:
+        parsed = json.loads(body_bytes) if body_bytes else {}
+        if not isinstance(parsed, dict):
+            parsed = {"payload": parsed}
+    except (json.JSONDecodeError, ValueError):
+        parsed = {"raw": body_bytes.decode("utf-8", errors="replace")}
+
+    flow_input = {"payload": parsed, "trigger_id": trigger_id}
+    run_body = RunFlowRequest(input=flow_input)
+
+    result = await _run_flow_impl(trigger["flow_id"], run_body)
+    return {"accepted": True, "run_id": result["run_id"], "trigger_id": trigger_id}
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,34 @@ All notable changes to the SynApps project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v1.0.0-alpha
+
+### Added
+
+- **N-19: Webhook Trigger Node** — inbound webhook trigger that starts a workflow when a unique URL receives a POST request. Includes `WebhookTriggerRegistry` (in-memory, thread-safe, Fernet-encrypted secrets), HMAC-SHA256 signature verification (`X-Webhook-Signature: sha256=<hex>`), and 5 REST endpoints: `POST /api/v1/webhook-triggers`, `GET /api/v1/webhook-triggers`, `GET /api/v1/webhook-triggers/{id}`, `DELETE /api/v1/webhook-triggers/{id}`, `POST /api/v1/webhook-triggers/{id}/receive`. Frontend: purple color variant in node canvas, config panel, palette entry.
+- **N-18: HTTP Request Node** — universal API connector supporting GET/POST/PUT/PATCH/DELETE, bearer/basic/API-key auth, SSRF protection (private IP ranges blocked), configurable retry with exponential backoff, response header capture, Jinja2 template rendering for URL/headers/body.
+- **N-17: Workflow Export/Import + UX Polish** — export flows as JSON/YAML, import into gallery, template marketplace with versioning (semver), collision-free re-import.
+- **N-15: Comprehensive Test Suite** — 1,566 total tests (1,457 backend + 109 frontend + 4 E2E). CRUCIBLE-gated test quality (Gate 2 non-empty assertions, Gate 5 silent exception audit, Gate 8 coverage integrity).
+- **N-13: Code Node with Sandboxing** — execute arbitrary Python/JavaScript with restricted builtins, timeout, and filesystem isolation.
+- **N-11: Conditional Routing (If/Else)** — expression-based branching node.
+- **N-10: Parallel Execution Engine** — fan-out/fan-in with configurable concurrency, `ForEach` node for collection iteration.
+- **N-09: Universal LLM Node** — provider-agnostic (OpenAI, Anthropic, Google, Ollama, Custom) with streaming support.
+- **N-12: JWT Authentication** — JWT with refresh tokens, API key management, encrypted keys at rest (Fernet), rate limiting per-user.
+
+### Changed
+
+- **Stack upgrade (N-07/N-08)** — Python 3.9 → 3.13, FastAPI 0.68 → 0.115, Pydantic v1 → v2, SQLAlchemy 1.x → 2.0 (async), frontend CRA → Vite 6, Tailwind 3 → 4, Zustand added, TypeScript strict mode.
+- **CI/CD** — GitHub Actions pipeline with backend lint (Ruff), frontend lint (ESLint 9), type-check, backend tests with coverage (pytest-cov XML → Codecov), frontend tests (Vitest lcov → Codecov), OpenAPI spec freshness gate, Docker build gate.
+- **Coverage config (CRUCIBLE Gate 8)** — `[tool.coverage.run] omit` added to `pyproject.toml` to exclude `tests/`, `venv/`, `migrations/`, `setup.py` from coverage measurement, eliminating ~8pp inflation.
+
+### Fixed
+
+- Aiosqlite teardown race in async tests (poll-until-terminal pattern).
+- Ruff UP042 compliance — `(str, Enum)` → `StrEnum`.
+- CI coverage path (`--cov=.` from `apps/orchestrator/` working-directory, not `--cov=apps/orchestrator`).
+
+---
+
 ## [0.5.2] - 2025-06-10
 
 ### Added

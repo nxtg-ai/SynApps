@@ -62,6 +62,7 @@ const nodeTypes = {
   if_else: AppletNode,
   code: AppletNode,
   http_request: AppletNode,
+  webhook_trigger: AppletNode,
 };
 
 const edgeTypes = {
@@ -227,7 +228,7 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ flow: propFlow, onFlowC
     // Map nodes
     const rfNodes = flow.nodes.map(node => ({
       id: node.id,
-      type: node.type === 'llm' || node.type === 'writer' || node.type === 'memory' || node.type === 'artist' || node.type === 'merge' || node.type === 'for_each' || node.type === 'if_else' || node.type === 'code'
+      type: node.type === 'llm' || node.type === 'writer' || node.type === 'memory' || node.type === 'artist' || node.type === 'merge' || node.type === 'for_each' || node.type === 'if_else' || node.type === 'code' || node.type === 'webhook_trigger'
         ? node.type
         : node.type === 'start' || node.type === 'end'
           ? node.type

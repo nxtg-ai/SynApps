@@ -17,6 +17,7 @@ SynApps is a **web-based visual platform for modular AI agents called Snaplets**
 - **Background Execution & Notifications:** Snaplets run in the background once triggered, with notifications for status changes.
 - **Extensibility:** 9 built-in node types (LLM, ImageGen, Code, HTTP Request, Transform, IfElse, Merge, ForEach, Memory) with support for custom logic via the Code node.
 - **Universal API Connector:** The HTTP Request node (N-18) supports GET/POST/PUT/PATCH/DELETE, bearer/basic/API-key auth, SSRF protection, retry with exponential backoff, and response header capture.
+- **Inbound Webhook Trigger:** The Webhook Trigger node (N-19) exposes a unique URL per trigger. Any external service can POST to that URL to start the workflow. Optional HMAC-SHA256 signature verification rejects unsigned or tampered requests.
 
 ## Quick Start
 
@@ -89,7 +90,8 @@ SynApps follows a microkernel architecture:
 | **LLM** | Text generation via LLM (e.g. GPT-4o) |
 | **ImageGen** | Image generation from text prompts |
 | **Code** | Execute custom Python/JavaScript logic |
-| **HTTP** | Make HTTP requests to external APIs |
+| **HTTP** | Make HTTP requests to external APIs (GET/POST/PUT/PATCH/DELETE, bearer/basic/API-key auth, SSRF protection, retry with exponential backoff) |
+| **Webhook Trigger** | Start a workflow from an inbound HTTP POST — unique URL per trigger, optional HMAC-SHA256 signature verification |
 | **Transform** | Transform and reshape data between nodes |
 | **IfElse** | Conditional branching based on expressions |
 | **Merge** | Combine outputs from multiple branches |
@@ -128,7 +130,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,537 tests** (1,428 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,566 tests** (1,457 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 
