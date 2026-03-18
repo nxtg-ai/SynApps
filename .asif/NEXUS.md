@@ -240,6 +240,31 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-77 — P1: N-22 Error Handling + Retry Logic
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 16:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Error handler node — catch + route to fallback or retry.
+2. [ ] Retry: max retries, backoff (fixed/exponential), conditions.
+3. [ ] Dead letter queue for failed executions. 4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-78.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-78 — P2: Workflow Versioning + Rollback
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 16:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Version history on edit. 2. [ ] Rollback to previous. 3. [ ] Diff view.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-67 — P1: N-20 Scheduler Node — Cron-Triggered Workflows
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: DONE
