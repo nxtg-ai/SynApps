@@ -29,7 +29,6 @@ from apps.orchestrator.main import (
     webhook_trigger_registry,
 )
 
-
 # ---------------------------------------------------------------------------
 # Auth helper — register + login to get a real JWT
 # ---------------------------------------------------------------------------

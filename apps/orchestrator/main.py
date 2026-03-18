@@ -12428,7 +12428,6 @@ class AnalyticsService:
         output = []
         for stats in node_stats.values():
             durations = stats.pop("_durations", [])
-            exec_count = stats["execution_count"]
             success_count = stats["success_count"]
             error_count = stats["error_count"]
             terminal = success_count + error_count
