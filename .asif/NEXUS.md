@@ -252,10 +252,10 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 3. `test_webhook_trigger_passthrough_preserves_input` — same API key issue
 
 **Action Items**:
-1. [ ] Mark these 3 tests with `@pytest.mark.integration` (or `@pytest.mark.skipif` for missing API key env var).
-2. [ ] Update CI workflow to exclude integration-marked tests: `pytest -m "not integration"`.
+1. [ ] Add `OPENAI_API_KEY` as GitHub Actions secret. The E2E tests should use real keys — our standard is real tests, not mocks.
+2. [ ] Update CI workflow to pass `OPENAI_API_KEY` from secrets to the test environment: `env: OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}`
 3. [ ] Verify CI goes GREEN.
-4. [ ] Do NOT delete the tests — they're valuable for local dev with real keys.
+4. [ ] If the secret is not set (forks/PRs), THEN skip with `@pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"))`. But on our repo: real key, real tests.
 
 **CHAIN**: When done, continue to DIRECTIVE-NXTG-20260318-77.
 **Response** (filled by team): >
