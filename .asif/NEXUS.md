@@ -254,6 +254,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260318-116 — P1: N-26 Workflow Variables + Environment Secrets
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 19:45 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Workflow variables** — key-value pairs scoped per workflow. Accessible by all nodes via `{{var.name}}`.
+2. [ ] **Environment secrets** — encrypted at rest, masked in logs. For API keys used by HTTP/LLM nodes.
+3. [ ] **`GET/PUT /workflows/:id/variables`** and **`GET/PUT /workflows/:id/secrets`**.
+4. [ ] Tests: variable resolution in nodes, secret masking in logs.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-117.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-117 — P2: Final README + Architecture Showcase
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 19:45 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] README — all 26 initiatives. 2. [ ] Final test count (1,778+). 3. [ ] Architecture diagram update.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-108 — P1: N-25 Execution Logs + Debug Console
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 19:15 | **Estimate**: M | **Status**: DONE
