@@ -240,6 +240,28 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-84 — P0: CI RED — Fix E2E Smoke Test Failures
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P0
+**Injected**: 2026-03-18 16:35 | **Estimate**: S | **Status**: PENDING
+
+**Context**: CI failing on 3 E2E smoke tests that require real API keys (`sk-test-*` = invalid). 1,527 passed, 3 failed, 1 skipped. These are integration tests hitting external services — they can't run in CI without real credentials.
+
+**Failures**:
+1. `test_full_pipeline_succeeds` — OpenAI API key invalid
+2. `test_all_nodes_produce_results` — HTTP node needs external service
+3. `test_webhook_trigger_passthrough_preserves_input` — same API key issue
+
+**Action Items**:
+1. [ ] Mark these 3 tests with `@pytest.mark.integration` (or `@pytest.mark.skipif` for missing API key env var).
+2. [ ] Update CI workflow to exclude integration-marked tests: `pytest -m "not integration"`.
+3. [ ] Verify CI goes GREEN.
+4. [ ] Do NOT delete the tests — they're valuable for local dev with real keys.
+
+**CHAIN**: When done, continue to DIRECTIVE-NXTG-20260318-77.
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-77 — P1: N-22 Error Handling + Retry Logic
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 16:15 | **Estimate**: M | **Status**: PENDING
