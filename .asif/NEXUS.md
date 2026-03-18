@@ -226,6 +226,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-06 | Cycle 8 — N-04 self-authorization withdrawn: ChromaDB already shipped in T-055/T-056 (`5692d90`/`4a85783`). Updated N-04 description in NEXUS. Asked CoS for T-0xx commit series inventory. |
 | 2026-03-13 | DIRECTIVE-NXTG-20260313-02 (N-18 HTTP Request Node) → SHIPPED. PATCH method, bearer/basic/api_key auth, SSRF protection (5 IP ranges), retry with exponential backoff. Frontend: NodeConfigModal form, palette item, AppletNode icon/color, ApiFetch template. 36 new tests. 1,401 backend + 109 frontend = 1,510 total passing. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-03 (CRUCIBLE Self-Audit + Quality Hardening) → DONE. Full 8-gate audit. Gate 2: 3 len guards added. Gate 5: 2 silent except blocks given logging. Gate 8: coverage omit config added to pyproject.toml (correct fix for working-dir issue). 41 new tests in test_crucible_hardening.py. README updated (Python 3.13, N-18 docs). 1,442 backend + 109 frontend = 1,551 total. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-50 (N-19 Webhook Trigger Node) → DONE. WebhookTriggerRegistry (Fernet-encrypted, HMAC-SHA256), WebhookTriggerNodeApplet (passthrough), 5 REST endpoints, frontend palette/color. 44 new tests (test_webhook_trigger.py). 1,457 backend + 109 frontend = 1,566 total. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-51 (Documentation + Architecture Refresh) → DONE. README updated (N-19 node types table + features, 1,566 test count). CHANGELOG [Unreleased] v1.0.0-alpha section from git history. Architecture diagram deferred. |
 
 ---
 
@@ -1683,9 +1685,11 @@ All other commits were NEXUS idle cycle entries (69–71). **Backend test count:
 
 ### 5. Blockers / Questions for CoS
 
-**`ci.yml` coverage flag revert — still unanswered.** Line 131 was reverted from `--cov=apps/orchestrator` back to `--cov=.` after D-08 explicitly set it. This re-inflates published coverage by ~8.2pp. Question has been open since cycle 68. Awaiting intent clarification before re-applying fix.
+**`ci.yml` coverage flag revert — RESOLVED (D-03, 2026-03-18).** The correct fix was not `--cov=apps/orchestrator` (which breaks under `working-directory: ./apps/orchestrator/`) but rather `[tool.coverage.run] omit = ["tests/*", "venv/*", "migrations/*"]` in `pyproject.toml`. Added in D-03 session. Coverage inflation eliminated without changing the CI invocation. Question closed.
 
-**N-07 self-auth green-light received (TQ-20260228-01).** No CoS action needed — will execute on next non-idle cycle.
+**Repo rename: `SynApps-v0.4.0` → `SynApps`** — awaiting CoS confirmation this was intentional.
+
+**N-07 self-auth green-light received (TQ-20260228-01).** DONE — executed commit `1959679` (Python 3.13 classifier in setup.py).
 
 ---
 
