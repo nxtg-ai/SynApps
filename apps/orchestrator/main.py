@@ -254,6 +254,11 @@ class AppConfig:
         self.synapps_master_key: str = g("SYNAPPS_MASTER_KEY", "")
         self.fernet_key: str = g("FERNET_KEY", "")
         self.ws_auth_token: str = g("WS_AUTH_TOKEN", "")
+        self.smtp_host: str = g("SMTP_HOST", "localhost")
+        self.smtp_port: int = int(g("SMTP_PORT", "587"))
+        self.smtp_user: str = g("SMTP_USER", "")
+        self.smtp_password: str = g("SMTP_PASSWORD", "")
+        self.sendgrid_api_key: str = g("SENDGRID_API_KEY", "")
 
         # --- CORS ---
         self.cors_origins: str = g("BACKEND_CORS_ORIGINS", "")
@@ -7938,6 +7943,247 @@ workflow_variable_store = WorkflowVariableStore()
 workflow_secret_store = WorkflowSecretStore()
 
 
+# ---------------------------------------------------------------------------
+# Workflow Notifications — N-27
+# ---------------------------------------------------------------------------
+
+class NotificationStore:
+    """Thread-safe per-workflow notification configuration store.
+
+    Config shape per flow:
+        {
+            "on_complete": [{"type": "email"|"slack"|"webhook", ...}],
+            "on_failure":  [{"type": "email"|"slack"|"webhook", ...}]
+        }
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._store: dict[str, dict[str, Any]] = {}
+
+    def set(self, flow_id: str, config: dict[str, Any]) -> None:
+        with self._lock:
+            self._store[flow_id] = dict(config)
+
+    def get(self, flow_id: str) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._store.get(flow_id, {}))
+
+    def delete(self, flow_id: str) -> None:
+        with self._lock:
+            self._store.pop(flow_id, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+notification_store = NotificationStore()
+
+
+class NotificationService:
+    """Dispatch workflow completion/failure notifications.
+
+    Supports three adapter types:
+      - ``email``   — SMTP (stdlib smtplib) or SendGrid HTTP
+      - ``slack``   — POST to a Slack Incoming Webhook URL
+      - ``webhook`` — POST to any custom HTTP endpoint
+
+    All adapter errors are caught and logged — notifications must NEVER
+    crash or block the workflow execution path.
+    """
+
+    async def dispatch(
+        self,
+        event: str,  # "on_complete" or "on_failure"
+        flow_id: str,
+        flow_name: str,
+        run_id: str,
+        status: str,
+        duration_ms: float | None,
+        output_preview: str,
+    ) -> None:
+        config = notification_store.get(flow_id)
+        handlers = config.get(event, [])
+        if not handlers:
+            return
+        summary = self._build_summary(flow_name, run_id, status, duration_ms, output_preview)
+        for handler in handlers:
+            if not isinstance(handler, dict):
+                continue
+            handler_type = str(handler.get("type", "")).lower()
+            try:
+                if handler_type == "email":
+                    await self._send_email(handler, summary)
+                elif handler_type == "slack":
+                    await self._send_slack(handler, summary, status)
+                elif handler_type == "webhook":
+                    await self._send_webhook(handler, summary, status, run_id)
+                else:
+                    logger.warning("Unknown notification handler type: %s", handler_type)
+            except Exception as exc:
+                logger.error(
+                    "Notification dispatch failed for handler type=%s flow=%s: %s",
+                    handler_type,
+                    flow_id,
+                    exc,
+                )
+
+    def _build_summary(
+        self,
+        flow_name: str,
+        run_id: str,
+        status: str,
+        duration_ms: float | None,
+        output_preview: str,
+    ) -> str:
+        dur = f"{duration_ms:.0f}ms" if duration_ms is not None else "N/A"
+        preview = str(output_preview)[:200] if output_preview else "(no output)"
+        return (
+            f"Workflow: {flow_name}\n"
+            f"Run ID:   {run_id}\n"
+            f"Status:   {status.upper()}\n"
+            f"Duration: {dur}\n"
+            f"Output:   {preview}"
+        )
+
+    async def _send_email(self, handler: dict[str, Any], summary: str) -> None:
+        """Send notification via SMTP or SendGrid.
+
+        Handler fields:
+          - to (str | list[str]): recipient(s)
+          - subject (str, optional): email subject
+          - smtp_host (str, optional): SMTP server (default: app_config.smtp_host or localhost)
+          - smtp_port (int, optional): SMTP port (default: 587)
+          - smtp_user (str, optional): SMTP username
+          - smtp_password (str, optional): SMTP password
+          - sendgrid_api_key (str, optional): if set, use SendGrid HTTP API instead of SMTP
+        """
+        import smtplib
+        from email.mime.text import MIMEText
+
+        to = handler.get("to", "")
+        if isinstance(to, str):
+            recipients = [to] if to else []
+        else:
+            recipients = [r for r in to if r]
+        if not recipients:
+            logger.warning("Email notification: no recipients configured")
+            return
+
+        subject = handler.get("subject", "SynApps Workflow Notification")
+        sendgrid_key = handler.get("sendgrid_api_key") or app_config.sendgrid_api_key
+
+        if sendgrid_key:
+            # Use SendGrid HTTP API
+            payload = {
+                "personalizations": [{"to": [{"email": r} for r in recipients]}],
+                "from": {"email": handler.get("from_email", "notifications@synapps.local")},
+                "subject": subject,
+                "content": [{"type": "text/plain", "value": summary}],
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {sendgrid_key}"},
+                )
+                if resp.status_code not in (200, 202):
+                    logger.warning(
+                        "SendGrid returned %s for flow notification", resp.status_code
+                    )
+        else:
+            # Use SMTP
+            smtp_host = handler.get("smtp_host") or getattr(app_config, "smtp_host", "localhost")
+            smtp_port = int(handler.get("smtp_port", getattr(app_config, "smtp_port", 587)))
+            smtp_user = handler.get("smtp_user") or getattr(app_config, "smtp_user", "")
+            smtp_password = (
+                handler.get("smtp_password") or getattr(app_config, "smtp_password", "")
+            )
+            from_addr = handler.get("from_email", "notifications@synapps.local")
+
+            msg = MIMEText(summary)
+            msg["Subject"] = subject
+            msg["From"] = from_addr
+            msg["To"] = ", ".join(recipients)
+
+            def _smtp_send() -> None:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as s:
+                    if smtp_user:
+                        s.starttls()
+                        s.login(smtp_user, smtp_password)
+                    s.sendmail(from_addr, recipients, msg.as_string())
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _smtp_send)
+
+    async def _send_slack(self, handler: dict[str, Any], summary: str, status: str) -> None:
+        """POST formatted notification to a Slack Incoming Webhook.
+
+        Handler fields:
+          - webhook_url (str, required): Slack incoming webhook URL
+          - channel (str, optional): channel override (e.g. #alerts)
+        """
+        webhook_url = handler.get("webhook_url", "")
+        if not webhook_url:
+            logger.warning("Slack notification: no webhook_url configured")
+            return
+
+        color = "#36a64f" if status == "success" else "#e01e5a"
+        blocks = {
+            "attachments": [
+                {
+                    "color": color,
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f"```{summary}```"},
+                        }
+                    ],
+                }
+            ]
+        }
+        if handler.get("channel"):
+            blocks["channel"] = handler["channel"]
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json=blocks)
+            if resp.status_code != 200:
+                logger.warning(
+                    "Slack webhook returned %s for flow notification", resp.status_code
+                )
+
+    async def _send_webhook(
+        self, handler: dict[str, Any], summary: str, status: str, run_id: str
+    ) -> None:
+        """POST JSON payload to a custom webhook URL.
+
+        Handler fields:
+          - url (str, required): target URL
+          - headers (dict, optional): additional request headers
+        """
+        url = handler.get("url", "")
+        if not url:
+            logger.warning("Webhook notification: no url configured")
+            return
+        headers = handler.get("headers", {}) or {}
+        payload = {
+            "event": "workflow_notification",
+            "run_id": run_id,
+            "status": status,
+            "summary": summary,
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code >= 400:
+                logger.warning(
+                    "Webhook notification returned %s for run %s", resp.status_code, run_id
+                )
+
+
+notification_service = NotificationService()
+
+
 def _resolve_template(value: Any, variables: dict[str, Any], secrets: dict[str, str]) -> Any:
     """Resolve ``{{var.name}}`` and ``{{secret.name}}`` placeholders in a value.
 
@@ -9566,6 +9812,18 @@ class Orchestrator:
                     "flow_name": flow.get("name", ""),
                     "duration_ms": execution_trace.get("duration_ms"),
                 })
+                # Dispatch on_complete notifications (fire-and-forget)
+                _notif_duration = status.get("end_time", time.time()) - status.get("start_time", time.time())
+                _output_preview = str(list(context.get("results", {}).values())[-1].get("output", "")) if context.get("results") else ""
+                asyncio.ensure_future(notification_service.dispatch(
+                    event="on_complete",
+                    flow_id=flow.get("id", ""),
+                    flow_name=flow.get("name", ""),
+                    run_id=run_id,
+                    status="success",
+                    duration_ms=_notif_duration * 1000,
+                    output_preview=_output_preview,
+                ))
 
         except Exception as e:
             logger.error(f"Error executing workflow: {e}")
@@ -9600,6 +9858,16 @@ class Orchestrator:
                 "flow_name": flow.get("name", ""),
                 "error": str(e),
             })
+            # Dispatch on_failure notifications (fire-and-forget)
+            asyncio.ensure_future(notification_service.dispatch(
+                event="on_failure",
+                flow_id=flow.get("id", ""),
+                flow_name=flow.get("name", ""),
+                run_id=run_id,
+                status="error",
+                duration_ms=None,
+                output_preview=str(e)[:200],
+            ))
 
 
 
@@ -12845,6 +13113,63 @@ async def put_workflow_secrets(
     workflow_secret_store.set(flow_id, body)
     masked = workflow_secret_store.get_masked(flow_id)
     return {"flow_id": flow_id, "secrets": masked, "count": len(body)}
+
+
+# ============================================================
+# Workflow Notifications — N-27
+# ============================================================
+
+
+@v1.get("/workflows/{flow_id}/notifications", tags=["Notifications"])
+async def get_workflow_notifications(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the notification configuration for a workflow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    config = notification_store.get(flow_id)
+    return {"flow_id": flow_id, "config": config}
+
+
+@v1.put("/workflows/{flow_id}/notifications", tags=["Notifications"])
+async def put_workflow_notifications(
+    flow_id: str,
+    body: dict[str, Any],
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set the notification configuration for a workflow.
+
+    Body shape:
+        {
+            "on_complete": [{"type": "email"|"slack"|"webhook", ...}],
+            "on_failure":  [{"type": "email"|"slack"|"webhook", ...}]
+        }
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Body must be a JSON object")
+    # Validate handler types
+    valid_types = {"email", "slack", "webhook"}
+    for event_key in ("on_complete", "on_failure"):
+        handlers = body.get(event_key, [])
+        if not isinstance(handlers, list):
+            raise HTTPException(status_code=422, detail=f"{event_key} must be a list")
+        for h in handlers:
+            if not isinstance(h, dict) or "type" not in h:
+                raise HTTPException(
+                    status_code=422, detail="Each handler must have a 'type' field"
+                )
+            if h["type"] not in valid_types:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown handler type '{h['type']}'. Valid: {sorted(valid_types)}",
+                )
+    notification_store.set(flow_id, body)
+    return {"flow_id": flow_id, "config": notification_store.get(flow_id)}
 
 
 # Include versioned router

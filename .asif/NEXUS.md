@@ -247,6 +247,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-108 (N-25 Execution Logs + Debug Console) → DONE. ExecutionLogStore singleton, 5 event types (node_start/retry/success/fallback/error), GET /executions/{id}/logs, POST /runs?debug=true. 19 tests. 1,688 backend + 109 frontend + 4 E2E = 1,797 total. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-116 (N-26 Variables + Secrets) → DONE. WorkflowVariableStore + WorkflowSecretStore (Fernet), {{var.name}}/{{secret.name}} template resolution in node data, secret masking in logs, 4 REST endpoints, 40 tests. 1,728 backend = 1,837 total. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-117 (Final README + Architecture) → DONE. README N-26 in initiatives table + node types table, test count 1,837. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-122 (N-27 Notifications) → DONE. NotificationStore + NotificationService (email/slack/webhook adapters), fire-and-forget dispatch, GET/PUT /notifications endpoint, 31 tests. 1,770 backend. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-123 (Final E2E + README) → DONE. test_e2e_n27_full.py (11 tests, 6 gates). README+CHANGELOG updated. 1,879 total (1,770 backend + 109 frontend + 4 E2E). |
 
 ---
 
@@ -258,27 +260,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-122 — P1: N-27 Workflow Notifications — Email + Slack on Complete/Fail
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 20:15 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 20:15 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Notification config** per workflow — on_complete and on_failure callbacks: email, Slack webhook, or custom URL.
-2. [ ] **Email adapter** — send execution summary (status, duration, output preview) via SMTP or SendGrid.
-3. [ ] **Slack adapter** — POST to Slack webhook with formatted blocks.
-4. [ ] Tests: both adapters, config validation, failure scenarios.
+1. [x] **Notification config** per workflow — on_complete and on_failure callbacks: email, Slack webhook, or custom URL.
+2. [x] **Email adapter** — send execution summary (status, duration, output preview) via SMTP or SendGrid.
+3. [x] **Slack adapter** — POST to Slack webhook with formatted blocks.
+4. [x] Tests: both adapters, config validation, failure scenarios.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-123.
-**Response** (filled by team): >
+**Response** (filled by team): N-27 shipped. `NotificationStore` (thread-safe per-flow config). `NotificationService` with 3 adapters: `email` (SMTP via stdlib `smtplib` run in executor, or SendGrid HTTP via httpx), `slack` (POST to Incoming Webhook with color-coded blocks: green on_complete, red on_failure), `webhook` (generic JSON POST). Config: `on_complete`/`on_failure` lists. Fire-and-forget via `asyncio.ensure_future` — never blocks execution path. SMTP/SendGrid config from env vars added to AppConfig. 2 REST endpoints: `GET/PUT /api/v1/workflows/{id}/notifications` with handler type validation (422 on unknown types). 31 tests in `test_notifications.py`. Total: 1,759 backend (+31). OpenAPI regenerated (85 paths). 2026-03-18.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-123 — P2: Final E2E + README + Test Count
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 20:15 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 20:15 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Full E2E: workflow with variables + secrets + scheduler + error handler + marketplace publish + notifications. 2. [ ] Final test count. 3. [ ] README showcase.
+1. [x] Full E2E: workflow with variables + secrets + scheduler + error handler + marketplace publish + notifications. 2. [x] Final test count. 3. [x] README showcase.
 
-**Response** (filled by team): >
+**Response** (filled by team): `test_e2e_n27_full.py` — 11 tests across 6 gates: flow structure, variables+secrets, notifications config, webhook trigger → execution → logs (secret masking verified), scheduler lifecycle, marketplace publish+install. README N-27 in Node Types and Initiatives tables. Test count: 1,879 (1,770 backend + 109 frontend + 4 E2E). CHANGELOG updated with N-27 entry. 2026-03-18.
 
 ---
 

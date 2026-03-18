@@ -97,6 +97,7 @@ SynApps follows a microkernel architecture:
 | **Marketplace** | Publish flows to a shared marketplace, search/discover by name/tags/category, install listings into your workspace (`/api/v1/marketplace/`) |
 | **Analytics** | Per-workflow and per-node execution metrics — run count, success/error rates, avg duration (`/api/v1/analytics/`) |
 | **Variables** | Per-workflow key-value variables (`{{var.name}}` in node fields) + encrypted secrets (`{{secret.name}}`, masked in API responses) |
+| **Notifications** | Email (SMTP/SendGrid), Slack Incoming Webhook, custom webhook — on_complete/on_failure per workflow (`/api/v1/workflows/:id/notifications`) |
 | **Transform** | Transform and reshape data between nodes |
 | **IfElse** | Conditional branching based on expressions |
 | **Merge** | Combine outputs from multiple branches |
@@ -135,6 +136,7 @@ All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-24 | Execution Analytics | PLATFORM | Per-workflow and per-node metrics — run count, success/error rates, avg duration — `GET /analytics/...` |
 | N-25 | Execution Logs + Debug Console | PLATFORM | Structured per-node logs (input, output, duration, errors, retry attempts), `GET /executions/:id/logs`, debug mode |
 | N-26 | Workflow Variables + Environment Secrets | PLATFORM | Per-workflow `{{var.name}}` key-value store + Fernet-encrypted `{{secret.name}}` secrets (masked in API responses + logs), `GET/PUT /workflows/:id/variables|secrets` |
+| N-27 | Workflow Notifications | PLATFORM | Email (SMTP/SendGrid), Slack webhook, custom webhook — on_complete/on_failure per flow, fire-and-forget dispatch, `GET/PUT /workflows/:id/notifications` |
 
 ## Tech Stack
 
@@ -168,7 +170,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,837 tests** (1,728 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,879 tests** (1,770 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 
