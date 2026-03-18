@@ -233,6 +233,40 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-50 — P1: N-19 Webhook Trigger Node
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 14:30 | **Estimate**: M | **Status**: PENDING
+
+**Context**: 18 initiatives SHIPPED. CRUCIBLE clean. N-18 HTTP Request Node allows workflows to CALL APIs. N-19 flips it: let external services TRIGGER workflows via webhook.
+
+**Action Items**:
+1. [ ] **Webhook trigger node** — new node type that exposes a unique URL. When hit with POST, starts the workflow with the request body as input.
+2. [ ] **Webhook management** — register/deregister webhooks. Store URL→workflow mapping.
+3. [ ] **Security** — HMAC signature verification on incoming webhooks. Reject unsigned/invalid.
+4. [ ] Tests: 1,510 → 1,550+ target. Cover: trigger, routing, signature verification, error cases.
+5. [ ] Add N-19 to Executive Dashboard (NODES pillar, BUILDING).
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-51.
+
+**Response** (filled by team):
+>
+
+---
+
+### DIRECTIVE-NXTG-20260318-51 — P2: Documentation + Architecture Refresh
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 14:30 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] README refresh — all 19 initiatives, test count, Python 3.13 + Pydantic v2.
+2. [ ] Architecture diagram — visual workflow editor + execution engine + node types (including HTTP + Webhook).
+3. [ ] CHANGELOG from git history.
+
+**Response** (filled by team):
+>
+
+---
+
 ### DIRECTIVE-NXTG-20260318-03 — P2: CRUCIBLE Self-Audit + Quality Hardening
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
 **Injected**: 2026-03-18 08:00 | **Estimate**: S | **Status**: DONE
