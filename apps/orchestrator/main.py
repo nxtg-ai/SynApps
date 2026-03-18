@@ -1404,7 +1404,9 @@ def _get_fernet_encrypt():
     def _dec(cipher: str) -> str | None:
         try:
             return FERNET_CIPHER.decrypt(cipher.encode("utf-8")).decode("utf-8")
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            # SILENT JUSTIFIED: tampered/invalid ciphertext returns None; caller handles sentinel
+            logger.debug("Fernet decrypt failed (likely tampered ciphertext): %s", exc)
             return None
 
     return _enc, _dec
@@ -1880,7 +1882,8 @@ async def _resolve_rate_limit_user(request: Request) -> dict[str, Any] | None:
     except HTTPException:
         # Invalid credentials are handled by endpoint auth dependencies.
         return None
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Unexpected error in optional auth resolution: %s", exc)
         return None
 
     return None

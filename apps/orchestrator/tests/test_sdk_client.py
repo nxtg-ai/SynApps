@@ -121,6 +121,7 @@ class TestSyncClient:
     def test_list_templates(self, sync_client: SynApps):
         result = sync_client.list_templates()
         assert isinstance(result, list)
+        # Note: len guard omitted — templates are file-based and not seeded in test env
 
     def test_list_flows(self, sync_client: SynApps):
         result = sync_client.list_flows()
@@ -148,6 +149,7 @@ class TestSyncClient:
     def test_list_providers(self, sync_client: SynApps):
         result = sync_client.list_providers()
         assert isinstance(result, list)
+        assert len(result) >= 1  # Gate 2: LLMProviderRegistry always returns ≥1 provider
 
     def test_get_history(self, sync_client: SynApps):
         result = sync_client.get_history()
@@ -198,6 +200,7 @@ class TestAsyncClient:
     async def test_list_templates(self, async_client: AsyncSynApps):
         result = await async_client.list_templates()
         assert isinstance(result, list)
+        # Note: len guard omitted — templates are file-based and not seeded in test env
 
     @pytest.mark.asyncio
     async def test_create_and_get_flow(self, async_client: AsyncSynApps):
@@ -218,6 +221,7 @@ class TestAsyncClient:
     async def test_list_providers(self, async_client: AsyncSynApps):
         result = await async_client.list_providers()
         assert isinstance(result, list)
+        assert len(result) >= 1  # Gate 2: LLMProviderRegistry always returns ≥1 provider
 
     @pytest.mark.asyncio
     async def test_get_history(self, async_client: AsyncSynApps):

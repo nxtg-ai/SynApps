@@ -43,6 +43,7 @@ def test_list_applets(client):
     assert "page_size" in data
     assert "total_pages" in data
     assert isinstance(data["items"], list)
+    assert len(data["items"]) >= 1  # Gate 2: built-in applets always registered
 
 def test_list_applets_pagination(client):
     """Test applet listing with custom pagination parameters."""

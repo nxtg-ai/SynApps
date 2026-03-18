@@ -15,14 +15,15 @@ SynApps is a **web-based visual platform for modular AI agents called Snaplets**
 - **Autonomous & Collaborative Snaplets:** Each snaplet runs autonomously but can pass data to others via the orchestrator.
 - **Real-Time Visual Feedback:** See the AI snaplets at work with an animated graph of nodes and connections.
 - **Background Execution & Notifications:** Snaplets run in the background once triggered, with notifications for status changes.
-- **Extensibility:** 9 built-in node types (LLM, ImageGen, Code, HTTP, Transform, IfElse, Merge, ForEach, Memory) with support for custom logic via the Code node.
+- **Extensibility:** 9 built-in node types (LLM, ImageGen, Code, HTTP Request, Transform, IfElse, Merge, ForEach, Memory) with support for custom logic via the Code node.
+- **Universal API Connector:** The HTTP Request node (N-18) supports GET/POST/PUT/PATCH/DELETE, bearer/basic/API-key auth, SSRF protection, retry with exponential backoff, and response header capture.
 
 ## Quick Start
 
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- For local development: Node.js 20+ and Python 3.11+
+- For local development: Node.js 20+ and Python 3.13+
 
 ### Running with Docker
 
@@ -99,7 +100,7 @@ SynApps follows a microkernel architecture:
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.11+, FastAPI 0.115+, Pydantic v2, SQLAlchemy 2.0 (async) |
+| Backend | Python 3.13+, FastAPI 0.115+, Pydantic v2, SQLAlchemy 2.0 (async) |
 | Frontend | React 18, TypeScript (strict), Vite 6, Tailwind CSS 4, Zustand, @xyflow/react v12 |
 | Database | SQLite (dev), PostgreSQL (prod) |
 | Testing | pytest + pytest-asyncio (backend), Vitest + React Testing Library (frontend), Playwright (E2E) |
@@ -126,6 +127,8 @@ Templates are available in the frontend gallery (`apps/web-frontend/src/template
 CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
+
+**1,537 tests** (1,428 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 

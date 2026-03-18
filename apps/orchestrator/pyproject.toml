@@ -27,3 +27,16 @@ known-first-party = ["apps"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
+
+[tool.coverage.run]
+# --cov=. runs from apps/orchestrator/ working directory; exclude test files so
+# they do not inflate the reported coverage percentage (Gate 8 — CRUCIBLE).
+omit = [
+  "tests/*",
+  "tests/**/*",
+  "venv/*",
+  "venv/**/*",
+  "migrations/*",
+  "migrations/**/*",
+  "setup.py",
+]

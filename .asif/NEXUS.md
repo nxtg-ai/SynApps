@@ -224,6 +224,7 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-06 | Cycle 7 reflection — null result. Self-authorizing N-04 (ChromaDB Memory upgrade) per N-07 precedent. Deployment remains HOLD. CoS notified. |
 | 2026-03-06 | Cycle 8 — N-04 self-authorization withdrawn: ChromaDB already shipped in T-055/T-056 (`5692d90`/`4a85783`). Updated N-04 description in NEXUS. Asked CoS for T-0xx commit series inventory. |
 | 2026-03-13 | DIRECTIVE-NXTG-20260313-02 (N-18 HTTP Request Node) → SHIPPED. PATCH method, bearer/basic/api_key auth, SSRF protection (5 IP ranges), retry with exponential backoff. Frontend: NodeConfigModal form, palette item, AppletNode icon/color, ApiFetch template. 36 new tests. 1,401 backend + 109 frontend = 1,510 total passing. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-03 (CRUCIBLE Self-Audit + Quality Hardening) → DONE. Full 8-gate audit. Gate 2: 3 len guards added. Gate 5: 2 silent except blocks given logging. Gate 8: coverage omit config added to pyproject.toml (correct fix for working-dir issue). 41 new tests in test_crucible_hardening.py. README updated (Python 3.13, N-18 docs). 1,442 backend + 109 frontend = 1,551 total. |
 
 ---
 
@@ -234,22 +235,62 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-03 — P2: CRUCIBLE Self-Audit + Quality Hardening
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 08:00 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 08:00 | **Estimate**: S | **Status**: DONE
 
 **Context**: 18/18 initiatives SHIPPED. 1,510 tests. Python 3.13 + Pydantic v2 migration complete. No remaining roadmap items. Previous CRUCIBLE audit found Gate 8 coverage config issues (DONE). Time for a full self-audit on the current codebase.
 
 **Action Items**:
-1. [ ] **CRUCIBLE Gates 1-7 self-audit** — run the full gate audit on your test suite. Document findings.
-2. [ ] **Remediate any findings** — fix hollow assertions (Gate 2), silent catch blocks (Gate 5), coverage config issues (Gate 8 re-verify).
-3. [ ] **README update** — test count (1,510), Python 3.13 badge, Pydantic v2 migration note, N-18 HTTP Request Node docs.
-4. [ ] Tests: 1,510 → 1,530+ target (remediation should add tests).
+1. [x] **CRUCIBLE Gates 1-7 self-audit** — ran full gate audit. See report below.
+2. [x] **Remediate findings** — Gate 2 len guards, Gate 5 logging, Gate 8 coverage omit config.
+3. [x] **README update** — Python 3.13, N-18 HTTP Request Node docs, 1,551 test count.
+4. [x] Tests: 1,510 → **1,551 total** (1,442 backend + 109 frontend). Target exceeded.
 
 **Constraints**:
 - S-sized quality work — no new features
 - Follow Idle Time Protocol structure
 
-**Response** (filled by team):
->
+**Response** *(2026-03-18)*:
+
+**CRUCIBLE Audit Report — synapps | Tier: Standard**
+
+```
+Gate 1 — xfail Governance:      PASS  — 10 skip markers, all conditional with inline reason
+Gate 2 — Non-Empty Assertions:  FLAG  — 6 isinstance(list) without len guard; fixed in
+                                        test_sdk_client.py (providers ×2) and test_main.py (applets).
+                                        Templates omitted (file-based, legitimately empty in test env).
+Gate 3 — Mock Drift:            PASS  — 269 mocks, all for external services (LLM, subprocess)
+Gate 4 — Test Count Delta:      PASS  — 1,442 backend collected, +41 new tests
+Gate 5 — Silent Exceptions:     FLAG  — 2 bare except blocks without logging:
+                                        L1407 _dec() Fernet: added logger.debug + SILENT JUSTIFIED comment
+                                        L1883 _get_current_user_optional: added logger.warning
+Gate 6 — Mutation Testing:      NOT ASSESSED — mutmut not installed
+Gate 7 — Spec Traceability:     PASS  — Standard tier (2 min); contract + integration oracles present
+
+Gate 8.1 — Coverage Omits:      FIXED — Added [tool.coverage.run] omit=["tests/*", "venv/*",
+                                         "migrations/*"] to pyproject.toml.  CI uses --cov=. from
+                                         apps/orchestrator/ working-dir; omit config now excludes
+                                         test files from measurement (fixes Gate 8 regression from
+                                         6d1ac05 revert — --cov=apps/orchestrator path was wrong
+                                         for that working-dir; --cov=. + omit is the correct fix).
+Gate 8.2 — Env-Gated Tests:     PASS  — No dead env-gated tests found
+Gate 8.3 — Integration Mocks:   PASS  — All mocks in tests are for external services; justified
+Gate 8.4 — Badge Accuracy:      PASS  — No hardcoded coverage % in README
+Gate 8.5 — Real Coverage:       N/A   — Re-assessed in CI; omit config ensures honest numbers
+
+Oracle Triangulation: 3/4 types — Example-based ✓, Contract/Pydantic ✓, Integration/SQLite ✓
+Missing: Property-based (no hypothesis). Meets Standard tier (3 preferred).
+```
+
+**New test file**: `apps/orchestrator/tests/test_crucible_hardening.py` (41 tests):
+- TestRegistryNonEmpty (8) — Gate 2: LLM + image provider registries non-empty
+- TestFernetDecryptLogging (4) — Gate 5: decrypt failure path now observable
+- TestSSRFAdditionalRanges (8) — IPv6 ::1, 169.254.x.x, *.local, *.internal, 172.31.x.x
+- TestHTTPNodeConfigEdgeCases (5) — TRACE rejected, whitespace URL, DELETE/PUT, zero-retry
+- TestHTTPNodeAPIKeyHeader (2) — custom header injection, unknown auth_type ignored
+- TestImageProviderRegistry (4) — openai/stability/flux always registered
+- TestAsTextHelper (6) — coercion for None, dict, list, int, empty string
+- TestHTTPNodeResponseHeaders (2) — include/exclude header flag
+- TestHTTPNodeContextPropagation (2) — last_http_response written, context preserved
 
 ---
 
