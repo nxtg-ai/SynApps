@@ -20,6 +20,7 @@ setup(
         "aiosqlite>=0.20.0",
         "asyncpg>=0.30.0",
         "psycopg2-binary>=2.9.9",
+        "croniter>=1.4.0",
     ],
     description="SynApps Orchestrator - Lightweight message routing for AI applets",
     author="SynApps Team",

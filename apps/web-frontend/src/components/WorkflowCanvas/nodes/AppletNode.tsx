@@ -57,6 +57,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
         return <span role="img" aria-label="HTTP Request">🌐</span>;
       case 'webhook_trigger':
         return <span role="img" aria-label="Webhook Trigger">🔗</span>;
+      case 'scheduler_node':
+        return <span role="img" aria-label="Scheduler">⏰</span>;
       default:
         return <span role="img" aria-label="Applet">🔌</span>;
     }
@@ -91,6 +93,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
         return '#ecfeff';
       case 'webhook_trigger':
         return '#f5f3ff';
+      case 'scheduler_node':
+        return '#f0fdf4';
       default:
         return '#f8fafc';
     }
@@ -125,6 +129,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
         return '#0891b2';
       case 'webhook_trigger':
         return '#7c3aed';
+      case 'scheduler_node':
+        return '#16a34a';
       default:
         return '#64748b';
     }
@@ -186,7 +192,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
             {appletType === 'code' && `Sandboxed ${(data as any).language || 'python'} — ${(data as any).timeout_seconds || 5}s timeout`}
             {appletType === 'http_request' && `${(data as any).method || 'GET'} ${(data as any).url || 'no URL configured'}`}
             {appletType === 'webhook_trigger' && 'Starts workflow from inbound HTTP POST'}
-            {!['llm', 'writer', 'artist', 'memory', 'researcher', 'analyzer', 'summarizer', 'merge', 'for_each', 'if_else', 'code', 'http_request', 'webhook_trigger'].includes(appletType) && 'Custom applet module'}
+            {appletType === 'scheduler_node' && 'Cron-triggered workflow'}
+            {!['llm', 'writer', 'artist', 'memory', 'researcher', 'analyzer', 'summarizer', 'merge', 'for_each', 'if_else', 'code', 'http_request', 'webhook_trigger', 'scheduler_node'].includes(appletType) && 'Custom applet module'}
           </div>
         )}
       </div>

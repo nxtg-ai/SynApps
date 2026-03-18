@@ -43,6 +43,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import jwt
+from croniter import croniter as CronIter
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import (
     APIRouter,
@@ -195,6 +196,7 @@ IF_ELSE_NODE_TYPE = "if_else"
 MERGE_NODE_TYPE = "merge"
 FOR_EACH_NODE_TYPE = "for_each"
 WEBHOOK_TRIGGER_NODE_TYPE = "webhook_trigger"
+SCHEDULER_NODE_TYPE = "scheduler_node"
 ENGINE_MAX_CONCURRENCY = int(os.environ.get("ENGINE_MAX_CONCURRENCY", "10"))
 TRACE_RESULTS_KEY = "__trace__"
 TRACE_SCHEMA_VERSION = 1
@@ -1538,6 +1540,92 @@ class WebhookTriggerRegistry:
 webhook_trigger_registry = WebhookTriggerRegistry()
 
 
+# ---------------------------------------------------------------------------
+# Scheduler Service — Background cron-tick loop
+# ---------------------------------------------------------------------------
+
+
+class SchedulerService:
+    """Async background service that fires scheduled workflows on their cron cadence.
+
+    Tick interval: 30 seconds (configurable via ``SCHEDULER_TICK_SECONDS`` env var).
+    Lightweight: does not use a third-party scheduler framework — just asyncio.sleep.
+    """
+
+    _task: asyncio.Task | None = None
+    _running: bool = False
+    TICK_SECONDS: float = float(os.environ.get("SCHEDULER_TICK_SECONDS", "30"))
+
+    @classmethod
+    async def start(cls) -> None:
+        """Start the background tick loop."""
+        cls._running = True
+        cls._task = asyncio.create_task(cls._run_loop(), name="scheduler-service")
+        logger.info("SchedulerService started (tick=%.0fs)", cls.TICK_SECONDS)
+
+    @classmethod
+    async def stop(cls) -> None:
+        """Stop the background tick loop gracefully."""
+        cls._running = False
+        if cls._task and not cls._task.done():
+            cls._task.cancel()
+            await asyncio.gather(cls._task, return_exceptions=True)
+            cls._task = None
+        logger.info("SchedulerService stopped")
+
+    @classmethod
+    async def _run_loop(cls) -> None:
+        while cls._running:
+            await asyncio.sleep(cls.TICK_SECONDS)
+            if cls._running:
+                await cls._tick()
+
+    @classmethod
+    async def _tick(cls) -> None:
+        """Fire any schedules whose next_run time has arrived."""
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _dt
+
+        due = scheduler_registry.get_due()
+        for schedule in due:
+            schedule_id = schedule["id"]
+            flow_id = schedule["flow_id"]
+            try:
+                run_body = RunFlowRequest(
+                    input={
+                        "trigger": "scheduler",
+                        "schedule_id": schedule_id,
+                        "schedule_name": schedule.get("name"),
+                    }
+                )
+                await _run_flow_impl(flow_id, run_body)
+                scheduler_registry.update(
+                    schedule_id,
+                    last_run=_dt.now(UTC).isoformat(),
+                    next_run=_compute_next_run(schedule["cron_expr"]),
+                    run_count=schedule.get("run_count", 0) + 1,
+                )
+                logger.info(
+                    "SchedulerService: fired schedule %s for flow %s",
+                    schedule_id,
+                    flow_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "SchedulerService: failed to fire schedule %s: %s",
+                    schedule_id,
+                    exc,
+                )
+                # Advance next_run so we don't hammer a broken flow
+                try:
+                    scheduler_registry.update(
+                        schedule_id,
+                        next_run=_compute_next_run(schedule["cron_expr"]),
+                    )
+                except ValueError:
+                    pass  # OMIT JUSTIFIED: cron_expr already validated at creation; failure here is unreachable
+
+
 def _init_webhook_trigger_registry() -> None:
     """Re-initialise webhook_trigger_registry with Fernet encryption."""
     global webhook_trigger_registry
@@ -1819,7 +1907,9 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialization complete")
     # Start background key-expiry watcher
     expiry_task = asyncio.create_task(_key_expiry_watcher())
+    await SchedulerService.start()
     yield
+    await SchedulerService.stop()
     expiry_task.cancel()
     logger.info("Closing database connections...")
     await close_db_connections()
@@ -7499,6 +7589,136 @@ applet_registry[FOR_EACH_NODE_TYPE] = ForEachNodeApplet
 applet_registry[WEBHOOK_TRIGGER_NODE_TYPE] = WebhookTriggerNodeApplet
 
 
+# ---------------------------------------------------------------------------
+# Scheduler Node — Cron-Triggered Workflow Scheduler
+# ---------------------------------------------------------------------------
+
+SCHEDULER_CREDENTIAL_FIELDS = frozenset({
+    "api_key", "bearer_token", "password", "secret", "token", "auth",
+    "authorization", "private_key", "client_secret",
+})
+
+
+def _compute_next_run(cron_expr: str, base: "datetime | None" = None) -> str:
+    """Return ISO-8601 string of the next scheduled run time for a cron expression."""
+    from datetime import UTC  # noqa: PLC0415
+    from datetime import datetime as _dt
+
+    now = base or _dt.now(UTC)
+    # Strip timezone for croniter (it works with naive datetimes internally)
+    now_naive = now.replace(tzinfo=None)
+    try:
+        c = CronIter(cron_expr, now_naive)
+        next_naive = c.get_next(_dt)
+        return next_naive.isoformat()
+    except (ValueError, KeyError) as exc:
+        raise ValueError(f"Invalid cron expression '{cron_expr}': {exc}") from exc
+
+
+class SchedulerRegistry:
+    """In-memory store for workflow cron schedules (thread-safe)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._schedules: dict[str, dict[str, Any]] = {}
+
+    def create(
+        self,
+        flow_id: str,
+        cron_expr: str,
+        name: str | None = None,
+        enabled: bool = True,
+    ) -> dict[str, Any]:
+        """Validate cron expression and register a new schedule."""
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _dt
+
+        next_run = _compute_next_run(cron_expr)  # raises ValueError if invalid
+        schedule_id = str(uuid.uuid4())
+        entry: dict[str, Any] = {
+            "id": schedule_id,
+            "flow_id": flow_id,
+            "cron_expr": cron_expr,
+            "name": name or f"Schedule for {flow_id}",
+            "enabled": enabled,
+            "next_run": next_run,
+            "last_run": None,
+            "created_at": _dt.now(UTC).isoformat(),
+            "run_count": 0,
+        }
+        with self._lock:
+            self._schedules[schedule_id] = entry
+        return dict(entry)
+
+    def get(self, schedule_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            entry = self._schedules.get(schedule_id)
+            return dict(entry) if entry else None
+
+    def list(self, flow_id: str | None = None) -> list[dict[str, Any]]:
+        with self._lock:
+            results = [dict(v) for v in self._schedules.values()]
+        if flow_id:
+            results = [r for r in results if r["flow_id"] == flow_id]
+        return sorted(results, key=lambda s: s.get("created_at", ""), reverse=True)
+
+    def update(self, schedule_id: str, **kwargs: Any) -> dict[str, Any] | None:
+        """Partial update. Recomputes next_run if cron_expr changes."""
+        with self._lock:
+            entry = self._schedules.get(schedule_id)
+            if entry is None:
+                return None
+            if "cron_expr" in kwargs:
+                kwargs["next_run"] = _compute_next_run(kwargs["cron_expr"])
+            entry.update(kwargs)
+            return dict(entry)
+
+    def delete(self, schedule_id: str) -> bool:
+        with self._lock:
+            return self._schedules.pop(schedule_id, None) is not None
+
+    def get_due(self) -> "list[dict[str, Any]]":
+        """Return enabled schedules whose next_run is in the past."""
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _dt
+
+        now_iso = _dt.now(UTC).replace(tzinfo=None).isoformat()
+        with self._lock:
+            due = [
+                dict(v) for v in self._schedules.values()
+                if v.get("enabled", True) and (v.get("next_run") or "") <= now_iso
+            ]
+        return due
+
+
+scheduler_registry = SchedulerRegistry()
+
+
+class SchedulerNodeApplet(BaseApplet):
+    """Passthrough node — represents the scheduler trigger in a cron-driven flow.
+
+    The flow is started externally by ``SchedulerService``; this applet simply
+    forwards the message downstream so the rest of the pipeline can execute.
+    """
+
+    VERSION = "1.0.0"
+    CAPABILITIES = ["scheduler-trigger", "cron-schedule", "flow-start"]
+
+    async def on_message(self, message: AppletMessage) -> AppletMessage:
+        return AppletMessage(
+            content=message.content,
+            context=message.context,
+            metadata={
+                **message.metadata,
+                "applet": SCHEDULER_NODE_TYPE,
+                "status": "triggered",
+            },
+        )
+
+
+applet_registry[SCHEDULER_NODE_TYPE] = SchedulerNodeApplet
+
+
 # ============================================================
 # Orchestrator Core
 # ============================================================
@@ -7598,6 +7818,17 @@ class Orchestrator:
         }:
             applet_registry[WEBHOOK_TRIGGER_NODE_TYPE] = WebhookTriggerNodeApplet
             return WebhookTriggerNodeApplet()
+
+        if normalized_type in {
+            SCHEDULER_NODE_TYPE,
+            "scheduler",
+            "scheduler-node",
+            "cron",
+            "cron_node",
+            "cron-node",
+        }:
+            applet_registry[SCHEDULER_NODE_TYPE] = SchedulerNodeApplet
+            return SchedulerNodeApplet()
 
         try:
             module_path = f"apps.applets.{normalized_type}.applet"
@@ -9183,7 +9414,8 @@ async def probe_single_connector(
 
 KNOWN_NODE_TYPES = frozenset({
     "start", "end", "llm", "image", "image_gen", "memory", "http_request",
-    "code", "transform", "if_else", "merge", "for_each", "webhook_trigger", "custom",
+    "code", "transform", "if_else", "merge", "for_each", "webhook_trigger",
+    "scheduler_node", "custom",
 })
 
 
@@ -9354,6 +9586,27 @@ class RegisterWebhookTriggerRequest(StrictRequestModel):
     )
 
 
+class CreateScheduleRequest(StrictRequestModel):
+    """Request body for creating a new workflow schedule."""
+
+    flow_id: str = Field(..., min_length=1, description="ID of the flow to schedule.")
+    cron_expr: str = Field(
+        ...,
+        min_length=9,
+        description="Standard 5-field cron expression (e.g. '0 9 * * 1-5').",
+    )
+    name: str | None = Field(None, max_length=200, description="Human-readable schedule name.")
+    enabled: bool = Field(True, description="Whether the schedule is active immediately.")
+
+
+class UpdateScheduleRequest(StrictRequestModel):
+    """Partial-update request for an existing schedule."""
+
+    cron_expr: str | None = Field(None, min_length=9)
+    name: str | None = Field(None, max_length=200)
+    enabled: bool | None = None
+
+
 class RegisterWebhookRequest(StrictRequestModel):
     """Request body for webhook registration."""
     url: str = Field(..., min_length=1, description="Delivery URL")
@@ -9510,6 +9763,108 @@ async def receive_webhook_trigger(
 
     result = await _run_flow_impl(trigger["flow_id"], run_body)
     return {"accepted": True, "run_id": result["run_id"], "trigger_id": trigger_id}
+
+
+# ---------------------------------------------------------------------------
+# Scheduler — Management API
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/schedules", status_code=201, tags=["Schedules"])
+async def create_schedule(
+    body: CreateScheduleRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Register a new cron schedule for a flow.
+
+    The ``cron_expr`` field accepts standard 5-field cron syntax::
+
+        ┌─────── minute (0–59)
+        │ ┌───── hour (0–23)
+        │ │ ┌─── day of month (1–31)
+        │ │ │ ┌─ month (1–12)
+        │ │ │ │ ┌ day of week (0–7, Sunday=0/7)
+        │ │ │ │ │
+        * * * * *
+
+    Examples: ``0 9 * * 1-5`` (9 AM Mon–Fri), ``*/15 * * * *`` (every 15 min).
+    """
+    # Verify the flow exists
+    flow = await FlowRepository.get_by_id(body.flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{body.flow_id}' not found")
+
+    try:
+        entry = scheduler_registry.create(
+            flow_id=body.flow_id,
+            cron_expr=body.cron_expr,
+            name=body.name,
+            enabled=body.enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return entry
+
+
+@v1.get("/schedules", tags=["Schedules"])
+async def list_schedules(
+    flow_id: str | None = Query(None, description="Filter by flow ID."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all registered schedules, optionally filtered by flow."""
+    return scheduler_registry.list(flow_id=flow_id)
+
+
+@v1.get("/schedules/{schedule_id}", tags=["Schedules"])
+async def get_schedule(
+    schedule_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Retrieve a single schedule by ID."""
+    entry = scheduler_registry.get(schedule_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' not found")
+    return entry
+
+
+@v1.patch("/schedules/{schedule_id}", tags=["Schedules"])
+async def update_schedule(
+    schedule_id: str,
+    body: UpdateScheduleRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Pause, resume, rename, or change the cron expression of a schedule."""
+    if not scheduler_registry.get(schedule_id):
+        raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' not found")
+
+    updates: dict[str, Any] = {}
+    if body.cron_expr is not None:
+        updates["cron_expr"] = body.cron_expr
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.enabled is not None:
+        updates["enabled"] = body.enabled
+
+    if not updates:
+        raise HTTPException(status_code=422, detail="No update fields provided")
+
+    try:
+        entry = scheduler_registry.update(schedule_id, **updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return entry
+
+
+@v1.delete("/schedules/{schedule_id}", status_code=204, tags=["Schedules"])
+async def delete_schedule(
+    schedule_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete a schedule. The associated flow is not affected."""
+    if not scheduler_registry.delete(schedule_id):
+        raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' not found")
 
 
 # ---------------------------------------------------------------------------
@@ -9797,6 +10152,45 @@ async def list_templates(
     return {"templates": templates, "total": len(templates)}
 
 
+@v1.get("/templates/search", tags=["Templates"])
+async def search_templates(
+    q: str | None = Query(None, description="Full-text search against name and description."),
+    tags: list[str] = Query(default=[], description="Filter by tags (any match)."),
+    category: str | None = Query(None, description="Filter by category metadata."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Search templates by name/description text and/or tags.
+
+    Results are ranked by recency (most recently imported first). All filters
+    are AND-combined: a template must match every supplied filter to appear.
+    """
+    results = template_registry.list_templates()
+
+    if q:
+        q_lower = q.lower()
+        results = [
+            t for t in results
+            if q_lower in t.get("name", "").lower()
+            or q_lower in t.get("description", "").lower()
+        ]
+
+    if tags:
+        tag_set = {t.lower() for t in tags}
+        results = [
+            t for t in results
+            if tag_set.intersection({tg.lower() for tg in t.get("tags", [])})
+        ]
+
+    if category:
+        cat_lower = category.lower()
+        results = [
+            t for t in results
+            if t.get("metadata", {}).get("category", "").lower() == cat_lower
+        ]
+
+    return {"items": results, "total": len(results)}
+
+
 @v1.get("/templates/{template_id}/by-semver", tags=["Templates"])
 async def get_template_by_semver(
     template_id: str,
@@ -9907,6 +10301,37 @@ class InstantiateTemplateRequest(StrictRequestModel):
     )
 
 
+# Credential field names that must never appear in exported templates
+_CREDENTIAL_FIELD_NAMES = frozenset({
+    "api_key", "apiKey", "bearer_token", "bearerToken", "password", "secret",
+    "token", "auth_token", "authToken", "authorization", "private_key",
+    "privateKey", "client_secret", "clientSecret", "access_token", "accessToken",
+    "refresh_token", "refreshToken", "webhook_secret", "webhookSecret",
+})
+
+
+def _scrub_node_credentials(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a copy of nodes with credential fields blanked out.
+
+    Operates on the ``data`` sub-dict of each node. Credential fields are set to
+    an empty string so the template consumer knows the field exists but must fill it.
+    """
+    scrubbed = []
+    for node in nodes:
+        node_copy = dict(node)
+        data = node_copy.get("data")
+        if isinstance(data, dict):
+            new_data = {}
+            for k, v in data.items():
+                if k in _CREDENTIAL_FIELD_NAMES or k.lower() in _CREDENTIAL_FIELD_NAMES:
+                    new_data[k] = ""  # blank — must be filled by importer
+                else:
+                    new_data[k] = v
+            node_copy["data"] = new_data
+        scrubbed.append(node_copy)
+    return scrubbed
+
+
 @v1.post("/templates", status_code=201, tags=["Templates"])
 async def publish_template(
     body: PublishTemplateRequest,
@@ -9925,7 +10350,7 @@ async def publish_template(
         "name": body.name,
         "description": body.description,
         "tags": [body.category],
-        "nodes": flow.get("nodes", []),
+        "nodes": _scrub_node_credentials(flow.get("nodes", [])),
         "edges": flow.get("edges", []),
         "metadata": {
             "category": body.category,

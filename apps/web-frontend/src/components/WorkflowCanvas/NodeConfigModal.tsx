@@ -694,6 +694,38 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           </>
         );
 
+      case 'scheduler_node':
+        return (
+          <>
+            <div className="form-group">
+              <label htmlFor="label">Node Label</label>
+              <input
+                type="text"
+                id="label"
+                name="label"
+                value={formData.label || ''}
+                onChange={handleChange}
+                placeholder="Enter node label"
+              />
+            </div>
+            <div className="form-group">
+              <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.5' }}>
+                This node triggers the workflow on a cron schedule. Configure the schedule via the Schedules API or dashboard.
+              </p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="node-id-display">Node ID</label>
+              <input
+                type="text"
+                id="node-id-display"
+                value={nodeId}
+                readOnly
+                style={{ backgroundColor: '#f5f5f5', cursor: 'default' }}
+              />
+            </div>
+          </>
+        );
+
       case 'http_request':
         return (
           <>

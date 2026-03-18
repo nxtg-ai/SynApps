@@ -229,6 +229,9 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-50 (N-19 Webhook Trigger Node) → DONE. WebhookTriggerRegistry (Fernet-encrypted, HMAC-SHA256), WebhookTriggerNodeApplet (passthrough), 5 REST endpoints, frontend palette/color. 44 new tests (test_webhook_trigger.py). 1,457 backend + 109 frontend = 1,566 total. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-51 (Documentation + Architecture Refresh) → DONE. README updated (N-19 node types table + features, 1,566 test count). CHANGELOG [Unreleased] v1.0.0-alpha section from git history. Architecture diagram deferred. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-57 (E2E Smoke Test) → DONE. test_e2e_smoke.py: 12 tests, webhook_trigger→LLM→http_request→end pipeline, all passing. Aiosqlite teardown race fixed. 1,469 backend + 109 frontend = 1,578 total. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-67 (N-20 Scheduler Node) → DONE. SchedulerService (async background tick loop, 30s), SchedulerRegistry (croniter-powered), SchedulerNodeApplet, 5 REST endpoints, frontend palette/modal. 42 new tests (test_scheduler.py). |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-68 (N-21 Template Marketplace) → DONE. Credential scrubbing on publish (_scrub_node_credentials, 18 fields), GET /templates/search (q/tags/category). 20 new tests (test_template_marketplace.py). |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-69 (Docker Compose + Getting Started) → DONE. docker-compose.yml already complete; docs/getting-started.md created. 1,531 backend + 109 frontend = 1,640 total. |
 
 ---
 
@@ -239,40 +242,50 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-67 — P1: N-20 Scheduler Node — Cron-Triggered Workflows
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Scheduler node** — configure cron expression. When triggered, starts workflow execution.
-2. [ ] **Scheduler service** — background process that checks cron schedules and fires workflows.
-3. [ ] **Management API** — list scheduled workflows, pause/resume, view next run time.
-4. [ ] Tests: scheduler logic, cron parsing, workflow triggering.
+1. [x] **Scheduler node** — `SchedulerNodeApplet` (passthrough), `SCHEDULER_NODE_TYPE = "scheduler_node"`, frontend: ⏰ icon, green palette entry, config modal.
+2. [x] **Scheduler service** — `SchedulerService` async background tick loop (30s default, `SCHEDULER_TICK_SECONDS` env var configurable). Fires `_run_flow_impl()` for due schedules. Started/stopped in lifespan handler.
+3. [x] **Management API** — 5 endpoints: `POST /schedules` (201, validates cron + flow exists), `GET /schedules` (?flow_id filter), `GET /schedules/{id}`, `PATCH /schedules/{id}` (pause/resume/rename/recron), `DELETE /schedules/{id}` (204). `SchedulerRegistry` thread-safe in-memory store.
+4. [x] Tests: 42 tests in `test_scheduler.py` — registry unit (12), node registration (6), cron parsing (5), endpoint HTTP (12), applet behaviour (4), get_due (3).
+
+**Response** *(2026-03-18)*:
+
+N-20 Scheduler Node SHIPPED. `croniter>=1.4.0` added as dependency. `_compute_next_run()` wraps croniter for ISO-8601 next-run computation. `SchedulerService._tick()` advances `next_run` after each fire (so schedules don't double-trigger). Frontend fully registered: canvas node, palette entry, config modal.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-68.
-**Response** (filled by team): >
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-68 — P1: N-21 Template Marketplace — Shareable Workflows
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Export workflow as template** — strip credentials, add description/tags.
-2. [ ] **Import template** — load, customize, run. 3. [ ] **Template gallery** — browse/search templates.
+1. [x] **Export workflow as template** — `_scrub_node_credentials()` strips 18 credential field variants (api_key, bearer_token, password, apiKey, etc.) to `""` on publish. `_CREDENTIAL_FIELD_NAMES` frozenset.
+2. [x] **Import template / customize / run** — already existed from N-17 (`instantiate_template` + `connector_overrides`). Confirmed working.
+3. [x] **Template gallery — browse/search** — `GET /api/v1/templates/search` with `q` (name/description substring), `tags` (any-match), `category` (exact) filters, AND-combined. Returns `{"items": [...], "total": N}`.
+
+**Response** *(2026-03-18)*:
+
+N-21 Template Marketplace enhancements SHIPPED. The core `TemplateRegistry` + versioning + publish/instantiate was already in place from N-17. This directive added credential scrubbing (export privacy) and search (discovery). 20 new tests in `test_template_marketplace.py`.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-69.
-**Response** (filled by team): >
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-69 — P2: Docker Compose + Getting Started Guide
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 15:30 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 15:30 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] `docker-compose.yml` for one-command setup. 2. [ ] `docs/getting-started.md` tutorial.
+1. [x] `docker-compose.yml` — already existed (PostgreSQL + orchestrator + frontend, healthchecks, env vars). Verified complete, no changes needed.
+2. [x] `docs/getting-started.md` — created. Covers Docker Quick Start (4 steps), local dev setup, first workflow tutorial (Start → LLM → End), env vars reference, and "What's next" links.
 
-**Response** (filled by team): >
+**Response** *(2026-03-18)*:
+
+D-69 DONE. `docker-compose.yml` was already production-quality from the CI/CD upgrade. `docs/getting-started.md` created covering both Docker and local dev paths.
 
 ---
 

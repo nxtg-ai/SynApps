@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from apps.orchestrator.main import (
     MARKETPLACE_CATEGORIES,
     _load_yaml_template,
+    _scrub_node_credentials,
     app,
     template_registry,
 )
@@ -754,3 +755,300 @@ def test_full_marketplace_roundtrip(client):
     assert flow["name"] == "My RSS to Slack"
     assert len(flow["nodes"]) == 3
     assert len(flow["edges"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# D-68: TestTemplateCredentialScrubbing — unit tests for _scrub_node_credentials
+# ---------------------------------------------------------------------------
+
+_FLOW_WITH_CREDS = {
+    "id": "tmpl-cred-test-001",
+    "name": "Cred Test Flow",
+    "nodes": [
+        {
+            "id": "http1",
+            "type": "http_request",
+            "position": {"x": 0, "y": 0},
+            "data": {
+                "label": "API Call",
+                "url": "https://api.example.com/data",
+                "api_key": "sk-secret-key-123",
+                "bearer_token": "tok_abc",
+                "content_type": "application/json",
+            },
+        },
+        {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {"label": "End"}},
+    ],
+    "edges": [{"id": "e1", "source": "http1", "target": "end"}],
+}
+
+
+class TestTemplateCredentialScrubbing:
+    """Unit tests for _scrub_node_credentials (D-68)."""
+
+    def test_scrub_removes_api_key_from_node_data(self):
+        """api_key field is blanked to empty string."""
+        nodes = [
+            {
+                "id": "n1",
+                "type": "http",
+                "data": {"url": "https://example.com", "api_key": "sk-super-secret"},
+            }
+        ]
+        result = _scrub_node_credentials(nodes)
+        assert result[0]["data"]["api_key"] == ""
+
+    def test_scrub_removes_bearer_token(self):
+        """bearer_token field is blanked to empty string."""
+        nodes = [{"id": "n1", "type": "http", "data": {"bearer_token": "tok-abc123"}}]
+        result = _scrub_node_credentials(nodes)
+        assert result[0]["data"]["bearer_token"] == ""
+
+    def test_scrub_removes_password(self):
+        """password field is blanked to empty string."""
+        nodes = [{"id": "n1", "type": "db", "data": {"host": "localhost", "password": "s3cr3t"}}]
+        result = _scrub_node_credentials(nodes)
+        assert result[0]["data"]["password"] == ""
+
+    def test_scrub_preserves_non_credential_fields(self):
+        """Non-credential fields are left intact."""
+        nodes = [
+            {
+                "id": "n1",
+                "type": "http",
+                "data": {
+                    "url": "https://api.example.com/data",
+                    "method": "POST",
+                    "content_type": "application/json",
+                    "api_key": "sk-secret",
+                },
+            }
+        ]
+        result = _scrub_node_credentials(nodes)
+        assert result[0]["data"]["url"] == "https://api.example.com/data"
+        assert result[0]["data"]["method"] == "POST"
+        assert result[0]["data"]["content_type"] == "application/json"
+
+    def test_scrub_multiple_nodes(self):
+        """All nodes in the list are scrubbed independently."""
+        nodes = _FLOW_WITH_CREDS["nodes"]
+        result = _scrub_node_credentials(nodes)
+        # http1 node — credentials blanked
+        http_node = next(n for n in result if n["id"] == "http1")
+        assert http_node["data"]["api_key"] == ""
+        assert http_node["data"]["bearer_token"] == ""
+        # end node — no credential fields, label preserved
+        end_node = next(n for n in result if n["id"] == "end")
+        assert end_node["data"]["label"] == "End"
+
+    def test_scrub_node_without_data_dict_unchanged(self):
+        """Node with no 'data' dict (or non-dict data) is returned unchanged."""
+        nodes = [{"id": "n1", "type": "start"}]
+        result = _scrub_node_credentials(nodes)
+        assert result[0] == {"id": "n1", "type": "start"}
+
+    def test_scrub_blanks_field_to_empty_string(self):
+        """Scrubbed fields become empty string, not None or deleted."""
+        nodes = [{"id": "n1", "type": "http", "data": {"token": "my-token-value"}}]
+        result = _scrub_node_credentials(nodes)
+        assert "token" in result[0]["data"]
+        assert result[0]["data"]["token"] == ""
+
+    def test_scrub_camel_case_api_key(self):
+        """camelCase 'apiKey' field is also scrubbed."""
+        nodes = [{"id": "n1", "type": "http", "data": {"apiKey": "camel-secret-key"}}]
+        result = _scrub_node_credentials(nodes)
+        assert result[0]["data"]["apiKey"] == ""
+
+
+# ---------------------------------------------------------------------------
+# D-68: TestTemplateSearch — GET /api/v1/templates/search
+# ---------------------------------------------------------------------------
+
+_SEARCH_TEMPLATES = [
+    {
+        "id": "tmpl-notify-rss",
+        "name": "RSS to Slack",
+        "description": "Forward RSS feed items to a Slack channel",
+        "tags": ["rss", "slack", "notification"],
+        "nodes": [],
+        "edges": [],
+        "metadata": {"category": "notification"},
+    },
+    {
+        "id": "tmpl-devops-deploy",
+        "name": "Deploy on PR Merge",
+        "description": "Trigger a deployment when a GitHub PR is merged",
+        "tags": ["github", "deploy", "devops"],
+        "nodes": [],
+        "edges": [],
+        "metadata": {"category": "devops"},
+    },
+    {
+        "id": "tmpl-monitor-uptime",
+        "name": "Uptime Monitor",
+        "description": "Periodically check endpoint health and alert on failure",
+        "tags": ["uptime", "health", "monitoring"],
+        "nodes": [],
+        "edges": [],
+        "metadata": {"category": "monitoring"},
+    },
+]
+
+
+class TestTemplateSearch:
+    """Tests for GET /api/v1/templates/search (D-68)."""
+
+    @pytest.fixture(autouse=True)
+    def _seed(self, client):
+        """Seed the registry with known templates before each search test."""
+        for tmpl in _SEARCH_TEMPLATES:
+            resp = client.post("/api/v1/templates/import", json=tmpl)
+            assert resp.status_code == 201
+
+    def test_search_empty_returns_empty(self, client):
+        """Search with no query returns all templates (no filter applied)."""
+        resp = client.get("/api/v1/templates/search")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert isinstance(data["items"], list)
+        assert data["total"] == 3
+
+    def test_search_by_name_q_param(self, client):
+        """?q=rss matches template by name."""
+        resp = client.get("/api/v1/templates/search?q=rss")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "RSS to Slack"
+
+    def test_search_by_description_q_param(self, client):
+        """?q=deployment matches template by description text."""
+        resp = client.get("/api/v1/templates/search?q=deployment")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == "tmpl-devops-deploy"
+
+    def test_search_by_tags_single_tag(self, client):
+        """?tags=uptime returns templates that have that tag."""
+        resp = client.get("/api/v1/templates/search?tags=uptime")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == "tmpl-monitor-uptime"
+
+    def test_search_by_category(self, client):
+        """?category=devops returns only devops templates."""
+        resp = client.get("/api/v1/templates/search?category=devops")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == "tmpl-devops-deploy"
+
+    def test_search_multiple_filters_and_combined(self, client):
+        """Combining q + category narrows results (AND logic)."""
+        # "monitor" matches name/description of uptime template AND category=monitoring
+        resp = client.get("/api/v1/templates/search?q=monitor&category=monitoring")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == "tmpl-monitor-uptime"
+
+    def test_search_case_insensitive(self, client):
+        """q= filter is case-insensitive."""
+        resp = client.get("/api/v1/templates/search?q=UPTIME")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == "tmpl-monitor-uptime"
+
+    def test_search_no_match_returns_empty(self, client):
+        """Search with no matching results returns items=[] and total=0."""
+        resp = client.get("/api/v1/templates/search?q=zzznomatchzzz")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert data["items"] == []
+        assert data["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# D-68: TestPublishTemplateScrubbedCredentials — integration
+# ---------------------------------------------------------------------------
+
+
+class TestPublishTemplateScrubbedCredentials:
+    """Integration tests: publish a flow with credentials, verify scrubbing (D-68)."""
+
+    def _create_flow_with_creds(self, client):
+        """Helper: create a flow with credential fields in a node's data."""
+        resp = client.post(
+            "/api/v1/flows",
+            json={
+                "name": "Cred Flow",
+                "nodes": _FLOW_WITH_CREDS["nodes"],
+                "edges": _FLOW_WITH_CREDS["edges"],
+            },
+        )
+        assert resp.status_code == 201
+        return resp.json()["id"]
+
+    def test_publish_scrubs_api_key_in_node_data(self, client):
+        """api_key is blank in published template nodes."""
+        flow_id = self._create_flow_with_creds(client)
+        resp = client.post(
+            "/api/v1/templates",
+            json={"flow_id": flow_id, "name": "Scrub API Key", "category": "notification"},
+        )
+        assert resp.status_code == 201
+        http_node = next(n for n in resp.json()["nodes"] if n["id"] == "http1")
+        assert http_node["data"]["api_key"] == ""
+
+    def test_publish_scrubs_bearer_token_in_node_data(self, client):
+        """bearer_token is blank in published template nodes."""
+        flow_id = self._create_flow_with_creds(client)
+        resp = client.post(
+            "/api/v1/templates",
+            json={"flow_id": flow_id, "name": "Scrub Bearer Token", "category": "devops"},
+        )
+        assert resp.status_code == 201
+        http_node = next(n for n in resp.json()["nodes"] if n["id"] == "http1")
+        assert http_node["data"]["bearer_token"] == ""
+
+    def test_publish_preserves_non_credential_fields(self, client):
+        """Non-credential fields (url, content_type) survive publish scrubbing."""
+        flow_id = self._create_flow_with_creds(client)
+        resp = client.post(
+            "/api/v1/templates",
+            json={"flow_id": flow_id, "name": "Preserve Fields", "category": "data-sync"},
+        )
+        assert resp.status_code == 201
+        http_node = next(n for n in resp.json()["nodes"] if n["id"] == "http1")
+        assert http_node["data"]["url"] == "https://api.example.com/data"
+        assert http_node["data"]["content_type"] == "application/json"
+        assert http_node["data"]["label"] == "API Call"
+
+    def test_publish_template_appears_in_search_results(self, client):
+        """Published template is findable via /templates/search."""
+        flow_id = self._create_flow_with_creds(client)
+        pub_resp = client.post(
+            "/api/v1/templates",
+            json={
+                "flow_id": flow_id,
+                "name": "Searchable Cred Template",
+                "description": "Template with scrubbed credentials",
+                "category": "monitoring",
+            },
+        )
+        assert pub_resp.status_code == 201
+
+        search_resp = client.get("/api/v1/templates/search?q=Searchable+Cred")
+        assert search_resp.status_code == 200
+        data = search_resp.json()
+        assert data["total"] >= 1  # Gate 2: confirm template was not silently lost
+        names = [t["name"] for t in data["items"]]
+        assert "Searchable Cred Template" in names
