@@ -256,6 +256,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260318-122 — P1: N-27 Workflow Notifications — Email + Slack on Complete/Fail
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 20:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Notification config** per workflow — on_complete and on_failure callbacks: email, Slack webhook, or custom URL.
+2. [ ] **Email adapter** — send execution summary (status, duration, output preview) via SMTP or SendGrid.
+3. [ ] **Slack adapter** — POST to Slack webhook with formatted blocks.
+4. [ ] Tests: both adapters, config validation, failure scenarios.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-123.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-123 — P2: Final E2E + README + Test Count
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 20:15 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Full E2E: workflow with variables + secrets + scheduler + error handler + marketplace publish + notifications. 2. [ ] Final test count. 3. [ ] README showcase.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-116 — P1: N-26 Workflow Variables + Environment Secrets
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 19:45 | **Estimate**: M | **Status**: DONE
