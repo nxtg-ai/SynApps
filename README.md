@@ -130,7 +130,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,566 tests** (1,457 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,578 tests** (1,469 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 

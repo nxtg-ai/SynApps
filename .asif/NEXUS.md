@@ -228,6 +228,7 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-03 (CRUCIBLE Self-Audit + Quality Hardening) → DONE. Full 8-gate audit. Gate 2: 3 len guards added. Gate 5: 2 silent except blocks given logging. Gate 8: coverage omit config added to pyproject.toml (correct fix for working-dir issue). 41 new tests in test_crucible_hardening.py. README updated (Python 3.13, N-18 docs). 1,442 backend + 109 frontend = 1,551 total. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-50 (N-19 Webhook Trigger Node) → DONE. WebhookTriggerRegistry (Fernet-encrypted, HMAC-SHA256), WebhookTriggerNodeApplet (passthrough), 5 REST endpoints, frontend palette/color. 44 new tests (test_webhook_trigger.py). 1,457 backend + 109 frontend = 1,566 total. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-51 (Documentation + Architecture Refresh) → DONE. README updated (N-19 node types table + features, 1,566 test count). CHANGELOG [Unreleased] v1.0.0-alpha section from git history. Architecture diagram deferred. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-57 (E2E Smoke Test) → DONE. test_e2e_smoke.py: 12 tests, webhook_trigger→LLM→http_request→end pipeline, all passing. Aiosqlite teardown race fixed. 1,469 backend + 109 frontend = 1,578 total. |
 
 ---
 
@@ -238,16 +239,29 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-57 — P0: E2E Smoke Test — Full Workflow Pipeline
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P0
-**Injected**: 2026-03-18 15:00 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 15:00 | **Estimate**: S | **Status**: DONE
 
 **Context**: N-19 Webhook Trigger shipped. Verify full workflow pipeline works end-to-end.
 
 **Action Items**:
-1. [ ] E2E: create workflow → add nodes (HTTP + webhook trigger + LLM) → execute → verify. One flow.
-2. [ ] Fix anything broken. 3. [ ] Final test count.
+1. [x] E2E: create workflow → add nodes (HTTP + webhook trigger + LLM) → execute → verify. One flow.
+2. [x] Fix anything broken (aiosqlite teardown race in sync TestClient path — poll-until-terminal pattern applied).
+3. [x] Final test count: **1,469 backend + 109 frontend = 1,578 total**.
 
-**Response** (filled by team):
->
+**Response** *(2026-03-18)*:
+
+E2E smoke test SHIPPED — `test_e2e_smoke.py` (12 tests, all passing).
+
+**Flow under test**: `webhook_trigger → LLM → http_request → end` (4 nodes, 3 edges). LLM and HTTP nodes are mocked; webhook_trigger and pipeline execution are real.
+
+**Test coverage** (3 classes):
+- `TestSmokeFlowStructure` (5): validate flow definition before execution — node count, edge count, type set, linear chain, edge endpoints
+- `TestSmokePipelineDirectExecution` (3): `Orchestrator.execute_flow()` path — full pipeline success, all nodes produce results, passthrough preserves input
+- `TestSmokePipelineViaReceiveEndpoint` (4): HTTP layer path — create/register/receive/run verified; HMAC signed + rejected; deleted trigger returns error; flow appears in list
+
+**Bug found and fixed**: `test_create_flow_register_trigger_receive_run` hit the same aiosqlite teardown race as 6 other tests in this project (background `create_task` writes DB after `TestClient` closes event loop). Fixed with poll-until-terminal inside the `with TestClient(app)` context, consistent with the established project pattern.
+
+**1,578 total tests** (1,469 backend + 109 frontend). Ruff clean.
 
 ---
 
