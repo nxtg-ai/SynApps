@@ -245,6 +245,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-93 (E2E Full Pipeline) → DONE. test_e2e_full_pipeline.py: 7 tests covering all node types + scheduler + analytics + marketplace full lifecycle. 1,669 backend + 109 frontend = 1,778 total. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-109 (Archive + README Showcase) → DONE. 15 DONE directives archived to NEXUS-archive.md. README ## Initiatives table added (N-01 through N-25). |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-108 (N-25 Execution Logs + Debug Console) → DONE. ExecutionLogStore singleton, 5 event types (node_start/retry/success/fallback/error), GET /executions/{id}/logs, POST /runs?debug=true. 19 tests. 1,688 backend + 109 frontend + 4 E2E = 1,797 total. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-116 (N-26 Variables + Secrets) → DONE. WorkflowVariableStore + WorkflowSecretStore (Fernet), {{var.name}}/{{secret.name}} template resolution in node data, secret masking in logs, 4 REST endpoints, 40 tests. 1,728 backend = 1,837 total. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-117 (Final README + Architecture) → DONE. README N-26 in initiatives table + node types table, test count 1,837. |
 
 ---
 
@@ -256,27 +258,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-116 — P1: N-26 Workflow Variables + Environment Secrets
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 19:45 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 19:45 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Workflow variables** — key-value pairs scoped per workflow. Accessible by all nodes via `{{var.name}}`.
-2. [ ] **Environment secrets** — encrypted at rest, masked in logs. For API keys used by HTTP/LLM nodes.
-3. [ ] **`GET/PUT /workflows/:id/variables`** and **`GET/PUT /workflows/:id/secrets`**.
-4. [ ] Tests: variable resolution in nodes, secret masking in logs.
+1. [x] **Workflow variables** — key-value pairs scoped per workflow. Accessible by all nodes via `{{var.name}}`.
+2. [x] **Environment secrets** — encrypted at rest, masked in logs. For API keys used by HTTP/LLM nodes.
+3. [x] **`GET/PUT /workflows/:id/variables`** and **`GET/PUT /workflows/:id/secrets`**.
+4. [x] Tests: variable resolution in nodes, secret masking in logs.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-117.
-**Response** (filled by team): >
+**Response** (filled by team): N-26 shipped. `WorkflowVariableStore` (thread-safe, per-flow key-value). `WorkflowSecretStore` (Fernet-encrypted at rest, values always masked as `***` in API responses). `_resolve_template` / `_resolve_node_data` apply `{{var.name}}` and `{{secret.name}}` substitution to all node data fields before execution. `_mask_secrets` applied to execution log entries to prevent secret leakage in logs. 4 REST endpoints: `GET/PUT /api/v1/workflows/{id}/variables`, `GET/PUT /api/v1/workflows/{id}/secrets`. 40 tests in `test_workflow_variables.py` (6 unit vars + 9 unit secrets + 7 template + 6 masking + 6 vars endpoint + 5 secrets endpoint + 1 E2E). Total: 1,728 backend (+40). OpenAPI regenerated (84 paths). 2026-03-18.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-117 — P2: Final README + Architecture Showcase
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 19:45 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 19:45 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] README — all 26 initiatives. 2. [ ] Final test count (1,778+). 3. [ ] Architecture diagram update.
+1. [x] README — all 26 initiatives. 2. [x] Final test count (1,837). 3. [ ] Architecture diagram update (no diagram file exists — skipped).
 
-**Response** (filled by team): >
+**Response** (filled by team): README ## Initiatives table updated with N-26 row. Node Types table updated with Variables row. Test count updated: 1,837 (1,728 backend + 109 frontend + 4 E2E). CHANGELOG updated with N-26 entry. No architecture diagram file exists in repo — skipped. 2026-03-18.
 
 ---
 

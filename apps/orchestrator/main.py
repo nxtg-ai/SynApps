@@ -7844,6 +7844,150 @@ execution_log_store = ExecutionLogStore()
 
 
 # ---------------------------------------------------------------------------
+# Workflow Variables + Environment Secrets — N-26
+# ---------------------------------------------------------------------------
+
+
+class WorkflowVariableStore:
+    """Thread-safe per-workflow key-value variable store.
+
+    Variables are plain values (strings, numbers, booleans) accessible in
+    node fields via the ``{{var.name}}`` template syntax.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._store: dict[str, dict[str, Any]] = {}
+
+    def set(self, flow_id: str, variables: dict[str, Any]) -> None:
+        with self._lock:
+            self._store[flow_id] = dict(variables)
+
+    def get(self, flow_id: str) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._store.get(flow_id, {}))
+
+    def delete(self, flow_id: str) -> None:
+        with self._lock:
+            self._store.pop(flow_id, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+class WorkflowSecretStore:
+    """Thread-safe per-workflow encrypted secret store.
+
+    Secrets are encrypted at rest using Fernet symmetric encryption.
+    GET returns values masked as ``***`` to prevent accidental leakage.
+    Only the raw values are available internally for template substitution.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._store: dict[str, dict[str, bytes]] = {}  # flow_id → {key: encrypted_bytes}
+        self._fernet: Fernet | None = None
+
+    def _get_fernet(self) -> Fernet:
+        if self._fernet is None:
+            key = app_config.fernet_key.encode() if app_config.fernet_key else None
+            if key and len(key) == 44:
+                self._fernet = Fernet(key)
+            else:
+                self._fernet = Fernet(Fernet.generate_key())
+        return self._fernet
+
+    def set(self, flow_id: str, secrets: dict[str, str]) -> None:
+        f = self._get_fernet()
+        with self._lock:
+            encrypted = {k: f.encrypt(str(v).encode()) for k, v in secrets.items()}
+            self._store[flow_id] = encrypted
+
+    def get_masked(self, flow_id: str) -> dict[str, str]:
+        """Return secret keys with masked values (``***``) — safe to return in API responses."""
+        with self._lock:
+            return {k: "***" for k in self._store.get(flow_id, {})}
+
+    def get_raw(self, flow_id: str) -> dict[str, str]:
+        """Return decrypted secret values — for internal template substitution only."""
+        f = self._get_fernet()
+        with self._lock:
+            result = {}
+            for k, v in self._store.get(flow_id, {}).items():
+                try:
+                    result[k] = f.decrypt(v).decode()
+                except Exception:
+                    result[k] = ""  # corrupt/tampered — emit empty rather than crash
+            return result
+
+    def get_secret_values(self, flow_id: str) -> "set[str]":
+        """Return the set of raw secret values — used for log masking."""
+        return set(self.get_raw(flow_id).values())
+
+    def delete(self, flow_id: str) -> None:
+        with self._lock:
+            self._store.pop(flow_id, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+workflow_variable_store = WorkflowVariableStore()
+workflow_secret_store = WorkflowSecretStore()
+
+
+def _resolve_template(value: Any, variables: dict[str, Any], secrets: dict[str, str]) -> Any:
+    """Resolve ``{{var.name}}`` and ``{{secret.name}}`` placeholders in a value.
+
+    Recursively processes strings, lists, and dicts. Non-string scalars are
+    returned unchanged.
+    """
+    if isinstance(value, str):
+        import re
+
+        def _replacer(match: re.Match) -> str:
+            namespace, name = match.group(1).strip(), match.group(2).strip()
+            if namespace == "var":
+                return str(variables.get(name, match.group(0)))
+            if namespace == "secret":
+                return str(secrets.get(name, match.group(0)))
+            return match.group(0)
+
+        return re.sub(r"\{\{(var|secret)\.([^}]+)\}\}", _replacer, value)
+    if isinstance(value, dict):
+        return {k: _resolve_template(v, variables, secrets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_template(item, variables, secrets) for item in value]
+    return value
+
+
+def _resolve_node_data(
+    node_data: dict[str, Any], variables: dict[str, Any], secrets: dict[str, str]
+) -> dict[str, Any]:
+    """Apply template resolution to all node data fields."""
+    return {k: _resolve_template(v, variables, secrets) for k, v in node_data.items()}
+
+
+def _mask_secrets(value: Any, secret_values: set[str]) -> Any:
+    """Replace raw secret values with ``***`` in log entry fields."""
+    if not secret_values:
+        return value
+    if isinstance(value, str):
+        result = value
+        for sv in secret_values:
+            if sv and sv in result:
+                result = result.replace(sv, "***")
+        return result
+    if isinstance(value, dict):
+        return {k: _mask_secrets(v, secret_values) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_mask_secrets(item, secret_values) for item in value]
+    return value
+
+
+# ---------------------------------------------------------------------------
 # Flow Version Registry — Snapshot history for workflow rollback
 # ---------------------------------------------------------------------------
 
@@ -8907,6 +9051,10 @@ class Orchestrator:
                     "error": None,
                     "duration_ms": None,
                 })
+                # Capture secret values once per node for log masking
+                _node_secret_values: set[str] = workflow_secret_store.get_secret_values(
+                    flow.get("id", "")
+                )
 
                 # -- merge gate: defer if not all inputs arrived --
                 if node_type == MERGE_NODE_TYPE:
@@ -8979,8 +9127,8 @@ class Orchestrator:
                         "node_type": node_trace["node_type"],
                         "event": "node_success",
                         "attempt": 1,
-                        "input": node_trace["input"],
-                        "output": node_trace["output"],
+                        "input": _mask_secrets(node_trace["input"], _node_secret_values),
+                        "output": _mask_secrets(node_trace["output"], _node_secret_values),
                         "error": None,
                         "duration_ms": node_trace["duration_ms"],
                     })
@@ -8999,6 +9147,13 @@ class Orchestrator:
                 node_data = node.get("data", {})
                 if not isinstance(node_data, dict):
                     node_data = {}
+
+                # -- resolve {{var.*}} and {{secret.*}} templates in node data --
+                _flow_id = flow.get("id", "")
+                _vars = workflow_variable_store.get(_flow_id)
+                _secrets = workflow_secret_store.get_raw(_flow_id)
+                if _vars or _secrets:
+                    node_data = _resolve_node_data(node_data, _vars, _secrets)
 
                 timeout_seconds = float(node_data.get("timeout_seconds", 60.0))
                 retry_config = node_data.get("retry_config", {})
@@ -9128,8 +9283,8 @@ class Orchestrator:
                             "node_type": node_trace["node_type"],
                             "event": "node_success",
                             "attempt": attempt_number,
-                            "input": node_trace.get("input"),
-                            "output": node_trace.get("output"),
+                            "input": _mask_secrets(node_trace.get("input"), _node_secret_values),
+                            "output": _mask_secrets(node_trace.get("output"), _node_secret_values),
                             "error": None,
                             "duration_ms": node_trace.get("duration_ms"),
                         })
@@ -9220,9 +9375,9 @@ class Orchestrator:
                             "node_type": node_trace["node_type"],
                             "event": "node_fallback",
                             "attempt": attempts,
-                            "input": node_trace.get("input"),
-                            "output": node_trace.get("output"),
-                            "error": error_payload,
+                            "input": _mask_secrets(node_trace.get("input"), _node_secret_values),
+                            "output": _mask_secrets(node_trace.get("output"), _node_secret_values),
+                            "error": _mask_secrets(error_payload, _node_secret_values),
                             "duration_ms": node_trace.get("duration_ms"),
                         })
                         _append_trace_error({"node_id": node_id, "error": error_payload})
@@ -9265,9 +9420,9 @@ class Orchestrator:
                         "node_type": node_trace["node_type"],
                         "event": "node_error",
                         "attempt": attempts,
-                        "input": node_trace.get("input"),
+                        "input": _mask_secrets(node_trace.get("input"), _node_secret_values),
                         "output": None,
-                        "error": error_payload,
+                        "error": _mask_secrets(error_payload, _node_secret_values),
                         "duration_ms": node_trace.get("duration_ms"),
                     })
                     _ensure_trace_in_context_results()
@@ -12619,6 +12774,77 @@ async def get_node_analytics(
     """Per-node execution analytics: execution counts, success/error rates, avg duration."""
     nodes = await analytics_service.get_node_analytics(flow_id=flow_id)
     return {"nodes": nodes, "total_nodes": len(nodes)}
+
+
+# ============================================================
+# Workflow Variables + Secrets  — N-26
+# ============================================================
+
+
+@v1.get("/workflows/{flow_id}/variables", tags=["Variables"])
+async def get_workflow_variables(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return all variables defined for a workflow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    variables = workflow_variable_store.get(flow_id)
+    return {"flow_id": flow_id, "variables": variables, "count": len(variables)}
+
+
+@v1.put("/workflows/{flow_id}/variables", tags=["Variables"])
+async def put_workflow_variables(
+    flow_id: str,
+    body: dict[str, Any],
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set (replace) all variables for a workflow.
+
+    Body must be a flat JSON object of ``{key: value}`` pairs.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Body must be a JSON object")
+    workflow_variable_store.set(flow_id, body)
+    return {"flow_id": flow_id, "variables": workflow_variable_store.get(flow_id), "count": len(body)}
+
+
+@v1.get("/workflows/{flow_id}/secrets", tags=["Secrets"])
+async def get_workflow_secrets(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return masked secret names for a workflow (values are always ``***``)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    masked = workflow_secret_store.get_masked(flow_id)
+    return {"flow_id": flow_id, "secrets": masked, "count": len(masked)}
+
+
+@v1.put("/workflows/{flow_id}/secrets", tags=["Secrets"])
+async def put_workflow_secrets(
+    flow_id: str,
+    body: dict[str, str],
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set (replace) all secrets for a workflow.
+
+    Body must be ``{name: plaintext_value}`` pairs. Values are encrypted at
+    rest and never returned in plaintext via the API.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Body must be a JSON object")
+    workflow_secret_store.set(flow_id, body)
+    masked = workflow_secret_store.get_masked(flow_id)
+    return {"flow_id": flow_id, "secrets": masked, "count": len(body)}
 
 
 # Include versioned router

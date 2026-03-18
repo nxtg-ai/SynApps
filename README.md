@@ -96,6 +96,7 @@ SynApps follows a microkernel architecture:
 | **Error Handler** | Catch pipeline errors — `fallback_content` output substitution, `suppress_error` to continue silently, dead letter queue integration |
 | **Marketplace** | Publish flows to a shared marketplace, search/discover by name/tags/category, install listings into your workspace (`/api/v1/marketplace/`) |
 | **Analytics** | Per-workflow and per-node execution metrics — run count, success/error rates, avg duration (`/api/v1/analytics/`) |
+| **Variables** | Per-workflow key-value variables (`{{var.name}}` in node fields) + encrypted secrets (`{{secret.name}}`, masked in API responses) |
 | **Transform** | Transform and reshape data between nodes |
 | **IfElse** | Conditional branching based on expressions |
 | **Merge** | Combine outputs from multiple branches |
@@ -133,6 +134,7 @@ All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-23 | Workflow Marketplace API | PLATFORM | Publish, search (paginated), featured listings, install with ID remapping — `POST/GET /marketplace/...` |
 | N-24 | Execution Analytics | PLATFORM | Per-workflow and per-node metrics — run count, success/error rates, avg duration — `GET /analytics/...` |
 | N-25 | Execution Logs + Debug Console | PLATFORM | Structured per-node logs (input, output, duration, errors, retry attempts), `GET /executions/:id/logs`, debug mode |
+| N-26 | Workflow Variables + Environment Secrets | PLATFORM | Per-workflow `{{var.name}}` key-value store + Fernet-encrypted `{{secret.name}}` secrets (masked in API responses + logs), `GET/PUT /workflows/:id/variables|secrets` |
 
 ## Tech Stack
 
@@ -166,7 +168,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,797 tests** (1,688 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,837 tests** (1,728 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 
