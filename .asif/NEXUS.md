@@ -262,6 +262,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260318-152 — P1: N-30 Audit Trail — Compliance Logging
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 22:50 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Audit log** — every workflow edit, execution, permission change logged with timestamp + user + action.
+2. [ ] **`GET /audit`** — query audit trail with filters (user, action, date range).
+3. [ ] **Retention policy** — configurable log retention (default 90 days).
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-153.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-153 — P2: Final Session Summary
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 22:50 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Final test count (1,800+?). 2. [ ] All 30 initiatives listed. 3. [ ] README showcase.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-144 — P1: N-29 Workflow Permissions — Team Access Control
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: DONE
