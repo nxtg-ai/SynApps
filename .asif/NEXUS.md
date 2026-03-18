@@ -260,6 +260,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260318-144 — P1: N-29 Workflow Permissions — Team Access Control
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Workflow ownership** — creator is owner. Owner can share with `viewer`/`editor` roles.
+2. [ ] **`POST /workflows/:id/share`** — invite user by ID. **`GET /workflows/:id/permissions`**.
+3. [ ] **Permission enforcement** — viewers can't edit/execute. Editors can edit but not delete/share.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-145.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-145 — P2: Docker Compose + Production Deployment
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] `docker-compose.yml` — app + PostgreSQL + Redis (for scheduler). 2. [ ] `Dockerfile` multi-stage. 3. [ ] `docs/deployment.md`.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-136 — P1: N-28 Workflow Comments + Collaboration
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 21:30 | **Estimate**: M | **Status**: DONE
