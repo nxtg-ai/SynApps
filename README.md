@@ -94,6 +94,8 @@ SynApps follows a microkernel architecture:
 | **Webhook Trigger** | Start a workflow from an inbound HTTP POST — unique URL per trigger, optional HMAC-SHA256 signature verification |
 | **Scheduler** | Start a workflow on a cron schedule — 5-field cron expression, pause/resume, configurable tick interval |
 | **Error Handler** | Catch pipeline errors — `fallback_content` output substitution, `suppress_error` to continue silently, dead letter queue integration |
+| **Marketplace** | Publish flows to a shared marketplace, search/discover by name/tags/category, install listings into your workspace (`/api/v1/marketplace/`) |
+| **Analytics** | Per-workflow and per-node execution metrics — run count, success/error rates, avg duration (`/api/v1/analytics/`) |
 | **Transform** | Transform and reshape data between nodes |
 | **IfElse** | Conditional branching based on expressions |
 | **Merge** | Combine outputs from multiple branches |
@@ -132,7 +134,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,713 tests** (1,604 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,778 tests** (1,669 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 

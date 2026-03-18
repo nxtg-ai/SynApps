@@ -3390,6 +3390,300 @@
         }
       }
     },
+    "/api/v1/marketplace/publish": {
+      "post": {
+        "tags": [
+          "v1",
+          "Marketplace"
+        ],
+        "summary": "Marketplace Publish",
+        "description": "Publish an existing flow as a marketplace listing.\n\nSnapshots the flow's nodes and edges, scrubs credentials, and creates\na new listing entry. Returns the listing with install_count=0.",
+        "operationId": "marketplace_publish_api_v1_marketplace_publish_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMarketplaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/marketplace/search": {
+      "get": {
+        "tags": [
+          "v1",
+          "Marketplace"
+        ],
+        "summary": "Marketplace Search",
+        "description": "Search marketplace listings with optional filters and pagination.",
+        "operationId": "marketplace_search_api_v1_marketplace_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Text search on name, description, and tags",
+              "title": "Q"
+            },
+            "description": "Text search on name, description, and tags"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category",
+              "title": "Category"
+            },
+            "description": "Filter by category"
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated tags to filter by",
+              "title": "Tags"
+            },
+            "description": "Comma-separated tags to filter by"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number (1-based)",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number (1-based)"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Results per page (max 100)",
+              "default": 20,
+              "title": "Per Page"
+            },
+            "description": "Results per page (max 100)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/marketplace/featured": {
+      "get": {
+        "tags": [
+          "v1",
+          "Marketplace"
+        ],
+        "summary": "Marketplace Featured",
+        "description": "Return the top 10 marketplace listings sorted by install count.",
+        "operationId": "marketplace_featured_api_v1_marketplace_featured_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/marketplace/install/{listing_id}": {
+      "post": {
+        "tags": [
+          "v1",
+          "Marketplace"
+        ],
+        "summary": "Marketplace Install",
+        "description": "Install a marketplace listing into the user's workspace.\n\nClones the listing's nodes and edges into a new flow, re-mapping all\nnode IDs to avoid collisions. Increments the listing's install_count.",
+        "operationId": "marketplace_install_api_v1_marketplace_install__listing_id__post",
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Listing Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallMarketplaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/keys": {
       "post": {
         "tags": [
@@ -6649,6 +6943,108 @@
         }
       }
     },
+    "/api/v1/analytics/workflows": {
+      "get": {
+        "tags": [
+          "v1",
+          "Analytics"
+        ],
+        "summary": "Get Workflow Analytics",
+        "description": "Per-flow execution analytics: run counts, success/error rates, avg duration.",
+        "operationId": "get_workflow_analytics_api_v1_analytics_workflows_get",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter analytics to a specific flow ID.",
+              "title": "Flow Id"
+            },
+            "description": "Filter analytics to a specific flow ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/nodes": {
+      "get": {
+        "tags": [
+          "v1",
+          "Analytics"
+        ],
+        "summary": "Get Node Analytics",
+        "description": "Per-node execution analytics: execution counts, success/error rates, avg duration.",
+        "operationId": "get_node_analytics_api_v1_analytics_nodes_get",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter analytics to a specific flow ID.",
+              "title": "Flow Id"
+            },
+            "description": "Filter analytics to a specific flow ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -7177,6 +7573,33 @@
         "title": "ImportFlowRequest",
         "description": "Request body for importing a flow."
       },
+      "InstallMarketplaceRequest": {
+        "properties": {
+          "flow_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Name",
+            "description": "Name for the new flow. Defaults to listing name."
+          },
+          "connector_overrides": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Connector Overrides",
+            "description": "Map of node IDs to connector config overrides."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "InstallMarketplaceRequest",
+        "description": "Request body for installing a marketplace listing."
+      },
       "InstantiateTemplateRequest": {
         "properties": {
           "flow_name": {
@@ -7263,6 +7686,59 @@
         ],
         "title": "ManagedKeyCreateRequest",
         "description": "Request body for creating a managed API key."
+      },
+      "PublishMarketplaceRequest": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id",
+            "description": "ID of the existing flow to publish"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Listing display name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Description",
+            "description": "Listing description",
+            "default": ""
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "One of: notification, data-sync, monitoring, content, devops"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "List of searchable tags"
+          },
+          "author": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Author",
+            "description": "Author name",
+            "default": "anonymous"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "flow_id",
+          "name",
+          "category"
+        ],
+        "title": "PublishMarketplaceRequest",
+        "description": "Request body for publishing a flow as a marketplace listing."
       },
       "PublishTemplateRequest": {
         "properties": {

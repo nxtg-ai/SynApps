@@ -10928,6 +10928,271 @@ async def list_tasks(
 
 
 # ---------------------------------------------------------------------------
+# Workflow Marketplace API (DIRECTIVE-NXTG-20260318-91)
+# ---------------------------------------------------------------------------
+
+
+class MarketplaceRegistry:
+    """Thread-safe in-memory store for marketplace listings."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._listings: dict[str, dict[str, Any]] = {}
+
+    def publish(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Create a new marketplace listing. Raises ValueError on ID collision."""
+        listing_id = str(uuid.uuid4())
+        entry: dict[str, Any] = {
+            "id": listing_id,
+            "name": data["name"],
+            "description": data.get("description", ""),
+            "category": data["category"],
+            "tags": list(data.get("tags", [])),
+            "author": data.get("author", "anonymous"),
+            "nodes": data.get("nodes", []),
+            "edges": data.get("edges", []),
+            "install_count": 0,
+            "featured": False,
+            "published_at": time.time(),
+        }
+        with self._lock:
+            if listing_id in self._listings:
+                raise ValueError(f"Listing ID '{listing_id}' already exists")
+            self._listings[listing_id] = entry
+        return entry
+
+    def search(
+        self,
+        q: str | None,
+        category: str | None,
+        tags: list[str] | None,
+        page: int,
+        per_page: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Search marketplace listings. Returns (items, total)."""
+        with self._lock:
+            results = list(self._listings.values())
+
+        if q:
+            q_lower = q.lower()
+            filtered = []
+            for item in results:
+                if (
+                    q_lower in item["name"].lower()
+                    or q_lower in item["description"].lower()
+                    or any(q_lower in tag.lower() for tag in item["tags"])
+                ):
+                    filtered.append(item)
+            results = filtered
+
+        if category:
+            cat_lower = category.lower()
+            results = [item for item in results if item["category"] == cat_lower]
+
+        if tags:
+            tag_set = {t.lower() for t in tags}
+            results = [
+                item for item in results
+                if any(tag.lower() in tag_set for tag in item["tags"])
+            ]
+
+        total = len(results)
+        start = (page - 1) * per_page
+        end = start + per_page
+        return results[start:end], total
+
+    def featured(self) -> list[dict[str, Any]]:
+        """Return top 10 listings sorted by install_count desc, published_at desc."""
+        with self._lock:
+            all_items = list(self._listings.values())
+        sorted_items = sorted(
+            all_items,
+            key=lambda x: (-x["install_count"], -x["published_at"]),
+        )
+        return sorted_items[:10]
+
+    def get(self, listing_id: str) -> dict[str, Any] | None:
+        """Get a listing by ID. Returns None if not found."""
+        with self._lock:
+            return self._listings.get(listing_id)
+
+    def increment_install(self, listing_id: str) -> bool:
+        """Increment install_count for a listing. Returns False if not found."""
+        with self._lock:
+            listing = self._listings.get(listing_id)
+            if listing is None:
+                return False
+            listing["install_count"] += 1
+            return True
+
+    def reset(self) -> None:
+        """Clear all listings (for testing)."""
+        with self._lock:
+            self._listings.clear()
+
+
+marketplace_registry = MarketplaceRegistry()
+
+
+class PublishMarketplaceRequest(StrictRequestModel):
+    """Request body for publishing a flow as a marketplace listing."""
+
+    flow_id: str = Field(..., description="ID of the existing flow to publish")
+    name: str = Field(..., min_length=1, max_length=200, description="Listing display name")
+    description: str = Field("", max_length=2000, description="Listing description")
+    category: str = Field(..., description="One of: notification, data-sync, monitoring, content, devops")
+    tags: list[str] = Field(default_factory=list, description="List of searchable tags")
+    author: str = Field("anonymous", min_length=1, max_length=100, description="Author name")
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v.lower() not in MARKETPLACE_CATEGORIES:
+            raise ValueError(
+                f"Invalid category '{v}'. Must be one of: {', '.join(sorted(MARKETPLACE_CATEGORIES))}"
+            )
+        return v.lower()
+
+
+class InstallMarketplaceRequest(StrictRequestModel):
+    """Request body for installing a marketplace listing."""
+
+    flow_name: str | None = Field(
+        None, max_length=200, description="Name for the new flow. Defaults to listing name."
+    )
+    connector_overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Map of node IDs to connector config overrides.",
+    )
+
+
+@v1.post("/marketplace/publish", status_code=201, tags=["Marketplace"])
+async def marketplace_publish(
+    body: PublishMarketplaceRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Publish an existing flow as a marketplace listing.
+
+    Snapshots the flow's nodes and edges, scrubs credentials, and creates
+    a new listing entry. Returns the listing with install_count=0.
+    """
+    flow = await FlowRepository.get_by_id(body.flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{body.flow_id}' not found")
+
+    listing_data = {
+        "name": body.name,
+        "description": body.description,
+        "category": body.category,
+        "tags": body.tags,
+        "author": body.author,
+        "nodes": _scrub_node_credentials(flow.get("nodes", [])),
+        "edges": flow.get("edges", []),
+    }
+
+    try:
+        entry = marketplace_registry.publish(listing_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return entry
+
+
+@v1.get("/marketplace/search", tags=["Marketplace"])
+async def marketplace_search(
+    q: str | None = Query(None, description="Text search on name, description, and tags"),
+    category: str | None = Query(None, description="Filter by category"),
+    tags: str | None = Query(None, description="Comma-separated tags to filter by"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    per_page: int = Query(20, ge=1, le=100, description="Results per page (max 100)"),
+):
+    """Search marketplace listings with optional filters and pagination."""
+    tag_list: list[str] | None = None
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+
+    items, total = marketplace_registry.search(
+        q=q,
+        category=category,
+        tags=tag_list,
+        page=page,
+        per_page=per_page,
+    )
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
+
+
+@v1.get("/marketplace/featured", tags=["Marketplace"])
+async def marketplace_featured():
+    """Return the top 10 marketplace listings sorted by install count."""
+    items = marketplace_registry.featured()
+    return {"items": items, "total": len(items)}
+
+
+@v1.post("/marketplace/install/{listing_id}", status_code=201, tags=["Marketplace"])
+async def marketplace_install(
+    listing_id: str,
+    body: InstallMarketplaceRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Install a marketplace listing into the user's workspace.
+
+    Clones the listing's nodes and edges into a new flow, re-mapping all
+    node IDs to avoid collisions. Increments the listing's install_count.
+    """
+    listing = marketplace_registry.get(listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail=f"Listing '{listing_id}' not found")
+
+    # Re-map node IDs to avoid collisions
+    id_map: dict[str, str] = {}
+    new_nodes = []
+    for node in listing.get("nodes", []):
+        old_id = node.get("id", str(uuid.uuid4()))
+        new_node_id = str(uuid.uuid4())
+        id_map[old_id] = new_node_id
+        new_node = {**node, "id": new_node_id}
+
+        # Apply connector overrides for this node
+        if old_id in body.connector_overrides:
+            overrides = body.connector_overrides[old_id]
+            existing_data = new_node.get("data", {})
+            if isinstance(existing_data, dict) and isinstance(overrides, dict):
+                new_node["data"] = {**existing_data, **overrides}
+            else:
+                new_node["data"] = overrides
+
+        new_nodes.append(new_node)
+
+    # Re-map edge source/target references
+    new_edges = []
+    for edge in listing.get("edges", []):
+        new_edges.append({
+            "id": str(uuid.uuid4()),
+            "source": id_map.get(edge.get("source", ""), edge.get("source", "")),
+            "target": id_map.get(edge.get("target", ""), edge.get("target", "")),
+            "animated": edge.get("animated", False),
+        })
+
+    flow_name = body.flow_name or listing.get("name", "Unnamed Flow")
+    new_flow_id = str(uuid.uuid4())
+    flow_data = {
+        "id": new_flow_id,
+        "name": flow_name,
+        "nodes": new_nodes,
+        "edges": new_edges,
+    }
+
+    await FlowRepository.save(flow_data)
+    marketplace_registry.increment_install(listing_id)
+
+    return {
+        "message": "Flow created from marketplace listing",
+        "flow_id": new_flow_id,
+        "listing_id": listing_id,
+        "listing_name": listing.get("name"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Admin API Key Management endpoints (master-key-protected)
 # ---------------------------------------------------------------------------
 
@@ -12042,6 +12307,160 @@ async def get_api_version():
         "deprecated_endpoints": deprecation_registry.all_deprecated(),
         "sunset_grace_days": API_SUNSET_GRACE_DAYS,
     }
+
+
+# ============================================================
+# Execution Analytics — N-24
+# ============================================================
+
+
+class AnalyticsService:
+    """Stateless service for computing execution analytics over workflow runs."""
+
+    @staticmethod
+    async def get_workflow_analytics(flow_id: str | None = None) -> list[dict]:
+        """Aggregate per-flow analytics from all workflow runs.
+
+        Args:
+            flow_id: Optional filter — if provided, only that flow is included.
+
+        Returns:
+            List of per-flow dicts sorted by last_run_at descending (nulls last).
+        """
+        all_runs = await WorkflowRunRepository.get_all()
+
+        if flow_id is not None:
+            all_runs = [r for r in all_runs if r.get("flow_id") == flow_id]
+
+        # Group by flow_id
+        groups: dict[str, list[dict]] = {}
+        for run in all_runs:
+            fid = run.get("flow_id") or ""
+            groups.setdefault(fid, []).append(run)
+
+        result = []
+        for fid, runs in groups.items():
+            run_count = len(runs)
+            success_count = sum(1 for r in runs if r.get("status") == "success")
+            error_count = sum(1 for r in runs if r.get("status") == "error")
+            terminal_count = success_count + error_count
+            success_rate = success_count / terminal_count if terminal_count > 0 else 0.0
+            error_rate = error_count / terminal_count if terminal_count > 0 else 0.0
+
+            durations = [
+                r["end_time"] - r["start_time"]
+                for r in runs
+                if r.get("end_time") is not None and r.get("start_time") is not None
+            ]
+            avg_duration_seconds: float | None = (
+                sum(durations) / len(durations) if durations else None
+            )
+
+            start_times = [r["start_time"] for r in runs if r.get("start_time") is not None]
+            last_run_at: float | None = max(start_times) if start_times else None
+
+            result.append({
+                "flow_id": fid,
+                "run_count": run_count,
+                "success_count": success_count,
+                "error_count": error_count,
+                "success_rate": success_rate,
+                "error_rate": error_rate,
+                "avg_duration_seconds": avg_duration_seconds,
+                "last_run_at": last_run_at,
+            })
+
+        result.sort(
+            key=lambda x: x["last_run_at"] if x["last_run_at"] is not None else float("-inf"),
+            reverse=True,
+        )
+        return result
+
+    @staticmethod
+    async def get_node_analytics(flow_id: str | None = None) -> list[dict]:
+        """Aggregate per-node analytics from all workflow run results.
+
+        Args:
+            flow_id: Optional filter — if provided, only runs for that flow are included.
+
+        Returns:
+            List of per-node dicts sorted by execution_count descending.
+        """
+        all_runs = await WorkflowRunRepository.get_all()
+
+        if flow_id is not None:
+            all_runs = [r for r in all_runs if r.get("flow_id") == flow_id]
+
+        # Aggregate per (node_id, flow_id)
+        node_stats: dict[tuple[str, str], dict] = {}
+
+        for run in all_runs:
+            fid = run.get("flow_id") or ""
+            results = run.get("results") or {}
+            if not isinstance(results, dict):
+                continue
+            for nid, node_result in results.items():
+                if not isinstance(node_result, dict):
+                    continue
+                key = (nid, fid)
+                if key not in node_stats:
+                    node_stats[key] = {
+                        "node_id": nid,
+                        "flow_id": fid,
+                        "execution_count": 0,
+                        "success_count": 0,
+                        "error_count": 0,
+                        "_durations": [],
+                    }
+                node_stats[key]["execution_count"] += 1
+                status = node_result.get("status", "")
+                if status == "success":
+                    node_stats[key]["success_count"] += 1
+                elif status == "error":
+                    node_stats[key]["error_count"] += 1
+                dur = node_result.get("duration_seconds")
+                if dur is not None:
+                    try:
+                        node_stats[key]["_durations"].append(float(dur))
+                    except (TypeError, ValueError):
+                        pass  # Non-numeric duration — skip gracefully
+
+        output = []
+        for stats in node_stats.values():
+            durations = stats.pop("_durations", [])
+            exec_count = stats["execution_count"]
+            success_count = stats["success_count"]
+            error_count = stats["error_count"]
+            terminal = success_count + error_count
+            stats["success_rate"] = success_count / terminal if terminal > 0 else 0.0
+            stats["avg_duration_seconds"] = (
+                sum(durations) / len(durations) if durations else None
+            )
+            output.append(stats)
+
+        output.sort(key=lambda x: x["execution_count"], reverse=True)
+        return output
+
+
+analytics_service = AnalyticsService()
+
+
+@v1.get("/analytics/workflows", tags=["Analytics"])
+async def get_workflow_analytics(
+    flow_id: str | None = Query(None, description="Filter analytics to a specific flow ID."),
+):
+    """Per-flow execution analytics: run counts, success/error rates, avg duration."""
+    workflows = await analytics_service.get_workflow_analytics(flow_id=flow_id)
+    return {"workflows": workflows, "total_flows": len(workflows)}
+
+
+@v1.get("/analytics/nodes", tags=["Analytics"])
+async def get_node_analytics(
+    flow_id: str | None = Query(None, description="Filter analytics to a specific flow ID."),
+):
+    """Per-node execution analytics: execution counts, success/error rates, avg duration."""
+    nodes = await analytics_service.get_node_analytics(flow_id=flow_id)
+    return {"nodes": nodes, "total_nodes": len(nodes)}
 
 
 # Include versioned router
