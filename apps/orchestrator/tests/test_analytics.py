@@ -16,9 +16,8 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from apps.orchestrator.db import close_db_connections, init_db
-from apps.orchestrator.main import AnalyticsService, analytics_service, app
+from apps.orchestrator.main import AnalyticsService, app
 from apps.orchestrator.repositories import WorkflowRunRepository
-
 
 # ---------------------------------------------------------------------------
 # Helpers

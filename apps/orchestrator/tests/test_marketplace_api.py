@@ -8,7 +8,6 @@ Covers: MarketplaceRegistry unit tests, and the 4 marketplace endpoints:
 """
 
 import threading
-import time
 import uuid
 
 import pytest
@@ -20,7 +19,6 @@ from apps.orchestrator.main import (
     app,
     marketplace_registry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
