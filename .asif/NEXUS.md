@@ -236,6 +236,21 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-57 — P0: E2E Smoke Test — Full Workflow Pipeline
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P0
+**Injected**: 2026-03-18 15:00 | **Estimate**: S | **Status**: PENDING
+
+**Context**: N-19 Webhook Trigger shipped. Verify full workflow pipeline works end-to-end.
+
+**Action Items**:
+1. [ ] E2E: create workflow → add nodes (HTTP + webhook trigger + LLM) → execute → verify. One flow.
+2. [ ] Fix anything broken. 3. [ ] Final test count.
+
+**Response** (filled by team):
+>
+
+---
+
 ### DIRECTIVE-NXTG-20260318-50 — P1: N-19 Webhook Trigger Node
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 14:30 | **Estimate**: M | **Status**: DONE
