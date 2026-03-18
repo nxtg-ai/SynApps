@@ -726,6 +726,63 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           </>
         );
 
+      case 'error_handler':
+        return (
+          <>
+            <div className="form-group">
+              <label htmlFor="label">Node Label</label>
+              <input
+                type="text"
+                id="label"
+                name="label"
+                value={formData.label || ''}
+                onChange={handleChange}
+                placeholder="Enter node label"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="fallback_content">Fallback content (output on error)</label>
+              <input
+                type="text"
+                id="fallback_content"
+                name="fallback_content"
+                value={(formData as any).fallback_content || ''}
+                onChange={handleChange}
+                placeholder="Fallback output when an error is received"
+              />
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  name="suppress_error"
+                  checked={!!(formData as any).suppress_error}
+                  onChange={handleChange}
+                />
+                Suppress error (continue pipeline)
+              </label>
+            </div>
+            <div className="form-group">
+              <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.5' }}>
+                This node catches errors from upstream nodes. When an error arrives it emits the
+                fallback content (if set) or the original error message. Enable &quot;Suppress
+                error&quot; to continue the pipeline silently; leave it off to forward error context
+                downstream.
+              </p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="node-id-display">Node ID</label>
+              <input
+                type="text"
+                id="node-id-display"
+                value={nodeId}
+                readOnly
+                style={{ backgroundColor: '#f5f5f5', cursor: 'default' }}
+              />
+            </div>
+          </>
+        );
+
       case 'http_request':
         return (
           <>

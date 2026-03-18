@@ -197,6 +197,7 @@ MERGE_NODE_TYPE = "merge"
 FOR_EACH_NODE_TYPE = "for_each"
 WEBHOOK_TRIGGER_NODE_TYPE = "webhook_trigger"
 SCHEDULER_NODE_TYPE = "scheduler_node"
+ERROR_HANDLER_NODE_TYPE = "error_handler"
 ENGINE_MAX_CONCURRENCY = int(os.environ.get("ENGINE_MAX_CONCURRENCY", "10"))
 TRACE_RESULTS_KEY = "__trace__"
 TRACE_SCHEMA_VERSION = 1
@@ -7719,6 +7720,258 @@ class SchedulerNodeApplet(BaseApplet):
 applet_registry[SCHEDULER_NODE_TYPE] = SchedulerNodeApplet
 
 
+# ---------------------------------------------------------------------------
+# Dead Letter Queue — Failed Run Store
+# ---------------------------------------------------------------------------
+
+
+class DeadLetterQueue:
+    """In-memory store for failed workflow runs.
+
+    Entries are added automatically when a run reaches "error" status.
+    Consumers can list, inspect, and replay failed runs via the DLQ API.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, dict[str, Any]] = {}
+
+    def push(
+        self,
+        run_id: str,
+        flow_id: str | None,
+        flow_snapshot: dict[str, Any] | None,
+        input_data: dict[str, Any],
+        error: str,
+        error_details: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Add a failed run to the DLQ."""
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _dt
+
+        entry_id = str(uuid.uuid4())
+        entry: dict[str, Any] = {
+            "id": entry_id,
+            "run_id": run_id,
+            "flow_id": flow_id,
+            "flow_snapshot": flow_snapshot,
+            "input_data": input_data,
+            "error": error,
+            "error_details": error_details,
+            "failed_at": _dt.now(UTC).isoformat(),
+            "replay_count": 0,
+        }
+        with self._lock:
+            self._entries[entry_id] = entry
+        return dict(entry)
+
+    def get(self, entry_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            e = self._entries.get(entry_id)
+            return dict(e) if e else None
+
+    def list(self, flow_id: str | None = None) -> list[dict[str, Any]]:
+        with self._lock:
+            entries = [dict(v) for v in self._entries.values()]
+        if flow_id:
+            entries = [e for e in entries if e.get("flow_id") == flow_id]
+        return sorted(entries, key=lambda e: e.get("failed_at", ""), reverse=True)
+
+    def delete(self, entry_id: str) -> bool:
+        with self._lock:
+            return self._entries.pop(entry_id, None) is not None
+
+    def increment_replay(self, entry_id: str) -> None:
+        with self._lock:
+            e = self._entries.get(entry_id)
+            if e:
+                e["replay_count"] = e.get("replay_count", 0) + 1
+
+    def size(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+
+dead_letter_queue = DeadLetterQueue()
+
+
+# ---------------------------------------------------------------------------
+# Flow Version Registry — Snapshot history for workflow rollback
+# ---------------------------------------------------------------------------
+
+
+def _diff_flow_snapshots(
+    snapshot_a: dict[str, Any], snapshot_b: dict[str, Any]
+) -> dict[str, Any]:
+    """Return a structural diff between two flow snapshots.
+
+    Compares nodes and edges:
+    - ``nodes_added``: node IDs present in B but not A
+    - ``nodes_removed``: node IDs present in A but not B
+    - ``nodes_changed``: node IDs where type or data differ
+    - ``edges_added``: edge source→target pairs in B but not A
+    - ``edges_removed``: edge source→target pairs in A but not B
+    """
+
+    def _node_map(snapshot: dict) -> dict[str, dict]:
+        return {n["id"]: n for n in snapshot.get("nodes", []) if isinstance(n, dict) and "id" in n}
+
+    def _edge_key(edge: dict) -> str:
+        return f"{edge.get('source', '')}→{edge.get('target', '')}"
+
+    def _edge_set(snapshot: dict) -> set[str]:
+        return {_edge_key(e) for e in snapshot.get("edges", []) if isinstance(e, dict)}
+
+    nodes_a = _node_map(snapshot_a)
+    nodes_b = _node_map(snapshot_b)
+    ids_a = set(nodes_a)
+    ids_b = set(nodes_b)
+
+    nodes_added = sorted(ids_b - ids_a)
+    nodes_removed = sorted(ids_a - ids_b)
+    nodes_changed = []
+    for nid in ids_a & ids_b:
+        na, nb = nodes_a[nid], nodes_b[nid]
+        if na.get("type") != nb.get("type") or na.get("data") != nb.get("data"):
+            nodes_changed.append(nid)
+
+    edges_a = _edge_set(snapshot_a)
+    edges_b = _edge_set(snapshot_b)
+
+    return {
+        "nodes_added": nodes_added,
+        "nodes_removed": nodes_removed,
+        "nodes_changed": sorted(nodes_changed),
+        "edges_added": sorted(edges_b - edges_a),
+        "edges_removed": sorted(edges_a - edges_b),
+        "summary": {
+            "nodes_added": len(nodes_added),
+            "nodes_removed": len(nodes_removed),
+            "nodes_changed": len(nodes_changed),
+            "edges_added": len(edges_b - edges_a),
+            "edges_removed": len(edges_a - edges_b),
+        },
+    }
+
+
+class FlowVersionRegistry:
+    """In-memory version history for flows.
+
+    Each time a flow is updated via PUT, the pre-update snapshot is stored here.
+    Consumers can list, retrieve, diff, and roll back to any prior version.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # flow_id -> list[version_dict] (chronological, index 0 = oldest)
+        self._versions: dict[str, list[dict[str, Any]]] = {}
+
+    def snapshot(self, flow_id: str, flow_data: dict[str, Any]) -> dict[str, Any]:
+        """Snapshot the current state of a flow before it is overwritten."""
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _dt  # noqa: PLC0415
+
+        version_id = str(uuid.uuid4())
+        with self._lock:
+            versions = self._versions.setdefault(flow_id, [])
+            seq = len(versions) + 1
+            entry: dict[str, Any] = {
+                "version_id": version_id,
+                "flow_id": flow_id,
+                "version": seq,
+                "snapshot": dict(flow_data),
+                "snapshotted_at": _dt.now(UTC).isoformat(),
+            }
+            versions.append(entry)
+        return dict(entry)
+
+    def list_versions(self, flow_id: str) -> list[dict[str, Any]]:
+        """Return version history newest-first (snapshots only, no full data)."""
+        with self._lock:
+            versions = self._versions.get(flow_id, [])
+            # Return summary without full snapshot data for list endpoint
+            return [
+                {
+                    "version_id": v["version_id"],
+                    "flow_id": v["flow_id"],
+                    "version": v["version"],
+                    "snapshotted_at": v["snapshotted_at"],
+                }
+                for v in reversed(versions)
+            ]
+
+    def get_version(self, flow_id: str, version_id: str) -> dict[str, Any] | None:
+        """Retrieve a full snapshot by version_id."""
+        with self._lock:
+            for v in self._versions.get(flow_id, []):
+                if v["version_id"] == version_id:
+                    return dict(v)
+        return None
+
+    def get_latest(self, flow_id: str) -> dict[str, Any] | None:
+        """Return the most recent snapshot for a flow."""
+        with self._lock:
+            versions = self._versions.get(flow_id, [])
+            return dict(versions[-1]) if versions else None
+
+    def diff(
+        self, flow_id: str, version_id_a: str, version_id_b: str
+    ) -> dict[str, Any] | None:
+        """Compute node/edge diff between two versions.
+
+        Returns ``None`` if either version is not found.
+        """
+        va = self.get_version(flow_id, version_id_a)
+        vb = self.get_version(flow_id, version_id_b)
+        if va is None or vb is None:
+            return None
+        return _diff_flow_snapshots(va["snapshot"], vb["snapshot"])
+
+
+flow_version_registry = FlowVersionRegistry()
+
+
+# ---------------------------------------------------------------------------
+# Error Handler Node — Graph-level error catcher
+# ---------------------------------------------------------------------------
+
+
+class ErrorHandlerNodeApplet(BaseApplet):
+    """Error handler node — catches failures from upstream nodes and emits
+    a clean, structured error response so the pipeline can continue.
+
+    Configuration keys in ``node.data``:
+    - ``fallback_content`` (any): output to emit when an error is received.
+      Defaults to the error message string.
+    - ``suppress_error`` (bool): if ``True``, emits ``fallback_content`` and
+      continues; if ``False`` (default), emits an error-status response which
+      will still cause downstream nodes to see the error context.
+    """
+
+    VERSION = "1.0.0"
+    CAPABILITIES = ["error-handling", "fallback-routing", "pipeline-recovery"]
+
+    async def on_message(self, message: AppletMessage) -> AppletMessage:
+        node_data = message.metadata.get("node_data", {}) if isinstance(message.metadata, dict) else {}
+        fallback_content = node_data.get("fallback_content", message.content)
+        suppress = bool(node_data.get("suppress_error", False))
+
+        error_info = message.metadata.get("error_info") if isinstance(message.metadata, dict) else None
+        return AppletMessage(
+            content=fallback_content if suppress else message.content,
+            context=message.context,
+            metadata={
+                **message.metadata,
+                "applet": ERROR_HANDLER_NODE_TYPE,
+                "status": "handled" if suppress else "error_forwarded",
+                "original_error": error_info,
+            },
+        )
+
+
+applet_registry[ERROR_HANDLER_NODE_TYPE] = ErrorHandlerNodeApplet
+
+
 # ============================================================
 # Orchestrator Core
 # ============================================================
@@ -7829,6 +8082,16 @@ class Orchestrator:
         }:
             applet_registry[SCHEDULER_NODE_TYPE] = SchedulerNodeApplet
             return SchedulerNodeApplet()
+
+        if normalized_type in {
+            ERROR_HANDLER_NODE_TYPE,
+            "error-handler",
+            "error_handler_node",
+            "error-handler-node",
+            "catch",
+        }:
+            applet_registry[ERROR_HANDLER_NODE_TYPE] = ErrorHandlerNodeApplet
+            return ErrorHandlerNodeApplet()
 
         try:
             module_path = f"apps.applets.{normalized_type}.applet"
@@ -8452,6 +8715,18 @@ class Orchestrator:
                     "error": error_msg,
                     "completed_applets": list(memory_completed_applets),
                 })
+            # Push to Dead Letter Queue for failed runs
+            try:
+                dead_letter_queue.push(
+                    run_id=run_id,
+                    flow_id=flow.get("id") if isinstance(flow, dict) else None,
+                    flow_snapshot=dict(flow) if isinstance(flow, dict) else None,
+                    input_data=input_data if isinstance(input_data, dict) else {},
+                    error=error_msg,
+                    error_details=error_details,
+                )
+            except Exception as dlq_exc:  # noqa: BLE001
+                logger.warning("Failed to push run %s to DLQ: %s", run_id, dlq_exc)
 
         try:
             status = await workflow_run_repo.get_by_run_id(run_id)
@@ -8660,6 +8935,12 @@ class Orchestrator:
                 max_retries = int(retry_config.get("max_retries", 0))
                 retry_delay = float(retry_config.get("delay", 1.0))
                 retry_backoff = float(retry_config.get("backoff", 2.0))
+                # retry_on: list of conditions — "timeout", "error", or "all" (default)
+                retry_on_raw = retry_config.get("retry_on", "all")
+                if isinstance(retry_on_raw, str):
+                    retry_on_conditions: set[str] = {"timeout", "error"} if retry_on_raw == "all" else {retry_on_raw}
+                else:
+                    retry_on_conditions = set(retry_on_raw) if retry_on_raw else {"timeout", "error"}
                 fallback_node_id_cfg = node_data.get("fallback_node_id")
 
                 attempts = 0
@@ -8783,6 +9064,8 @@ class Orchestrator:
                                     "error": last_error.to_dict(),
                                 }
                             )
+                        if "timeout" not in retry_on_conditions:
+                            break  # do not retry on timeout if not configured
                     except Exception as e:
                         last_error = NodeError(
                             NodeErrorCode.EXECUTION_ERROR,
@@ -8801,6 +9084,8 @@ class Orchestrator:
                                     "error": last_error.to_dict(),
                                 }
                             )
+                        if "error" not in retry_on_conditions:
+                            break  # do not retry on generic error if not configured
                     attempts += 1
 
                 if not success:
@@ -9415,7 +9700,7 @@ async def probe_single_connector(
 KNOWN_NODE_TYPES = frozenset({
     "start", "end", "llm", "image", "image_gen", "memory", "http_request",
     "code", "transform", "if_else", "merge", "for_each", "webhook_trigger",
-    "scheduler_node", "custom",
+    "scheduler_node", "error_handler", "custom",
 })
 
 
@@ -9605,6 +9890,23 @@ class UpdateScheduleRequest(StrictRequestModel):
     cron_expr: str | None = Field(None, min_length=9)
     name: str | None = Field(None, max_length=200)
     enabled: bool | None = None
+
+
+class ReplayDLQRequest(StrictRequestModel):
+    """Optional overrides when replaying a dead-lettered run."""
+
+    input_override: dict[str, Any] | None = Field(
+        None,
+        description="Override the original input data for the replay.",
+    )
+
+
+class FlowUpdateRequest(StrictRequestModel):
+    """Request body for updating (replacing) an existing flow."""
+
+    name: str | None = Field(None, max_length=200)
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
+    edges: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RegisterWebhookRequest(StrictRequestModel):
@@ -9865,6 +10167,72 @@ async def delete_schedule(
     """Delete a schedule. The associated flow is not affected."""
     if not scheduler_registry.delete(schedule_id):
         raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' not found")
+
+
+# ---------------------------------------------------------------------------
+# Dead Letter Queue (DLQ) — Failed Run Management
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/dlq", tags=["DLQ"])
+async def list_dlq(
+    flow_id: str | None = Query(None, description="Filter by flow ID."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List dead-lettered (failed) runs, newest first."""
+    return {
+        "items": dead_letter_queue.list(flow_id=flow_id),
+        "total": dead_letter_queue.size() if flow_id is None else len(dead_letter_queue.list(flow_id=flow_id)),
+    }
+
+
+@v1.get("/dlq/{entry_id}", tags=["DLQ"])
+async def get_dlq_entry(
+    entry_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get a single dead-lettered run by DLQ entry ID."""
+    entry = dead_letter_queue.get(entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"DLQ entry '{entry_id}' not found")
+    return entry
+
+
+@v1.delete("/dlq/{entry_id}", status_code=204, tags=["DLQ"])
+async def delete_dlq_entry(
+    entry_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a dead-lettered run from the queue."""
+    if not dead_letter_queue.delete(entry_id):
+        raise HTTPException(status_code=404, detail=f"DLQ entry '{entry_id}' not found")
+
+
+@v1.post("/dlq/{entry_id}/replay", status_code=202, tags=["DLQ"])
+async def replay_dlq_entry(
+    entry_id: str,
+    body: ReplayDLQRequest = ReplayDLQRequest(),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Replay a dead-lettered run using the original (or overridden) input.
+
+    Looks up the flow by ID and re-executes with the stored input data (or
+    ``input_override`` if provided). Increments ``replay_count`` on the entry.
+    """
+    entry = dead_letter_queue.get(entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"DLQ entry '{entry_id}' not found")
+
+    flow_id = entry.get("flow_id")
+    if not flow_id:
+        raise HTTPException(status_code=422, detail="DLQ entry has no flow_id — cannot replay")
+
+    replay_input = body.input_override if body.input_override is not None else entry.get("input_data", {})
+    run_body = RunFlowRequest(input=replay_input)
+
+    result = await _run_flow_impl(flow_id, run_body)
+    dead_letter_queue.increment_replay(entry_id)
+    return {"accepted": True, "run_id": result["run_id"], "dlq_entry_id": entry_id}
 
 
 # ---------------------------------------------------------------------------
@@ -10792,6 +11160,32 @@ async def delete_flow(
     return {"message": "Flow deleted"}
 
 
+@v1.put("/flows/{flow_id}", tags=["Flows"])
+async def update_flow(
+    flow_id: str,
+    body: FlowUpdateRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Replace a flow's nodes and edges, saving the previous version to history.
+
+    If the flow exists, its current state is snapshotted in ``FlowVersionRegistry``
+    before being overwritten. If it does not exist, a new flow is created (no
+    snapshot is taken).
+    """
+    existing = await FlowRepository.get_by_id(flow_id)
+    if existing:
+        flow_version_registry.snapshot(flow_id, existing)
+
+    flow_data: dict[str, Any] = {
+        "id": flow_id,
+        "name": body.name or (existing.get("name") if existing else "Unnamed Flow"),
+        "nodes": body.nodes,
+        "edges": body.edges,
+    }
+    saved = await FlowRepository.save(flow_data)
+    return saved
+
+
 @v1.get("/flows/{flow_id}/export", tags=["Flows"])
 async def export_flow(
     flow_id: str,
@@ -10833,6 +11227,95 @@ async def export_flow(
             "Content-Disposition": f'attachment; filename="{safe_name}.synapps.json"',
         },
     )
+
+
+@v1.get("/flows/{flow_id}/versions", tags=["Flows"])
+async def list_flow_versions(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List the version history for a flow (newest first).
+
+    Each entry includes ``version_id``, ``version`` (sequential number), and
+    ``snapshotted_at`` timestamp. Use ``GET /flows/{flow_id}/versions/{version_id}``
+    to retrieve the full snapshot.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+    return {"items": flow_version_registry.list_versions(flow_id)}
+
+
+@v1.get("/flows/{flow_id}/versions/{version_id}", tags=["Flows"])
+async def get_flow_version(
+    flow_id: str,
+    version_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Retrieve the full snapshot of a specific flow version."""
+    entry = flow_version_registry.get_version(flow_id, version_id)
+    if not entry:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Version '{version_id}' not found for flow '{flow_id}'",
+        )
+    return entry
+
+
+@v1.post("/flows/{flow_id}/rollback", status_code=200, tags=["Flows"])
+async def rollback_flow(
+    flow_id: str,
+    version_id: str = Query(..., description="Version ID to roll back to."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Roll back a flow to a previous version.
+
+    Snapshots the current state before applying the rollback, so the rollback
+    itself is also reversible.
+    """
+    entry = flow_version_registry.get_version(flow_id, version_id)
+    if not entry:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Version '{version_id}' not found for flow '{flow_id}'",
+        )
+
+    current = await FlowRepository.get_by_id(flow_id)
+    if current:
+        flow_version_registry.snapshot(flow_id, current)
+
+    restored = await FlowRepository.save({**entry["snapshot"], "id": flow_id})
+    return {"flow": restored, "rolled_back_to": version_id}
+
+
+@v1.get("/flows/{flow_id}/diff", tags=["Flows"])
+async def diff_flow_versions(
+    flow_id: str,
+    version_a: str = Query(..., description="First version ID (base)."),
+    version_b: str = Query(..., description="Second version ID (compare)."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Compute a structural diff between two versions of a flow.
+
+    Pass the string ``"current"`` as ``version_b`` to diff against the live flow.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+
+    if version_b == "current":
+        snapshot_b = flow
+    else:
+        entry_b = flow_version_registry.get_version(flow_id, version_b)
+        if not entry_b:
+            raise HTTPException(status_code=404, detail=f"Version '{version_b}' not found")
+        snapshot_b = entry_b["snapshot"]
+
+    entry_a = flow_version_registry.get_version(flow_id, version_a)
+    if not entry_a:
+        raise HTTPException(status_code=404, detail=f"Version '{version_a}' not found")
+
+    return _diff_flow_snapshots(entry_a["snapshot"], snapshot_b)
 
 
 class ImportFlowRequest(BaseModel):

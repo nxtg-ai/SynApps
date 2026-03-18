@@ -587,6 +587,26 @@ class ${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}Applet(BaseApplet):
                     <span className="node-icon">⏰</span>
                     <span className="node-label">Scheduler</span>
                   </div>
+                  <div
+                    className="node-item error_handler"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        'application/reactflow',
+                        JSON.stringify({
+                          type: 'error_handler',
+                          data: {
+                            label: 'Error Handler',
+                            description: 'Error catch + recovery',
+                          },
+                        })
+                      );
+                    }}
+                    onClick={() => handleNodeClick(generateId(), 'error_handler')}
+                  >
+                    <span className="node-icon">⚠️</span>
+                    <span className="node-label">Error Handler</span>
+                  </div>
                 </div>
               </div>
               

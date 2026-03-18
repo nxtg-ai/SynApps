@@ -59,6 +59,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
         return <span role="img" aria-label="Webhook Trigger">🔗</span>;
       case 'scheduler_node':
         return <span role="img" aria-label="Scheduler">⏰</span>;
+      case 'error_handler':
+        return <span role="img" aria-label="Error Handler">⚠️</span>;
       default:
         return <span role="img" aria-label="Applet">🔌</span>;
     }
@@ -95,6 +97,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
         return '#f5f3ff';
       case 'scheduler_node':
         return '#f0fdf4';
+      case 'error_handler':
+        return '#fff7ed';
       default:
         return '#f8fafc';
     }
@@ -131,6 +135,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
         return '#7c3aed';
       case 'scheduler_node':
         return '#16a34a';
+      case 'error_handler':
+        return '#ea580c';
       default:
         return '#64748b';
     }
@@ -193,7 +199,8 @@ const AppletNode: React.FC<NodeProps<AppletFlowNode>> = ({ data, id, type, selec
             {appletType === 'http_request' && `${(data as any).method || 'GET'} ${(data as any).url || 'no URL configured'}`}
             {appletType === 'webhook_trigger' && 'Starts workflow from inbound HTTP POST'}
             {appletType === 'scheduler_node' && 'Cron-triggered workflow'}
-            {!['llm', 'writer', 'artist', 'memory', 'researcher', 'analyzer', 'summarizer', 'merge', 'for_each', 'if_else', 'code', 'http_request', 'webhook_trigger', 'scheduler_node'].includes(appletType) && 'Custom applet module'}
+            {appletType === 'error_handler' && 'Error catch + recovery'}
+            {!['llm', 'writer', 'artist', 'memory', 'researcher', 'analyzer', 'summarizer', 'merge', 'for_each', 'if_else', 'code', 'http_request', 'webhook_trigger', 'scheduler_node', 'error_handler'].includes(appletType) && 'Custom applet module'}
           </div>
         )}
       </div>
