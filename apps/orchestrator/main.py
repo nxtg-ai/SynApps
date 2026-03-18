@@ -8184,6 +8184,116 @@ class NotificationService:
 notification_service = NotificationService()
 
 
+# ---------------------------------------------------------------------------
+# Node Comment Store (N-28)
+# ---------------------------------------------------------------------------
+
+
+class NodeCommentStore:
+    """Thread-safe in-memory store for per-workflow, per-node comments."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._comments: dict[str, list[dict[str, Any]]] = {}  # key: "flow_id:node_id"
+
+    def add(
+        self,
+        flow_id: str,
+        node_id: str,
+        author: str,
+        content: str,
+        parent_id: str | None = None,
+    ) -> dict[str, Any]:
+        key = f"{flow_id}:{node_id}"
+        comment: dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "flow_id": flow_id,
+            "node_id": node_id,
+            "author": author,
+            "content": content,
+            "parent_id": parent_id,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        with self._lock:
+            self._comments.setdefault(key, []).append(comment)
+        return comment
+
+    def get(self, flow_id: str, node_id: str) -> list[dict[str, Any]]:
+        key = f"{flow_id}:{node_id}"
+        with self._lock:
+            return list(self._comments.get(key, []))
+
+    def get_all_for_flow(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            result: list[dict[str, Any]] = []
+            for key, comments in self._comments.items():
+                if key.startswith(f"{flow_id}:"):
+                    result.extend(comments)
+        result.sort(key=lambda c: c["created_at"])
+        return result
+
+    def delete(self, flow_id: str, node_id: str, comment_id: str) -> bool:
+        key = f"{flow_id}:{node_id}"
+        with self._lock:
+            comments = self._comments.get(key, [])
+            before = len(comments)
+            self._comments[key] = [c for c in comments if c["id"] != comment_id]
+            return len(self._comments[key]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._comments.clear()
+
+
+node_comment_store = NodeCommentStore()
+
+
+# ---------------------------------------------------------------------------
+# Activity Feed Store (N-28)
+# ---------------------------------------------------------------------------
+
+
+class ActivityFeedStore:
+    """Thread-safe in-memory store for per-workflow activity events."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._events: dict[str, list[dict[str, Any]]] = {}  # key: flow_id
+
+    def record(
+        self,
+        flow_id: str,
+        actor: str,
+        action: str,
+        detail: str = "",
+    ) -> dict[str, Any]:
+        event: dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "flow_id": flow_id,
+            "actor": actor,
+            "action": action,
+            "detail": detail,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        with self._lock:
+            self._events.setdefault(flow_id, []).append(event)
+        return event
+
+    def get(self, flow_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            events = list(self._events.get(flow_id, []))
+        events.sort(key=lambda e: e["timestamp"], reverse=True)
+        return events[:limit]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._events.clear()
+
+
+activity_feed_store = ActivityFeedStore()
+
+
 def _resolve_template(value: Any, variables: dict[str, Any], secrets: dict[str, str]) -> Any:
     """Resolve ``{{var.name}}`` and ``{{secret.name}}`` placeholders in a value.
 
@@ -9824,6 +9934,12 @@ class Orchestrator:
                     duration_ms=_notif_duration * 1000,
                     output_preview=_output_preview,
                 ))
+                activity_feed_store.record(
+                    flow.get("id", ""),
+                    actor="system",
+                    action="run_completed",
+                    detail=f"Run {run_id} completed successfully.",
+                )
 
         except Exception as e:
             logger.error(f"Error executing workflow: {e}")
@@ -9868,6 +9984,12 @@ class Orchestrator:
                 duration_ms=None,
                 output_preview=str(e)[:200],
             ))
+            activity_feed_store.record(
+                flow.get("id", ""),
+                actor="system",
+                action="run_failed",
+                detail=f"Run {run_id} failed: {str(e)[:200]}",
+            )
 
 
 
@@ -11991,6 +12113,13 @@ async def update_flow(
         "edges": body.edges,
     }
     saved = await FlowRepository.save(flow_data)
+    actor = current_user.get("email", "unknown") if current_user else "unknown"
+    activity_feed_store.record(
+        flow_id,
+        actor=actor,
+        action="flow_edited",
+        detail=f"Flow '{flow_data['name']}' updated.",
+    )
     return saved
 
 
@@ -12187,6 +12316,13 @@ async def _run_flow_impl(
         raise HTTPException(status_code=404, detail="Flow not found")
     flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
     run_id = await Orchestrator.execute_flow(flow, body.input)
+    actor = current_user.get("email", "system") if current_user else "system"
+    activity_feed_store.record(
+        flow_id,
+        actor=actor,
+        action="run_started",
+        detail=f"Run {run_id} started.",
+    )
     return {"run_id": run_id}
 
 
@@ -13170,6 +13306,85 @@ async def put_workflow_notifications(
                 )
     notification_store.set(flow_id, body)
     return {"flow_id": flow_id, "config": notification_store.get(flow_id)}
+
+
+# ---------------------------------------------------------------------------
+# N-28: Node Comments + Activity Feed
+# ---------------------------------------------------------------------------
+
+
+class NodeCommentRequest(BaseModel):
+    content: str
+    parent_id: str | None = None
+
+
+@v1.post(
+    "/workflows/{flow_id}/nodes/{node_id}/comments",
+    status_code=201,
+    tags=["Comments"],
+)
+async def create_node_comment(
+    flow_id: str,
+    node_id: str,
+    body: NodeCommentRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Add a threaded comment to a specific node in a workflow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    author = current_user.get("email", "unknown")
+    comment = node_comment_store.add(
+        flow_id, node_id, author=author, content=body.content, parent_id=body.parent_id
+    )
+    activity_feed_store.record(
+        flow_id,
+        actor=author,
+        action="node_commented",
+        detail=f"Comment on node '{node_id}': {body.content[:80]}",
+    )
+    return comment
+
+
+@v1.get("/workflows/{flow_id}/nodes/{node_id}/comments", tags=["Comments"])
+async def list_node_comments(
+    flow_id: str,
+    node_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return all comments on a specific node."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    comments = node_comment_store.get(flow_id, node_id)
+    return {"flow_id": flow_id, "node_id": node_id, "count": len(comments), "comments": comments}
+
+
+@v1.get("/workflows/{flow_id}/comments", tags=["Comments"])
+async def list_flow_comments(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return all comments across all nodes in a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    comments = node_comment_store.get_all_for_flow(flow_id)
+    return {"flow_id": flow_id, "count": len(comments), "comments": comments}
+
+
+@v1.get("/workflows/{flow_id}/activity", tags=["Activity"])
+async def get_workflow_activity(
+    flow_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return the activity feed for a workflow — edits, runs, and comments."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    events = activity_feed_store.get(flow_id, limit=limit)
+    return {"flow_id": flow_id, "count": len(events), "events": events}
 
 
 # Include versioned router

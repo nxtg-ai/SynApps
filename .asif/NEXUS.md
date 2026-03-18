@@ -249,6 +249,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-117 (Final README + Architecture) → DONE. README N-26 in initiatives table + node types table, test count 1,837. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-122 (N-27 Notifications) → DONE. NotificationStore + NotificationService (email/slack/webhook adapters), fire-and-forget dispatch, GET/PUT /notifications endpoint, 31 tests. 1,770 backend. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-123 (Final E2E + README) → DONE. test_e2e_n27_full.py (11 tests, 6 gates). README+CHANGELOG updated. 1,879 total (1,770 backend + 109 frontend + 4 E2E). |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-136 (N-28 Comments + Activity) → DONE. NodeCommentStore + ActivityFeedStore, 4 REST endpoints, activity wired into flow edits/runs/comments. 27 tests. 1,797 backend. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-137 (Final Archive + README) → DONE. README N-28 in tables, test count 1,910 (1,797 backend + 109 frontend + 4 E2E). CHANGELOG updated. |
 
 ---
 
@@ -260,26 +262,26 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-136 — P1: N-28 Workflow Comments + Collaboration
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 21:30 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 21:30 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Comments on nodes** — `POST /workflows/:id/nodes/:nodeId/comments`. Threaded.
-2. [ ] **Activity feed** — `GET /workflows/:id/activity` — who edited what, when. Comments + edits + executions.
-3. [ ] Tests.
+1. [x] **Comments on nodes** — `POST /workflows/:id/nodes/:nodeId/comments`. Threaded.
+2. [x] **Activity feed** — `GET /workflows/:id/activity` — who edited what, when. Comments + edits + executions.
+3. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-137.
-**Response** (filled by team): >
+**Response** (filled by team): N-28 shipped. `NodeCommentStore` (thread-safe, threaded via `parent_id`). `ActivityFeedStore` (per-flow event log, most-recent-first). 4 REST endpoints: `POST /workflows/{id}/nodes/{nodeId}/comments` (201, auth), `GET /workflows/{id}/nodes/{nodeId}/comments`, `GET /workflows/{id}/comments` (all nodes), `GET /workflows/{id}/activity?limit=N`. Activity wired into: flow edits (`PUT /flows/{id}` → `flow_edited`), run creation (`_run_flow_impl` → `run_started`), execution success/failure (`run_completed`/`run_failed`), and node comments (`node_commented`). 27 tests in `test_workflow_comments.py`. 1,797 backend + 109 frontend + 4 E2E = 1,910 total. OpenAPI: 88 paths. 2026-03-18.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-137 — P2: Final Session Archive + Showcase
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 21:30 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 21:30 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Archive DONE directives. 2. [ ] Final test count. 3. [ ] README — all 28 initiatives.
+1. [x] Archive DONE directives. 2. [x] Final test count. 3. [x] README — all 28 initiatives.
 
-**Response** (filled by team): >
+**Response** (filled by team): DONE directives (D-122, D-123, D-136, D-137) archived to activity log. README updated: N-28 in Node Types and Initiatives tables, test count 1,910 (1,797 backend + 109 frontend + 4 E2E). CHANGELOG N-28 entry added. 2026-03-18.
 
 ---
 
