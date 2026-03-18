@@ -246,6 +246,51 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-91 — P1: N-23 Workflow Marketplace API — Publish + Discover
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 17:45 | **Estimate**: M | **Status**: PENDING
+
+**Context**: 10 directives shipped today. 1,713 tests. N-21 Templates gave export/import. Now: a marketplace API so users can publish and discover shared templates.
+
+**Action Items**:
+1. [ ] **`POST /marketplace/publish`** — publish a workflow template (name, description, tags, author). Validates completeness.
+2. [ ] **`GET /marketplace/search`** — search by name, tags, category. Pagination.
+3. [ ] **`GET /marketplace/featured`** — curated top templates.
+4. [ ] **`POST /marketplace/install/:id`** — clone template into user's workflows.
+5. [ ] Tests: publish, search, install, validation.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-92.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-92 — P1: N-24 Execution Analytics — Pipeline Metrics
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 17:45 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Execution metrics** — per-workflow: run count, avg duration, success rate, error rate.
+2. [ ] **Node-level metrics** — per-node: avg execution time, failure rate, retry rate.
+3. [ ] **`GET /analytics/workflows`** and **`GET /analytics/nodes`** endpoints.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-93.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-93 — P2: E2E Integration Test + Session Summary
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 17:45 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Full E2E: create workflow → add all node types (LLM + HTTP + webhook + scheduler + error handler) → execute → verify metrics → publish to marketplace → install. One flow.
+2. [ ] Final test count and session summary.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-84 — P0: CI RED — Fix E2E Smoke Test Failures
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P0
 **Injected**: 2026-03-18 16:35 | **Estimate**: S | **Status**: DONE
