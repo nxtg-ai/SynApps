@@ -12,6 +12,24 @@
 # =============================================================================
 
 services:
+  # ---------- Redis (scheduler state + caching) ----------
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - synapps-network
+    restart: unless-stopped
+
   # ---------- PostgreSQL ----------
   db:
     image: postgres:16-alpine
@@ -76,10 +94,15 @@ services:
 
       # Memory
       MEMORY_BACKEND: ${MEMORY_BACKEND:-sqlite_fts}
+
+      # Redis (scheduler state + task queue)
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/api/v1/health"]
@@ -120,3 +143,4 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:

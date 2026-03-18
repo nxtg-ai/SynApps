@@ -8294,6 +8294,96 @@ class ActivityFeedStore:
 activity_feed_store = ActivityFeedStore()
 
 
+# ---------------------------------------------------------------------------
+# Workflow Permission Store (N-29)
+# ---------------------------------------------------------------------------
+
+_PERMISSION_RANK: dict[str, int] = {"viewer": 1, "editor": 2, "owner": 3}
+_VALID_SHARE_ROLES: frozenset[str] = frozenset({"viewer", "editor"})
+
+
+class WorkflowPermissionStore:
+    """Thread-safe in-memory store for per-workflow ownership and access grants.
+
+    Backwards compatible: if no permissions are set for a flow, all access is
+    allowed (open). Permissions are set when a flow is created with an
+    authenticated user.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # flow_id → {"owner": str, "grants": {user_id: role}}
+        self._perms: dict[str, dict[str, Any]] = {}
+
+    def set_owner(self, flow_id: str, user_id: str) -> None:
+        with self._lock:
+            if flow_id not in self._perms:
+                self._perms[flow_id] = {"owner": user_id, "grants": {}}
+
+    def grant(self, flow_id: str, user_id: str, role: str) -> None:
+        with self._lock:
+            if flow_id in self._perms:
+                self._perms[flow_id]["grants"][user_id] = role
+
+    def revoke(self, flow_id: str, user_id: str) -> None:
+        with self._lock:
+            if flow_id in self._perms:
+                self._perms[flow_id]["grants"].pop(user_id, None)
+
+    def get_role(self, flow_id: str, user_id: str) -> str | None:
+        """Return role for user: 'owner', 'editor', 'viewer', or None."""
+        with self._lock:
+            perm = self._perms.get(flow_id)
+            if perm is None:
+                return None
+            if perm["owner"] == user_id:
+                return "owner"
+            return perm["grants"].get(user_id)
+
+    def has_flow(self, flow_id: str) -> bool:
+        with self._lock:
+            return flow_id in self._perms
+
+    def get_permissions(self, flow_id: str) -> dict[str, Any]:
+        with self._lock:
+            perm = self._perms.get(flow_id)
+            if perm is None:
+                return {}
+            return {"owner": perm["owner"], "grants": dict(perm["grants"])}
+
+    def delete(self, flow_id: str) -> None:
+        with self._lock:
+            self._perms.pop(flow_id, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._perms.clear()
+
+
+workflow_permission_store = WorkflowPermissionStore()
+
+
+def _check_flow_permission(flow_id: str, user_id: str, required: str) -> None:
+    """Raise HTTP 403 if user lacks the required role.
+
+    If no permissions are set for the flow (open-access / legacy), always passes.
+    Roles in ascending order: viewer < editor < owner.
+    """
+    if not workflow_permission_store.has_flow(flow_id):
+        return  # open access — backwards compatible
+    role = workflow_permission_store.get_role(flow_id, user_id)
+    if role is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: you are not a member of this workflow.",
+        )
+    if _PERMISSION_RANK.get(role, 0) < _PERMISSION_RANK.get(required, 0):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: '{required}' role required, you have '{role}'.",
+        )
+
+
 def _resolve_template(value: Any, variables: dict[str, Any], secrets: dict[str, str]) -> Any:
     """Resolve ``{{var.name}}`` and ``{{secret.name}}`` placeholders in a value.
 
@@ -12045,6 +12135,10 @@ async def create_flow(
     if migrated:
         logger.info("Applied legacy node migration while creating flow '%s'", flow_id)
     await FlowRepository.save(flow_dict)
+    # Set ownership when created by an authenticated (non-anonymous) user
+    user_email = current_user.get("email", "")
+    if user_email and user_email != "anonymous@local":
+        workflow_permission_store.set_owner(flow_id, user_email)
     return {"message": "Flow created", "id": flow_id}
 
 
@@ -12102,6 +12196,7 @@ async def update_flow(
     before being overwritten. If it does not exist, a new flow is created (no
     snapshot is taken).
     """
+    _check_flow_permission(flow_id, current_user.get("email", ""), "editor")
     existing = await FlowRepository.get_by_id(flow_id)
     if existing:
         flow_version_registry.snapshot(flow_id, existing)
@@ -12311,6 +12406,7 @@ async def _run_flow_impl(
     current_user: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Execute a flow and return a run identifier."""
+    _check_flow_permission(flow_id, current_user.get("email", "") if current_user else "", "editor")
     flow = await FlowRepository.get_by_id(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -13385,6 +13481,78 @@ async def get_workflow_activity(
         raise HTTPException(status_code=404, detail="Flow not found")
     events = activity_feed_store.get(flow_id, limit=limit)
     return {"flow_id": flow_id, "count": len(events), "events": events}
+
+
+# ---------------------------------------------------------------------------
+# N-29: Workflow Permissions — Team Access Control
+# ---------------------------------------------------------------------------
+
+
+class ShareWorkflowRequest(BaseModel):
+    user_id: str
+    role: str  # "viewer" or "editor"
+
+
+@v1.post("/workflows/{flow_id}/share", status_code=200, tags=["Permissions"])
+async def share_workflow(
+    flow_id: str,
+    body: ShareWorkflowRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Grant a user viewer or editor access to a workflow. Only the owner can share."""
+    if body.role not in _VALID_SHARE_ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid role '{body.role}'. Valid: {sorted(_VALID_SHARE_ROLES)}",
+        )
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    _check_flow_permission(flow_id, current_user.get("email", ""), "owner")
+    workflow_permission_store.grant(flow_id, body.user_id, body.role)
+    return {
+        "flow_id": flow_id,
+        "shared_with": body.user_id,
+        "role": body.role,
+        "permissions": workflow_permission_store.get_permissions(flow_id),
+    }
+
+
+@v1.delete(
+    "/workflows/{flow_id}/share/{target_user_id}",
+    status_code=200,
+    tags=["Permissions"],
+)
+async def revoke_workflow_share(
+    flow_id: str,
+    target_user_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Revoke a user's access to a workflow. Only the owner can revoke."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    _check_flow_permission(flow_id, current_user.get("email", ""), "owner")
+    workflow_permission_store.revoke(flow_id, target_user_id)
+    return {
+        "flow_id": flow_id,
+        "revoked": target_user_id,
+        "permissions": workflow_permission_store.get_permissions(flow_id),
+    }
+
+
+@v1.get("/workflows/{flow_id}/permissions", tags=["Permissions"])
+async def get_workflow_permissions(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return the ownership and access grants for a workflow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    _check_flow_permission(flow_id, current_user.get("email", ""), "viewer")
+    perms = workflow_permission_store.get_permissions(flow_id)
+    return {"flow_id": flow_id, "permissions": perms}
 
 
 # Include versioned router

@@ -251,6 +251,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-123 (Final E2E + README) → DONE. test_e2e_n27_full.py (11 tests, 6 gates). README+CHANGELOG updated. 1,879 total (1,770 backend + 109 frontend + 4 E2E). |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-136 (N-28 Comments + Activity) → DONE. NodeCommentStore + ActivityFeedStore, 4 REST endpoints, activity wired into flow edits/runs/comments. 27 tests. 1,797 backend. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-137 (Final Archive + README) → DONE. README N-28 in tables, test count 1,910 (1,797 backend + 109 frontend + 4 E2E). CHANGELOG updated. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-144 (N-29 Workflow Permissions) → DONE. WorkflowPermissionStore, _check_flow_permission, 3 REST endpoints, enforcement on PUT/POST runs. 26 tests. 1,823 backend. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-145 (Docker + Deployment) → DONE. Redis added to docker-compose.yml, docs/deployment.md written (env vars, Fly.io/Vercel deploy, scaling, monitoring). |
 
 ---
 
@@ -262,27 +264,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-144 — P1: N-29 Workflow Permissions — Team Access Control
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Workflow ownership** — creator is owner. Owner can share with `viewer`/`editor` roles.
-2. [ ] **`POST /workflows/:id/share`** — invite user by ID. **`GET /workflows/:id/permissions`**.
-3. [ ] **Permission enforcement** — viewers can't edit/execute. Editors can edit but not delete/share.
-4. [ ] Tests.
+1. [x] **Workflow ownership** — creator is owner. Owner can share with `viewer`/`editor` roles.
+2. [x] **`POST /workflows/:id/share`** — invite user by ID. **`GET /workflows/:id/permissions`**.
+3. [x] **Permission enforcement** — viewers can't edit/execute. Editors can edit but not delete/share.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-145.
-**Response** (filled by team): >
+**Response** (filled by team): N-29 shipped. `WorkflowPermissionStore` (thread-safe, backwards-compat — open access if no perms set). `_check_flow_permission(flow_id, user_email, required_role)` helper with rank-based enforcement (viewer < editor < owner). Ownership set on `POST /flows` for authenticated users. Permission checked on `PUT /flows/{id}` (editor+) and `POST /flows/{id}/runs` (editor+). 3 REST endpoints: `POST /workflows/{id}/share` (owner only, viewer|editor roles), `DELETE /workflows/{id}/share/{userId}` (owner only), `GET /workflows/{id}/permissions` (viewer+). 26 tests in `test_workflow_permissions.py`. 1,823 backend. 2026-03-18.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-145 — P2: Docker Compose + Production Deployment
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 22:20 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] `docker-compose.yml` — app + PostgreSQL + Redis (for scheduler). 2. [ ] `Dockerfile` multi-stage. 3. [ ] `docs/deployment.md`.
+1. [x] `docker-compose.yml` — app + PostgreSQL + Redis (for scheduler). 2. [x] `Dockerfile` multi-stage. 3. [x] `docs/deployment.md`.
 
-**Response** (filled by team): >
+**Response** (filled by team): D-145 shipped. Root `docker-compose.yml` updated: Redis service (`redis:7-alpine`, appendonly, healthcheck, `redis_data` volume) added; orchestrator `depends_on` updated to include Redis; `REDIS_URL` env var added. `Dockerfile.orchestrator` was already multi-stage (builder + runtime, non-root user, ~150MB). `docs/deployment.md` written: architecture overview, all env vars, production `.env` template, Fly.io + Vercel deploy, scaling notes, monitoring endpoints, troubleshooting. 2026-03-18.
 
 ---
 
