@@ -237,6 +237,45 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-67 — P1: N-20 Scheduler Node — Cron-Triggered Workflows
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Scheduler node** — configure cron expression. When triggered, starts workflow execution.
+2. [ ] **Scheduler service** — background process that checks cron schedules and fires workflows.
+3. [ ] **Management API** — list scheduled workflows, pause/resume, view next run time.
+4. [ ] Tests: scheduler logic, cron parsing, workflow triggering.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-68.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-68 — P1: N-21 Template Marketplace — Shareable Workflows
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 15:30 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Export workflow as template** — strip credentials, add description/tags.
+2. [ ] **Import template** — load, customize, run. 3. [ ] **Template gallery** — browse/search templates.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-69.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-69 — P2: Docker Compose + Getting Started Guide
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 15:30 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] `docker-compose.yml` for one-command setup. 2. [ ] `docs/getting-started.md` tutorial.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-57 — P0: E2E Smoke Test — Full Workflow Pipeline
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P0
 **Injected**: 2026-03-18 15:00 | **Estimate**: S | **Status**: DONE
