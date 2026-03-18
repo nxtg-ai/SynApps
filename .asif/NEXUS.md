@@ -232,6 +232,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 
+### DIRECTIVE-NXTG-20260318-03 — P2: CRUCIBLE Self-Audit + Quality Hardening
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 08:00 | **Estimate**: S | **Status**: PENDING
+
+**Context**: 18/18 initiatives SHIPPED. 1,510 tests. Python 3.13 + Pydantic v2 migration complete. No remaining roadmap items. Previous CRUCIBLE audit found Gate 8 coverage config issues (DONE). Time for a full self-audit on the current codebase.
+
+**Action Items**:
+1. [ ] **CRUCIBLE Gates 1-7 self-audit** — run the full gate audit on your test suite. Document findings.
+2. [ ] **Remediate any findings** — fix hollow assertions (Gate 2), silent catch blocks (Gate 5), coverage config issues (Gate 8 re-verify).
+3. [ ] **README update** — test count (1,510), Python 3.13 badge, Pydantic v2 migration note, N-18 HTTP Request Node docs.
+4. [ ] Tests: 1,510 → 1,530+ target (remediation should add tests).
+
+**Constraints**:
+- S-sized quality work — no new features
+- Follow Idle Time Protocol structure
+
+**Response** (filled by team):
+>
+
+---
+
 ### DIRECTIVE-NXTG-20260314-08 — P0: CRUCIBLE Gate 8 — Fix Coverage Config + Stale Artifact
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P0
 **Injected**: 2026-03-14 | **Estimate**: S | **Status**: DONE | **CoS ACK**: 2026-03-14
