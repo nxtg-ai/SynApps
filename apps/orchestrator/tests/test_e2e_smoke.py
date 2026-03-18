@@ -126,7 +126,7 @@ def _reset_trigger_registry():
 # ---------------------------------------------------------------------------
 
 
-async def _poll_until_terminal(run_id: str, *, max_attempts: int = 40) -> dict | None:
+async def _poll_until_terminal(run_id: str, *, max_attempts: int = 80) -> dict | None:
     """Poll WorkflowRunRepository until the run reaches a terminal status."""
     for _ in range(max_attempts):
         await asyncio.sleep(0.15)
