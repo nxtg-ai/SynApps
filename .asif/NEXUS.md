@@ -253,6 +253,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-137 (Final Archive + README) → DONE. README N-28 in tables, test count 1,910 (1,797 backend + 109 frontend + 4 E2E). CHANGELOG updated. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-144 (N-29 Workflow Permissions) → DONE. WorkflowPermissionStore, _check_flow_permission, 3 REST endpoints, enforcement on PUT/POST runs. 26 tests. 1,823 backend. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-145 (Docker + Deployment) → DONE. Redis added to docker-compose.yml, docs/deployment.md written (env vars, Fly.io/Vercel deploy, scaling, monitoring). |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-152 (N-30 Audit Trail) → DONE. AuditLogStore, 6 lifecycle events wired, GET /audit endpoint, 90-day retention. set_owner bugfix. 21 tests. 1,844 backend. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-153 (Final Session Summary) → DONE. 1,957 total tests (1,844+109+4). All 30 N-series initiatives complete. README+CHANGELOG updated. SynApps v1.0-alpha feature-complete. |
 
 ---
 
@@ -264,27 +266,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-152 — P1: N-30 Audit Trail — Compliance Logging
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 22:50 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 22:50 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Audit log** — every workflow edit, execution, permission change logged with timestamp + user + action.
-2. [ ] **`GET /audit`** — query audit trail with filters (user, action, date range).
-3. [ ] **Retention policy** — configurable log retention (default 90 days).
-4. [ ] Tests.
+1. [x] **Audit log** — every workflow edit, execution, permission change logged with timestamp + user + action.
+2. [x] **`GET /audit`** — query audit trail with filters (user, action, date range).
+3. [x] **Retention policy** — configurable log retention (default 90 days).
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-153.
-**Response** (filled by team): >
+**Response** (filled by team): `AuditLogStore` added to `main.py` — thread-safe global compliance log, records actor/action/resource_type/resource_id/detail/ISO timestamp. 90-day retention via `purge_old()` called lazily on every `GET /audit`. Wired into 6 lifecycle events: `workflow_created`, `workflow_updated`, `workflow_deleted`, `workflow_run_started`, `permission_granted`, `permission_revoked`. `GET /api/v1/audit` endpoint supports `actor`, `action`, `resource_type`, `resource_id`, `since`, `until`, `limit` filters. `AUDIT_LOG_RETENTION_DAYS` env var configures retention. Bugfix: `WorkflowPermissionStore.set_owner` was silently no-op when flow already registered — added `else: self._perms[flow_id]["owner"] = user_id`. 21 tests — all passing. Backend: 1,844 total.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-153 — P2: Final Session Summary
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 22:50 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 22:50 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Final test count (1,800+?). 2. [ ] All 30 initiatives listed. 3. [ ] README showcase.
+1. [x] Final test count (1,800+?). 2. [x] All 30 initiatives listed. 3. [x] README showcase.
 
-**Response** (filled by team): >
+**Response** (filled by team): Final counts — **1,957 tests** (1,844 backend + 109 frontend unit + 4 E2E), 0 failures. All 30 N-series initiatives complete: N-01 through N-30 (see README table). README updated with N-30 entry and test count. CHANGELOG updated with N-30 entry. `set_owner` bugfix committed (was silent no-op on existing flows). SynApps v1.0-alpha is feature-complete per SPEC.md.
 
 ---
 

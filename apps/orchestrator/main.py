@@ -589,7 +589,7 @@ failed_request_store = FailedRequestStore(capacity=_FAILED_REQUEST_CAP)
 # Consumer Usage Tracker + Quota System
 # ============================================================
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 
 def _month_start_ts() -> float:
@@ -8319,6 +8319,8 @@ class WorkflowPermissionStore:
         with self._lock:
             if flow_id not in self._perms:
                 self._perms[flow_id] = {"owner": user_id, "grants": {}}
+            else:
+                self._perms[flow_id]["owner"] = user_id
 
     def grant(self, flow_id: str, user_id: str, role: str) -> None:
         with self._lock:
@@ -8361,6 +8363,97 @@ class WorkflowPermissionStore:
 
 
 workflow_permission_store = WorkflowPermissionStore()
+
+
+# ---------------------------------------------------------------------------
+# Audit Log Store (N-30)
+# ---------------------------------------------------------------------------
+
+
+class AuditLogStore:
+    """Global compliance audit log with configurable retention.
+
+    Records every workflow edit, execution, and permission change with
+    timestamp, actor, action, resource type, and resource ID.
+    """
+
+    def __init__(self, retention_days: int = 90) -> None:
+        self._lock = threading.Lock()
+        self._entries: list[dict[str, Any]] = []
+        self._retention_days = retention_days
+
+    def record(
+        self,
+        actor: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        detail: str = "",
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.utcnow().isoformat(),
+            "actor": actor,
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "detail": detail,
+        }
+        with self._lock:
+            self._entries.append(entry)
+        return entry
+
+    def query(
+        self,
+        actor: str | None = None,
+        action: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return matching entries in reverse-chronological order."""
+        with self._lock:
+            entries = list(self._entries)
+        results: list[dict[str, Any]] = []
+        for e in reversed(entries):
+            if actor and e["actor"] != actor:
+                continue
+            if action and e["action"] != action:
+                continue
+            if resource_type and e["resource_type"] != resource_type:
+                continue
+            if resource_id and e["resource_id"] != resource_id:
+                continue
+            if since and e["timestamp"] < since:
+                continue
+            if until and e["timestamp"] > until:
+                continue
+            results.append(e)
+            if len(results) >= limit:
+                break
+        return results
+
+    def purge_old(self, retention_days: int | None = None) -> int:
+        """Delete entries older than retention_days. Returns count deleted."""
+        days = retention_days if retention_days is not None else self._retention_days
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        with self._lock:
+            before = len(self._entries)
+            self._entries = [e for e in self._entries if e["timestamp"] >= cutoff]
+            return before - len(self._entries)
+
+    def count(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+
+audit_log_store = AuditLogStore(retention_days=int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "90")))
 
 
 def _check_flow_permission(flow_id: str, user_id: str, required: str) -> None:
@@ -12139,6 +12232,13 @@ async def create_flow(
     user_email = current_user.get("email", "")
     if user_email and user_email != "anonymous@local":
         workflow_permission_store.set_owner(flow_id, user_email)
+    audit_log_store.record(
+        user_email or "anonymous",
+        "workflow_created",
+        "flow",
+        flow_id,
+        detail=f"Flow '{flow_dict.get('name', flow_id)}' created.",
+    )
     return {"message": "Flow created", "id": flow_id}
 
 
@@ -12181,6 +12281,8 @@ async def delete_flow(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     await FlowRepository.delete(flow_id)
+    actor = current_user.get("email", "unknown")
+    audit_log_store.record(actor, "workflow_deleted", "flow", flow_id, detail=f"Flow '{flow.get('name', flow_id)}' deleted.")
     return {"message": "Flow deleted"}
 
 
@@ -12215,6 +12317,7 @@ async def update_flow(
         action="flow_edited",
         detail=f"Flow '{flow_data['name']}' updated.",
     )
+    audit_log_store.record(actor, "workflow_updated", "flow", flow_id, detail=f"Flow '{flow_data['name']}' updated.")
     return saved
 
 
@@ -12413,6 +12516,7 @@ async def _run_flow_impl(
     flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
     run_id = await Orchestrator.execute_flow(flow, body.input)
     actor = current_user.get("email", "system") if current_user else "system"
+    audit_log_store.record(actor, "workflow_run_started", "flow", flow_id, detail=f"Run {run_id} started.")
     activity_feed_store.record(
         flow_id,
         actor=actor,
@@ -13510,6 +13614,13 @@ async def share_workflow(
         raise HTTPException(status_code=404, detail="Flow not found")
     _check_flow_permission(flow_id, current_user.get("email", ""), "owner")
     workflow_permission_store.grant(flow_id, body.user_id, body.role)
+    audit_log_store.record(
+        current_user.get("email", "unknown"),
+        "permission_granted",
+        "flow",
+        flow_id,
+        detail=f"Granted '{body.role}' to {body.user_id}.",
+    )
     return {
         "flow_id": flow_id,
         "shared_with": body.user_id,
@@ -13534,6 +13645,13 @@ async def revoke_workflow_share(
         raise HTTPException(status_code=404, detail="Flow not found")
     _check_flow_permission(flow_id, current_user.get("email", ""), "owner")
     workflow_permission_store.revoke(flow_id, target_user_id)
+    audit_log_store.record(
+        current_user.get("email", "unknown"),
+        "permission_revoked",
+        "flow",
+        flow_id,
+        detail=f"Revoked access for {target_user_id}.",
+    )
     return {
         "flow_id": flow_id,
         "revoked": target_user_id,
@@ -13553,6 +13671,40 @@ async def get_workflow_permissions(
     _check_flow_permission(flow_id, current_user.get("email", ""), "viewer")
     perms = workflow_permission_store.get_permissions(flow_id)
     return {"flow_id": flow_id, "permissions": perms}
+
+
+# ---------------------------------------------------------------------------
+# N-30: Audit Trail — Compliance Logging
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/audit", tags=["Audit"])
+async def get_audit_trail(
+    actor: str | None = Query(None, description="Filter by actor email"),
+    action: str | None = Query(None, description="Filter by action name"),
+    resource_type: str | None = Query(None, description="Filter by resource type"),
+    resource_id: str | None = Query(None, description="Filter by resource ID"),
+    since: str | None = Query(None, description="ISO timestamp lower bound"),
+    until: str | None = Query(None, description="ISO timestamp upper bound"),
+    limit: int = Query(100, ge=1, le=1000, description="Max entries to return"),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return audit log entries with optional filters.
+
+    Performs lazy retention purge on each call (entries older than the
+    configured retention window are removed before querying).
+    """
+    audit_log_store.purge_old()
+    entries = audit_log_store.query(
+        actor=actor,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        since=since,
+        until=until,
+        limit=limit,
+    )
+    return {"count": len(entries), "entries": entries}
 
 
 # Include versioned router

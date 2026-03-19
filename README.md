@@ -141,6 +141,7 @@ All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-27 | Workflow Notifications | PLATFORM | Email (SMTP/SendGrid), Slack webhook, custom webhook — on_complete/on_failure per flow, fire-and-forget dispatch, `GET/PUT /workflows/:id/notifications` |
 | N-28 | Workflow Comments + Collaboration | PLATFORM | Threaded node comments (`parent_id`), workflow activity feed (edits, runs, comments) — `POST/GET /workflows/:id/nodes/:nodeId/comments`, `GET /workflows/:id/activity` |
 | N-29 | Workflow Permissions — Team Access Control | PLATFORM | Ownership on create, `viewer`/`editor` roles, enforced on edit + execute, share/revoke per user — `POST /workflows/:id/share`, `GET /workflows/:id/permissions` |
+| N-30 | Audit Trail — Compliance Logging | PLATFORM | Global compliance log (actor, action, resource, timestamp), 90-day retention with auto-purge, query filters — `GET /audit?actor=&action=&resource_id=&since=&limit=` |
 
 ## Tech Stack
 
@@ -174,7 +175,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**1,936 tests** (1,823 backend + 109 frontend unit + 4 E2E) — all passing.
+**1,957 tests** (1,844 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 
