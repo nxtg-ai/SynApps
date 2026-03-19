@@ -8,6 +8,7 @@ import { chatbotWithMemoryTemplate } from './ChatbotWithMemory';
 import { twoBrainInboxTemplate } from './TwoBrainInbox';
 import { contentEngineTemplate } from './ContentEngine';
 import { apiFetchTemplate } from './ApiFetch';
+import { faultlineComplianceTemplate } from './FaultlineCompliance';
 
 // Export all templates
 export const templates: FlowTemplate[] = [
@@ -16,7 +17,8 @@ export const templates: FlowTemplate[] = [
   chatbotWithMemoryTemplate,
   twoBrainInboxTemplate,
   contentEngineTemplate,
-  apiFetchTemplate
+  apiFetchTemplate,
+  faultlineComplianceTemplate,
 ];
 
 // Helper function to get a template by ID

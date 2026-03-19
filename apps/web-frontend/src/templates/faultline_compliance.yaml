@@ -1,0 +1,243 @@
+name: AI Content Compliance Pipeline
+id: ai-content-compliance-pipeline
+description: >
+  Receive text via webhook, scan with Faultline Platform for trust score,
+  route flagged content to Slack and compliant content to a compliance report
+  + email. Powered by the Faultline Platform API.
+tags:
+  - compliance
+  - faultline
+  - content-moderation
+  - webhook
+  - slack
+  - monitoring
+
+variables:
+  FAULTLINE_API_URL:
+    description: Base URL of the Faultline Platform API (e.g. https://api.faultline.ai)
+    required: true
+  FAULTLINE_API_KEY:
+    description: Bearer token for Faultline Platform API authentication
+    required: true
+  SLACK_WEBHOOK_URL:
+    description: Slack incoming webhook URL for compliance alerts
+    required: true
+  REPORT_EMAIL:
+    description: Email address to receive compliance reports
+    required: true
+  EMAIL_WEBHOOK_URL:
+    description: HTTP endpoint that sends email (e.g. SendGrid, Mailgun relay)
+    required: true
+
+nodes:
+  - id: webhook
+    type: webhook_trigger
+    position:
+      x: 100
+      y: 300
+    data:
+      label: Content Submission Webhook
+      input_schema:
+        text:
+          type: string
+          required: true
+        content_type:
+          type: string
+          required: false
+        user_id:
+          type: string
+          required: false
+
+  - id: scan
+    type: http_request
+    position:
+      x: 300
+      y: 300
+    data:
+      label: "Faultline: Content Scan"
+      method: POST
+      url: "{{var.FAULTLINE_API_URL}}/scan"
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer {{var.FAULTLINE_API_KEY}}"
+      auth_type: bearer
+      auth_token: "{{var.FAULTLINE_API_KEY}}"
+      body: |
+        {
+          "text": "{{input.text}}",
+          "content_type": "{{input.content_type}}",
+          "user_id": "{{input.user_id}}"
+        }
+      timeout_seconds: 30
+      verify_ssl: true
+      max_retries: 1
+      allow_redirects: true
+
+  - id: extract
+    type: code
+    position:
+      x: 500
+      y: 300
+    data:
+      label: Extract Trust Score
+      language: python
+      timeout_seconds: 10
+      memory_limit_mb: 256
+      code: |
+        # data = HTTP response body from Faultline scan (dict)
+        # context["input"] = original webhook payload
+        raw_input = context.get("input", {})
+        if isinstance(raw_input, dict):
+            original_text = raw_input.get("text", "")
+        else:
+            original_text = str(raw_input)
+
+        scan_response = data if isinstance(data, dict) else {}
+
+        trust_score = scan_response.get("trust_score", 0)
+        try:
+            trust_score = float(trust_score)
+        except (TypeError, ValueError):
+            trust_score = 0.0
+
+        compliant = "yes" if trust_score >= 70 else "no"
+        label = "PASS" if compliant == "yes" else "FLAGGED"
+        scan_id = scan_response.get("scan_id", "")
+        text_preview = original_text[:100]
+
+        result = {
+            "trust_score": trust_score,
+            "compliant": compliant,
+            "label": label,
+            "scan_id": scan_id,
+            "text_preview": text_preview,
+        }
+
+  - id: route
+    type: if_else
+    position:
+      x: 700
+      y: 300
+    data:
+      label: Route by Trust Score
+      source: "{{data.compliant}}"
+      operation: equals
+      value: "no"
+      case_sensitive: false
+      negate: false
+      true_target: alert
+      false_target: report
+
+  - id: alert
+    type: http_request
+    position:
+      x: 600
+      y: 500
+    data:
+      label: "Slack: Compliance Alert"
+      method: POST
+      url: "{{var.SLACK_WEBHOOK_URL}}"
+      headers:
+        Content-Type: application/json
+      auth_type: none
+      body: |
+        {
+          "text": "⚠️ Content flagged (trust score: {{data.trust_score}}): {{data.text_preview}}"
+        }
+      timeout_seconds: 15
+      verify_ssl: true
+      max_retries: 1
+      allow_redirects: true
+
+  - id: report
+    type: http_request
+    position:
+      x: 900
+      y: 500
+    data:
+      label: Generate Compliance Report
+      method: POST
+      url: "{{var.FAULTLINE_API_URL}}/scan/report"
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer {{var.FAULTLINE_API_KEY}}"
+      auth_type: bearer
+      auth_token: "{{var.FAULTLINE_API_KEY}}"
+      body: |
+        {
+          "scan_id": "{{data.scan_id}}",
+          "format": "json",
+          "recipient": "{{var.REPORT_EMAIL}}"
+        }
+      timeout_seconds: 30
+      verify_ssl: true
+      max_retries: 1
+      allow_redirects: true
+
+  - id: email
+    type: http_request
+    position:
+      x: 900
+      y: 650
+    data:
+      label: Email Compliance Report
+      method: POST
+      url: "{{var.EMAIL_WEBHOOK_URL}}"
+      headers:
+        Content-Type: application/json
+      auth_type: none
+      body: |
+        {
+          "to": "{{var.REPORT_EMAIL}}",
+          "subject": "Compliance Report — Content Passed Review",
+          "body": "{{data.report_url}}"
+        }
+      timeout_seconds: 15
+      verify_ssl: true
+      max_retries: 1
+      allow_redirects: true
+
+  - id: end
+    type: end
+    position:
+      x: 1100
+      y: 550
+    data:
+      label: Done
+
+edges:
+  - id: webhook-scan
+    source: webhook
+    target: scan
+
+  - id: scan-extract
+    source: scan
+    target: extract
+
+  - id: extract-route
+    source: extract
+    target: route
+
+  - id: route-alert
+    source: route
+    target: alert
+    sourceHandle: "true"
+    label: flagged
+
+  - id: route-report
+    source: route
+    target: report
+    sourceHandle: "false"
+    label: compliant
+
+  - id: alert-end
+    source: alert
+    target: end
+
+  - id: report-email
+    source: report
+    target: email
+
+  - id: email-end
+    source: email
+    target: end

@@ -19,6 +19,7 @@ const AnalyticsDashboard = React.lazy(() => import('./pages/AnalyticsDashboard/A
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage/NotFoundPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
 const RegisterPage = React.lazy(() => import('./pages/RegisterPage/RegisterPage'));
+const PricingPage = React.lazy(() => import('./pages/PricingPage/PricingPage'));
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -45,6 +46,9 @@ const AppRoutes: React.FC = () => {
         }
       >
         <Routes>
+          {/* Public routes — no auth required */}
+          <Route path="/pricing" element={<PricingPage />} />
+
           {/* Guest-only routes */}
           <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
           <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />

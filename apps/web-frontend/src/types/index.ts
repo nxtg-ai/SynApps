@@ -17,6 +17,8 @@ export interface FlowEdge {
   source: string;
   target: string;
   animated?: boolean;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 }
 
 export interface Flow {

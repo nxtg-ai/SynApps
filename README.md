@@ -170,12 +170,24 @@ SynApps ships with workflow templates that validate the platform against real NX
 
 Templates are available in the frontend gallery (`apps/web-frontend/src/templates/`) and as standalone YAML definitions (`templates/`).
 
+## Pricing
+
+| Plan | Price | Workflows | Executions/mo |
+|------|-------|-----------|---------------|
+| Free | $0 | 5 | 100 |
+| Pro | $29/mo | Unlimited | Unlimited |
+| Enterprise | Custom | Unlimited | Unlimited |
+
+See [Pricing Page](https://synapps.nxtg.ai/pricing) or [self-host for free](docs/DEPLOY.md).
+
 ## Deployment
 
 - **Frontend:** Vercel
 - **Backend:** Fly.io
 
 CI/CD pipelines are set up using GitHub Actions.
+
+See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
