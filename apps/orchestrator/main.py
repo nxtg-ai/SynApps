@@ -59,6 +59,7 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -7801,6 +7802,69 @@ dead_letter_queue = DeadLetterQueue()
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# SSEEventBus — real-time per-run event bus for SSE streaming (N-32)
+# ---------------------------------------------------------------------------
+
+
+class SSEEventBus:
+    """Thread-safe per-run event bus for Server-Sent Events streaming.
+
+    Subscribers call :meth:`subscribe` to obtain an :class:`asyncio.Queue`
+    that receives events as they are published.  ``publish_sync`` is safe to
+    call from synchronous code running inside an active asyncio event loop
+    (e.g. from within an async coroutine via a sync helper).
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+
+    def subscribe(self, run_id: str) -> asyncio.Queue:
+        """Return a new queue that will receive all future events for *run_id*."""
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        with self._lock:
+            self._subscribers.setdefault(run_id, []).append(q)
+        return q
+
+    def unsubscribe(self, run_id: str, queue: asyncio.Queue) -> None:
+        with self._lock:
+            subs = self._subscribers.get(run_id, [])
+            try:
+                subs.remove(queue)
+            except ValueError:
+                pass
+            if not subs:
+                self._subscribers.pop(run_id, None)
+
+    def publish_sync(self, run_id: str, event: dict[str, Any]) -> None:
+        """Synchronously put *event* into every subscriber queue for *run_id*.
+
+        Uses ``put_nowait``; events are silently dropped when a queue is full
+        (subscriber is too slow).  Safe to call from synchronous code running
+        inside an asyncio event loop.
+        """
+        with self._lock:
+            queues = list(self._subscribers.get(run_id, []))
+        for q in queues:
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass  # slow consumer — drop rather than block the engine
+
+    def has_subscribers(self, run_id: str) -> bool:
+        with self._lock:
+            return bool(self._subscribers.get(run_id))
+
+    def reset(self) -> None:
+        with self._lock:
+            self._subscribers.clear()
+
+
+sse_event_bus = SSEEventBus()
+
+
+# ---------------------------------------------------------------------------
 # Execution Log Store — Structured per-node execution logs (D-108 / N-25)
 # ---------------------------------------------------------------------------
 
@@ -7817,9 +7881,10 @@ class ExecutionLogStore:
         self._logs: dict[str, list[dict[str, Any]]] = {}
 
     def append(self, run_id: str, entry: dict[str, Any]) -> None:
-        """Append a log entry for *run_id*."""
+        """Append a log entry for *run_id* and notify SSE subscribers."""
         with self._lock:
             self._logs.setdefault(run_id, []).append(entry)
+        sse_event_bus.publish_sync(run_id, entry)
 
     def get(self, run_id: str) -> list[dict[str, Any]]:
         """Return all log entries for *run_id* (empty list if none)."""
@@ -10349,6 +10414,12 @@ class Orchestrator:
                     action="run_completed",
                     detail=f"Run {run_id} completed successfully.",
                 )
+                sse_event_bus.publish_sync(run_id, {
+                    "event": "execution_complete",
+                    "run_id": run_id,
+                    "status": "success",
+                    "duration_ms": execution_trace.get("duration_ms"),
+                })
 
         except Exception as e:
             logger.error(f"Error executing workflow: {e}")
@@ -10399,8 +10470,12 @@ class Orchestrator:
                 action="run_failed",
                 detail=f"Run {run_id} failed: {str(e)[:200]}",
             )
-
-
+            sse_event_bus.publish_sync(run_id, {
+                "event": "execution_complete",
+                "run_id": run_id,
+                "status": "error",
+                "error": str(e)[:500],
+            })
 
 
 # ============================================================
@@ -13981,6 +14056,127 @@ async def import_workflow(
         result["saved"] = True
         result["flow_id"] = workflow["id"]
     return result
+
+
+# ---------------------------------------------------------------------------
+# GET /executions/{run_id}/stream — N-32 Real-Time SSE Execution Streaming
+# ---------------------------------------------------------------------------
+
+# Map execution log event names to SSE event types
+_SSE_EVENT_TYPE_MAP: dict[str, str] = {
+    "node_start": "node_started",
+    "node_success": "node_completed",
+    "node_error": "node_failed",
+    "node_retry": "node_started",    # retry = re-start
+    "node_fallback": "node_completed",
+    "execution_complete": "execution_complete",
+}
+
+
+@v1.get("/executions/{run_id}/stream", tags=["Executions"])
+async def stream_execution_events(
+    run_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> EventSourceResponse:
+    """Stream node-by-node execution progress as Server-Sent Events.
+
+    Replays all existing log entries for *run_id* first, then streams new
+    events in real-time.  Closes automatically when an ``execution_complete``
+    event is received.
+
+    SSE event types emitted:
+    - ``node_started`` — a node has begun execution
+    - ``node_completed`` — a node succeeded (or used fallback)
+    - ``node_failed`` — a node errored
+    - ``execution_complete`` — the workflow reached a terminal state (``data``
+      includes ``status`` and optional ``error``)
+    """
+    import json as _json
+
+    # Validate run exists or has logs
+    existing_logs = execution_log_store.get(run_id)
+    run_record = await WorkflowRunRepository.get_by_run_id(run_id)
+    if not existing_logs and run_record is None:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+
+    async def _event_generator():
+        q = sse_event_bus.subscribe(run_id)
+        try:
+            # --- Replay existing log entries ---
+            for entry in existing_logs:
+                raw_event = entry.get("event", "")
+                sse_type = _SSE_EVENT_TYPE_MAP.get(raw_event, raw_event)
+                payload = {
+                    "run_id": run_id,
+                    "node_id": entry.get("node_id"),
+                    "node_type": entry.get("node_type"),
+                    "timestamp": entry.get("timestamp"),
+                    "attempt": entry.get("attempt"),
+                    "error": entry.get("error"),
+                    "duration_ms": entry.get("duration_ms"),
+                }
+                yield {"event": sse_type, "data": _json.dumps(payload)}
+
+            # --- If run already terminal, send execution_complete and exit ---
+            if run_record and run_record.get("status") in ("success", "error"):
+                yield {
+                    "event": "execution_complete",
+                    "data": _json.dumps({
+                        "run_id": run_id,
+                        "status": run_record["status"],
+                        "error": run_record.get("error"),
+                    }),
+                }
+                return
+
+            # --- Stream live events ---
+            while True:
+                try:
+                    entry = await asyncio.wait_for(q.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    # Poll for terminal status (covers race between publish and subscribe)
+                    check = await WorkflowRunRepository.get_by_run_id(run_id)
+                    if check and check.get("status") in ("success", "error"):
+                        yield {
+                            "event": "execution_complete",
+                            "data": _json.dumps({
+                                "run_id": run_id,
+                                "status": check["status"],
+                                "error": check.get("error"),
+                            }),
+                        }
+                        return
+                    continue
+
+                raw_event = entry.get("event", "")
+                sse_type = _SSE_EVENT_TYPE_MAP.get(raw_event, raw_event)
+                if raw_event == "execution_complete":
+                    yield {
+                        "event": "execution_complete",
+                        "data": _json.dumps({
+                            "run_id": run_id,
+                            "status": entry.get("status"),
+                            "error": entry.get("error"),
+                            "duration_ms": entry.get("duration_ms"),
+                        }),
+                    }
+                    return
+
+                payload = {
+                    "run_id": run_id,
+                    "node_id": entry.get("node_id"),
+                    "node_type": entry.get("node_type"),
+                    "timestamp": entry.get("timestamp"),
+                    "attempt": entry.get("attempt"),
+                    "error": entry.get("error"),
+                    "duration_ms": entry.get("duration_ms"),
+                }
+                yield {"event": sse_type, "data": _json.dumps(payload)}
+
+        finally:
+            sse_event_bus.unsubscribe(run_id, q)
+
+    return EventSourceResponse(_event_generator())
 
 
 # Include versioned router

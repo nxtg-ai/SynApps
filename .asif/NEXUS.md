@@ -34,6 +34,14 @@
 | N-22 | Error Handling + Retry Logic + Workflow Versioning | EXECUTION | SHIPPED | P1 | 2026-03-18 |
 | N-23 | Workflow Marketplace API — Publish + Discover + Install | PLATFORM | SHIPPED | P1 | 2026-03-18 |
 | N-24 | Execution Analytics — Pipeline + Node Metrics | PLATFORM | SHIPPED | P1 | 2026-03-18 |
+| N-25 | Execution Logs + Debug Console | EXECUTION | SHIPPED | P1 | 2026-03-18 |
+| N-26 | Workflow Variables + Environment Secrets | SECURITY | SHIPPED | P1 | 2026-03-18 |
+| N-27 | Workflow Notifications — Email + Slack | PLATFORM | SHIPPED | P1 | 2026-03-18 |
+| N-28 | Workflow Comments + Collaboration | PLATFORM | SHIPPED | P1 | 2026-03-18 |
+| N-29 | Workflow Permissions — Team Access Control | SECURITY | SHIPPED | P1 | 2026-03-18 |
+| N-30 | Audit Trail — Compliance Logging | SECURITY | SHIPPED | P1 | 2026-03-18 |
+| N-31 | Workflow Import from External Tools | PLATFORM | SHIPPED | P1 | 2026-03-18 |
+| N-32 | Real-Time Execution Streaming — SSE Progress | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 
 ---
 
@@ -257,6 +265,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-153 (Final Session Summary) → DONE. 1,957 total tests (1,844+109+4). All 30 N-series initiatives complete. README+CHANGELOG updated. SynApps v1.0-alpha feature-complete. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-162 (N-31 Workflow Import n8n+Zapier) → DONE. WorkflowImportService, POST /workflows/import, 35 tests. 1,879 backend. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-163 (Final Portfolio README + Docker) → DONE. README N-31 + 1,992 total tests. All 31 initiatives listed. |
+| 2026-03-19 | DIRECTIVE-NXTG-20260318-164 (N-32 SSE Execution Streaming) → DONE. SSEEventBus + ExecutionLogStore wiring + GET /executions/{id}/stream + useExecutionStream hook. 26 tests. 1,904 backend. |
+| 2026-03-19 | DIRECTIVE-NXTG-20260318-165 (Final Archive + README) → DONE. README N-32, all 32 initiatives. 2,017 total tests. |
 
 ---
 
@@ -268,27 +278,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-164 — P1: N-32 Real-Time Execution Streaming — SSE Progress
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 23:45 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 23:45 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **SSE endpoint** — `GET /executions/:id/stream` sends node-by-node progress events as they execute.
-2. [ ] **Event types**: `node_started`, `node_completed`, `node_failed`, `execution_complete`.
-3. [ ] **Frontend hook** — `useExecutionStream(id)` that subscribes and updates UI in real-time.
-4. [ ] Tests.
+1. [x] **SSE endpoint** — `GET /executions/:id/stream` sends node-by-node progress events as they execute.
+2. [x] **Event types**: `node_started`, `node_completed`, `node_failed`, `execution_complete`.
+3. [x] **Frontend hook** — `useExecutionStream(id)` that subscribes and updates UI in real-time.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-165.
-**Response** (filled by team): >
+**Response** (filled by team): N-32 shipped. `SSEEventBus` (thread-safe, per-run asyncio.Queue pub/sub, `publish_sync` safe from sync context). `ExecutionLogStore.append` now calls `sse_event_bus.publish_sync` after every node event. Both terminal branches in `_execute_flow_async` (success + error) publish `execution_complete` to the bus. `GET /api/v1/executions/{run_id}/stream` uses `EventSourceResponse` from `sse_starlette`: replays existing log entries first, sends `execution_complete` immediately if run is already terminal, otherwise streams live queue events with 1s polling fallback. `_SSE_EVENT_TYPE_MAP` translates internal event names (`node_start`→`node_started`, `node_success`→`node_completed`, `node_error`→`node_failed`, `node_retry`→`node_started`, `node_fallback`→`node_completed`). `useExecutionStream(runId)` React hook — EventSource lifecycle (`idle→connecting→streaming→complete|error`), auto-connect on runId change, exposes `events[]`, `status`, `isComplete`, `finalStatus`, `connect`, `disconnect`. 26 tests in `test_sse_streaming.py` (10 SSEEventBus unit + 2 wiring + 2 auth/404 + 5 replay endpoint + 7 type mapping). 1,904 backend passed. 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-165 — P2: Final NEXUS Archive + Portfolio Showcase
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 23:45 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 23:45 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Archive all DONE directives. 2. [ ] Final test count. 3. [ ] README — all 32 initiatives.
+1. [x] Archive all DONE directives. 2. [x] Final test count. 3. [x] README — all 32 initiatives.
 
-**Response** (filled by team): >
+**Response** (filled by team): NEXUS D-164 marked DONE. README updated with N-32 row (all 32 N-series initiatives). CHANGELOG N-32 entry added. Final test count: **2,017 total** (1,904 backend + 109 frontend unit + 4 E2E). Activity log updated. 2026-03-19.
 
 ---
 
