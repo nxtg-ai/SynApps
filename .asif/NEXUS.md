@@ -282,6 +282,36 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-111 — P0: OPERATION FIRST DOLLAR — Faultline Compliance Workflow Template
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P0
+**Injected**: 2026-03-19 06:00 | **Estimate**: M | **Status**: PENDING
+
+**Context**: REVENUE SPRINT. Build a publishable workflow template that showcases SynApps + Faultline integration.
+
+**Action Items**:
+1. [ ] **Template: "AI Content Compliance Pipeline"** — workflow that: (a) receives text via webhook trigger, (b) scans with FP via HTTP node (`POST /scan`), (c) checks if trust score < 70 → sends Slack alert, (d) if trust score >= 70 → generates compliance report via HTTP node (`POST /scan/report`), (e) emails report to configurable address.
+2. [ ] **Publish to marketplace** — use the N-21 template marketplace system.
+3. [ ] **Documentation** — `docs/templates/ai-compliance-pipeline.md` with setup instructions.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-112.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-112 — P1: SynApps Pricing Page + Self-Hosted Deploy Guide
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 06:00 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Pricing** — Free (5 workflows, 100 executions/mo), Pro ($29/mo, unlimited), Enterprise (custom).
+2. [ ] **Self-hosted deploy guide** — Docker Compose one-command setup for enterprises who want on-prem.
+3. [ ] README update with pricing + deploy options.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260319-24 — P1: N-34 Workflow Testing Framework — Automated Validation
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-19 02:15 | **Estimate**: M | **Status**: DONE
