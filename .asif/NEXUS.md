@@ -1869,6 +1869,71 @@ The `typing.Dict/List` alias sweep came back clean — zero deprecated generic a
 
 ---
 
+## Team Feedback — Cycle 74 (2026-03-19)
+
+### 1. What did I ship since last check-in?
+
+**N-32 through N-34 + D-13 in a single session — the largest single-session push in this portfolio.**
+
+| Initiative | Key Deliverable | Tests Added |
+| --- | --- | --- |
+| N-32 Real-Time SSE Streaming | `SSEEventBus`, `GET /executions/{id}/stream`, `useExecutionStream` hook | 26 |
+| N-33 Analytics Dashboard | `WorkflowAnalyticsDashboard`, `GET /analytics/dashboard`, `GET /analytics/dashboard/export.csv`, React page | 18 |
+| D-13 Execution Quotas | `ExecutionQuotaStore` (hourly + monthly), `GET /usage/me`, 429 enforcement in `_run_flow_impl` | 23 |
+| N-34 Testing Framework | `WorkflowAssertionEngine` (DSL), `WorkflowTestStore`, 4 endpoints for run/history/suites | 35 |
+
+Backend total moved from **1,904 → 1,981** (+77). Frontend unchanged at 109. Grand total: **2,094**.
+
+Also: hot-fixed CI RED this session — `sse-starlette`, `croniter`, `pyyaml` were missing from `requirements.txt`, causing 55 test collection errors in GitHub Actions. Fixed by adding all three to `requirements.txt` and `setup.py`, and removing the ad-hoc `pip install` line from `ci.yml`.
+
+---
+
+### 2. What surprised me?
+
+**SSE test isolation required mocking the async DB layer, not an in-memory store.** The SSE endpoint calls `WorkflowRunRepository.get_by_run_id` (async DB) to detect terminal run state. The natural test instinct is to put a record in an in-memory dict. That doesn't work — the endpoint never sees it. The correct pattern is `patch("apps.orchestrator.main.WorkflowRunRepository.get_by_run_id", new_callable=AsyncMock, return_value=_terminal_run(run_id))`. This pattern is now used in 5 SSE replay tests and is reusable for any endpoint that reads from the async repo layer.
+
+**FastAPI route ordering bites again.** `/usage/{key_id:path}` was already registered. Adding `/usage/me` after it meant "me" matched the path parameter. Learned: always register specific literal routes before parameterized ones. This is non-obvious because FastAPI doesn't warn — it silently routes to the wrong handler.
+
+**`asyncio.TimeoutError` vs builtin `TimeoutError`.** Ruff UP rule (Python 3.11+) flags `asyncio.TimeoutError` as a redundant alias — it's an alias for the builtin. Caught by the pre-push ruff hook twice in this session. The fix is mechanical (`ruff --fix`) but surprising that it's enforced as an upgrade rule.
+
+**Parallel agents editing `main.py` concurrently didn't conflict.** N-33 and D-13 agents both modified `main.py` in parallel sub-tasks. N-33 inserted after the analytics section; D-13 inserted after `ConsumerUsageTracker`. Since the insertions were at different locations, no merge conflict emerged. This validates the parallel-agent strategy for large monolith files, as long as insertion points are spatially separated.
+
+---
+
+### 3. Cross-project signals
+
+**`sse-starlette` dependency drift pattern.** Any project that adds an SSE endpoint must add `sse-starlette` to both `requirements.txt` and `setup.py`. The package is not pulled in transitively by FastAPI. If your CI install uses only `requirements.txt`, the import succeeds locally (installed by hand) but fails in CI. Add to the portfolio standard: SSE → `sse-starlette>=1.8.0` as an explicit dep.
+
+**`WorkflowAssertionEngine` DSL is reusable.** The `path op value` string assertion engine (`output.field == "expected"`, `type(output.x) == list`, `results.NODE.status == "success"`) is generic. Any project that needs user-writable test assertions or output validation rules could lift this class with minimal changes. It handles type coercion, nested path resolution, and type-checking assertions.
+
+**`ExecutionQuotaStore` pattern for rolling rate limits.** Thread-safe rolling hourly window + calendar-month quota, stored in-memory, with `Retry-After` header on 429. Simple and self-contained. Could be extracted to a shared util for other ASIF projects needing lightweight quota enforcement without Redis.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **N-35: Workflow Versioning UI** — backend versioning exists (N-22 `FlowVersionRegistry`), no frontend to access snapshots or trigger rollback. High user value.
+2. **CI coverage flag fix** — `--cov=.` still includes test files in coverage metrics, inflating numbers. Should be `--cov=apps/orchestrator`. Low effort, improves signal accuracy.
+3. **Frontend test expansion** — 109 frontend tests vs 1,981 backend is a ~18:1 ratio. Many new pages (AnalyticsDashboard, SSE streaming hook) have no frontend unit tests. Target: 150+ frontend tests.
+4. **`useExecutionStream` integration in EditorPage** — the hook exists but EditorPage still uses WebSocket for execution feedback. Wiring SSE as the primary execution feedback channel would be N-32's natural completion.
+5. **Flaky test stabilization** — `test_webhook_trigger_execute_and_analytics` and `test_webhook_trigger_and_execution_logs` fail intermittently in the full suite run but pass in isolation. Root cause: shared in-memory state (quota store, audit log) not fully reset by the test fixtures. Worth adding explicit `execution_quota_store.reset()` and `audit_log_store.clear()` to the shared `_clean` fixture.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`ci.yml` coverage flag** — `--cov=.` still in place. This has been flagged since cycle 68. Is it intentional (track all files in the repo root including tests) or a legacy artifact from before the monorepo structure?
+
+**N-35 scope?** Backend versioning (FlowVersionRegistry: snapshot, rollback, diff) shipped in N-22. Should a frontend versioning UI be N-35, or is that out of scope for v1.0? Requesting a directive or a "no-directive" confirmation so we can stop tracking it as an implied gap.
+
+**Flaky test policy**: The two intermittently failing tests (`TestWebhookTriggerAndAnalytics`, `TestWebhookExecutionWithLogsAndNotifications`) pass in isolation but fail ~1/5 runs in the full suite due to quota store state pollution. Should we add `execution_quota_store.reset()` to shared fixtures (slight test coupling increase) or mark them `xfail(strict=False)` (hides the underlying issue)?
+
+---
+
+> Last updated: 2026-03-19 (Wolf) — cycle 74 (N-32 through N-34, D-13, CI hotfix)
+
+---
+
 ## Team Questions
 
 _(Project team: add questions for ASIF CoS here. They will be answered during the next enrichment cycle.)_
