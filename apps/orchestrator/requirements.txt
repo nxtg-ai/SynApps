@@ -12,3 +12,6 @@ aiosqlite>=0.20.0
 asyncpg>=0.30.0
 cryptography>=42.0.0
 pyjwt[crypto]>=2.8.0
+sse-starlette>=1.8.0
+croniter>=1.4.0
+pyyaml>=6.0.0
