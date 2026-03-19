@@ -257,9 +257,7 @@ class TestWebhookTriggerEndpoints:
         assert data["triggers"][0]["flow_id"] == flow_id
 
     def test_get_trigger(self, client, flow_id):
-        reg = client.post(
-            "/api/v1/webhook-triggers", json={"flow_id": flow_id}
-        ).json()
+        reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
         resp = client.get(f"/api/v1/webhook-triggers/{reg['id']}")
         assert resp.status_code == 200
         assert resp.json()["id"] == reg["id"]
@@ -269,9 +267,7 @@ class TestWebhookTriggerEndpoints:
         assert resp.status_code == 404
 
     def test_delete_trigger(self, client, flow_id):
-        reg = client.post(
-            "/api/v1/webhook-triggers", json={"flow_id": flow_id}
-        ).json()
+        reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
         resp = client.delete(f"/api/v1/webhook-triggers/{reg['id']}")
         assert resp.status_code == 200
         assert resp.json()["id"] == reg["id"]
@@ -297,9 +293,7 @@ class TestWebhookTriggerReceive:
         assert resp.status_code in (401, 404)
 
     def test_receive_unsigned_trigger_no_secret(self, client, flow_id):
-        reg = client.post(
-            "/api/v1/webhook-triggers", json={"flow_id": flow_id}
-        ).json()
+        reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
         resp = client.post(
             f"/api/v1/webhook-triggers/{reg['id']}/receive",
             json={"hello": "world"},
@@ -351,9 +345,7 @@ class TestWebhookTriggerReceive:
         assert resp.status_code == 401
 
     def test_receive_non_json_body(self, client, flow_id):
-        reg = client.post(
-            "/api/v1/webhook-triggers", json={"flow_id": flow_id}
-        ).json()
+        reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
         resp = client.post(
             f"/api/v1/webhook-triggers/{reg['id']}/receive",
             content=b"plain text body",
@@ -363,9 +355,7 @@ class TestWebhookTriggerReceive:
         assert resp.json()["accepted"] is True
 
     def test_receive_empty_body(self, client, flow_id):
-        reg = client.post(
-            "/api/v1/webhook-triggers", json={"flow_id": flow_id}
-        ).json()
+        reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
         resp = client.post(
             f"/api/v1/webhook-triggers/{reg['id']}/receive",
             content=b"",
@@ -373,9 +363,7 @@ class TestWebhookTriggerReceive:
         assert resp.status_code == 202
 
     def test_receive_array_json_body(self, client, flow_id):
-        reg = client.post(
-            "/api/v1/webhook-triggers", json={"flow_id": flow_id}
-        ).json()
+        reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
         resp = client.post(
             f"/api/v1/webhook-triggers/{reg['id']}/receive",
             json=[1, 2, 3],

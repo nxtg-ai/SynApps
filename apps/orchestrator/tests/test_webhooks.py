@@ -150,7 +150,9 @@ async def test_deliver_webhook_success():
 @pytest.mark.asyncio
 async def test_deliver_webhook_with_hmac_header():
     """Delivery with secret includes X-Webhook-Signature header."""
-    hook_data = webhook_registry.register("https://mock.com/signed", ["step_completed"], secret="s3cret")
+    hook_data = webhook_registry.register(
+        "https://mock.com/signed", ["step_completed"], secret="s3cret"
+    )
     hook = webhook_registry.get(hook_data["id"])
     mock_resp = AsyncMock()
     mock_resp.status_code = 200
@@ -200,7 +202,9 @@ async def test_emit_event_no_hooks():
 async def test_emit_event_triggers_delivery():
     """emit_event creates delivery tasks for matching hooks."""
     webhook_registry.register("https://mock.com/hook", ["template_completed"])
-    with patch("apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock) as mock_deliver:
+    with patch(
+        "apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock
+    ) as mock_deliver:
         mock_deliver.return_value = True
         await emit_event("template_completed", {"run_id": "r1"})
         # Give the task a chance to run
@@ -219,10 +223,13 @@ async def test_emit_event_triggers_delivery():
 
 def test_register_webhook_endpoint(client):
     """POST /api/v1/webhooks creates a webhook."""
-    resp = client.post("/api/v1/webhooks", json={
-        "url": "https://example.com/hook",
-        "events": ["template_started", "template_completed"],
-    })
+    resp = client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://example.com/hook",
+            "events": ["template_started", "template_completed"],
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
@@ -232,32 +239,46 @@ def test_register_webhook_endpoint(client):
 
 def test_register_webhook_with_secret(client):
     """POST /api/v1/webhooks with secret creates hook (secret not returned)."""
-    resp = client.post("/api/v1/webhooks", json={
-        "url": "https://example.com/signed",
-        "events": ["step_failed"],
-        "secret": "my-hmac-secret",
-    })
+    resp = client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://example.com/signed",
+            "events": ["step_failed"],
+            "secret": "my-hmac-secret",
+        },
+    )
     assert resp.status_code == 201
     assert "secret" not in resp.json()
 
 
 def test_register_webhook_invalid_event(client):
     """POST /api/v1/webhooks rejects invalid event names."""
-    resp = client.post("/api/v1/webhooks", json={
-        "url": "https://example.com/bad",
-        "events": ["invalid_event"],
-    })
+    resp = client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://example.com/bad",
+            "events": ["invalid_event"],
+        },
+    )
     assert resp.status_code == 422
 
 
 def test_list_webhooks_endpoint(client):
     """GET /api/v1/webhooks returns all hooks."""
-    client.post("/api/v1/webhooks", json={
-        "url": "https://a.com/h1", "events": ["template_started"],
-    })
-    client.post("/api/v1/webhooks", json={
-        "url": "https://b.com/h2", "events": ["template_failed"],
-    })
+    client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://a.com/h1",
+            "events": ["template_started"],
+        },
+    )
+    client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://b.com/h2",
+            "events": ["template_failed"],
+        },
+    )
     resp = client.get("/api/v1/webhooks")
     assert resp.status_code == 200
     data = resp.json()
@@ -267,9 +288,13 @@ def test_list_webhooks_endpoint(client):
 
 def test_delete_webhook_endpoint(client):
     """DELETE /api/v1/webhooks/{id} removes a webhook."""
-    create = client.post("/api/v1/webhooks", json={
-        "url": "https://d.com", "events": ["step_completed"],
-    })
+    create = client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://d.com",
+            "events": ["step_completed"],
+        },
+    )
     hook_id = create.json()["id"]
     resp = client.delete(f"/api/v1/webhooks/{hook_id}")
     assert resp.status_code == 200
@@ -287,9 +312,14 @@ def test_delete_webhook_not_found(client):
 def test_webhook_events_constant():
     """WEBHOOK_EVENTS contains all expected event types."""
     expected = {
-        "template_started", "template_completed", "template_failed",
-        "step_completed", "step_failed",
-        "connector.status_changed", "request.failed",
-        "key.rotated", "key.expiring_soon",
+        "template_started",
+        "template_completed",
+        "template_failed",
+        "step_completed",
+        "step_failed",
+        "connector.status_changed",
+        "request.failed",
+        "key.rotated",
+        "key.expiring_soon",
     }
     assert WEBHOOK_EVENTS == expected

@@ -112,7 +112,9 @@ class TestNodeCommentStoreUnit:
 
 class TestActivityFeedStoreUnit:
     def test_record_returns_event_with_id(self):
-        e = activity_feed_store.record("f1", actor="a@test.com", action="flow_edited", detail="test")
+        e = activity_feed_store.record(
+            "f1", actor="a@test.com", action="flow_edited", detail="test"
+        )
         assert e["id"]  # Gate 2
         assert e["action"] == "flow_edited"
         assert e["actor"] == "a@test.com"

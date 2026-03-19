@@ -34,8 +34,8 @@ from apps.orchestrator.main import (
 # ErrorCategory enum
 # ---------------------------------------------------------------------------
 
-class TestErrorCategory:
 
+class TestErrorCategory:
     def test_values(self):
         assert ErrorCategory.TRANSIENT == "transient"
         assert ErrorCategory.RATE_LIMITED == "rate_limited"
@@ -49,8 +49,8 @@ class TestErrorCategory:
 # classify_error()
 # ---------------------------------------------------------------------------
 
-class TestClassifyError:
 
+class TestClassifyError:
     # Status code classification
     def test_429_is_rate_limited(self):
         assert classify_error(status_code=429) == ErrorCategory.RATE_LIMITED
@@ -132,8 +132,8 @@ class TestClassifyError:
 # RetryPolicy
 # ---------------------------------------------------------------------------
 
-class TestRetryPolicy:
 
+class TestRetryPolicy:
     def test_default_retries(self):
         p = RetryPolicy()
         assert p.max_retries == 3
@@ -189,8 +189,8 @@ class TestRetryPolicy:
 # Per-connector policies
 # ---------------------------------------------------------------------------
 
-class TestConnectorPolicies:
 
+class TestConnectorPolicies:
     def test_known_connectors_have_policies(self):
         for name in ("openai", "anthropic", "google", "ollama", "custom", "stability"):
             policy = get_retry_policy(name)
@@ -214,8 +214,8 @@ class TestConnectorPolicies:
 # ConnectorError
 # ---------------------------------------------------------------------------
 
-class TestConnectorError:
 
+class TestConnectorError:
     def test_fields(self):
         err = ConnectorError(
             "rate limited",
@@ -241,8 +241,8 @@ class TestConnectorError:
 # execute_with_retry()
 # ---------------------------------------------------------------------------
 
-class TestExecuteWithRetry:
 
+class TestExecuteWithRetry:
     @pytest.mark.asyncio
     async def test_success_no_retry(self):
         func = AsyncMock(return_value="ok")
@@ -337,6 +337,7 @@ class TestExecuteWithRetry:
     @pytest.mark.asyncio
     async def test_uses_connector_default_policy(self):
         """When no policy is given, uses per-connector default."""
+
         async def ok():
             return "done"
 

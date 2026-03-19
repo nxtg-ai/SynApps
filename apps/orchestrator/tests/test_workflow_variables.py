@@ -403,16 +403,19 @@ class TestVariableResolutionInExecution:
         """Set a workflow variable, run a flow that uses it — verify node data resolved."""
         with TestClient(app) as client:
             flow = _new_flow()
-            flow["nodes"].insert(1, {
-                "id": "http1",
-                "type": "http_request",
-                "position": {"x": 0, "y": 50},
-                "data": {
-                    "label": "HTTP",
-                    "method": "GET",
-                    "url": "https://httpbin.org/get?param={{var.my_param}}",
+            flow["nodes"].insert(
+                1,
+                {
+                    "id": "http1",
+                    "type": "http_request",
+                    "position": {"x": 0, "y": 50},
+                    "data": {
+                        "label": "HTTP",
+                        "method": "GET",
+                        "url": "https://httpbin.org/get?param={{var.my_param}}",
+                    },
                 },
-            })
+            )
             flow["edges"] = [
                 {"id": "s-h", "source": "start", "target": "http1"},
                 {"id": "h-e", "source": "http1", "target": "end"},

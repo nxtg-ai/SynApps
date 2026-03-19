@@ -317,7 +317,7 @@ class TestStreamEndpointReplay:
                     headers={"Authorization": f"Bearer {token}"},
                 )
             data_payloads = [
-                line[len("data: "):].strip()
+                line[len("data: ") :].strip()
                 for line in resp.text.splitlines()
                 if line.startswith("data: ")
             ]
@@ -348,9 +348,7 @@ class TestStreamEndpointReplay:
                     f"/api/v1/executions/{run_id}/stream",
                     headers={"Authorization": f"Bearer {token}"},
                 )
-            event_lines = [
-                line for line in resp.text.splitlines() if line.startswith("event: ")
-            ]
+            event_lines = [line for line in resp.text.splitlines() if line.startswith("event: ")]
             assert len(event_lines) >= 1  # Gate 2
 
 
@@ -366,9 +364,9 @@ class TestSSEEventTypeMapping:
         current: dict = {}
         for line in body.splitlines():
             if line.startswith("event: "):
-                current["event"] = line[len("event: "):].strip()
+                current["event"] = line[len("event: ") :].strip()
             elif line.startswith("data: "):
-                raw = line[len("data: "):].strip()
+                raw = line[len("data: ") :].strip()
                 try:
                     current["data"] = json.loads(raw)
                 except json.JSONDecodeError:
@@ -420,9 +418,7 @@ class TestSSEEventTypeMapping:
         with TestClient(app) as client:
             token, _ = _register(client)
             run_id = f"map-err-{uuid.uuid4().hex[:8]}"
-            events = self._stream_with_log(
-                client, token, run_id, "node_error", status="error"
-            )
+            events = self._stream_with_log(client, token, run_id, "node_error", status="error")
             event_types = [e.get("event") for e in events]
             assert "node_failed" in event_types  # Gate 2
 
@@ -452,9 +448,7 @@ class TestSSEEventTypeMapping:
         with TestClient(app) as client:
             token, _ = _register(client)
             run_id = f"runid-{uuid.uuid4().hex[:8]}"
-            execution_log_store.append(
-                run_id, {"event": "node_success", "node_id": "n1"}
-            )
+            execution_log_store.append(run_id, {"event": "node_success", "node_id": "n1"})
             with patch(
                 "apps.orchestrator.main.WorkflowRunRepository.get_by_run_id",
                 new_callable=AsyncMock,

@@ -1,6 +1,5 @@
 """Tests for the rate limiter middleware."""
 
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -103,9 +102,7 @@ class TestRateLimiterMiddleware:
 
     def test_returns_429_when_exhausted(self, monkeypatch):
         """Force a very low limit and verify 429."""
-        monkeypatch.setattr(
-            "apps.orchestrator.middleware.rate_limiter.RATE_LIMIT_ANONYMOUS", 2
-        )
+        monkeypatch.setattr("apps.orchestrator.middleware.rate_limiter.RATE_LIMIT_ANONYMOUS", 2)
         monkeypatch.setattr(
             "apps.orchestrator.middleware.rate_limiter._TIER_LIMITS",
             {"anonymous": 2, "free": 2, "pro": 2, "enterprise": 2},

@@ -3,6 +3,7 @@ Repository classes for database operations.
 
 This module provides repository classes that handle database operations for the various models.
 """
+
 import logging
 import time
 import uuid
@@ -17,8 +18,10 @@ from apps.orchestrator.models import Flow, FlowEdge, FlowNode, WorkflowRun
 # Configure logging
 logger = logging.getLogger("repositories")
 
+
 class FlowRepository:
     """Async repository for Flow operations."""
+
     @staticmethod
     async def save(flow_data: dict[str, Any]) -> dict[str, Any]:
         flow_id = flow_data.get("id") or str(uuid.uuid4())
@@ -44,7 +47,7 @@ class FlowRepository:
                     type=node_data.get("type", "unknown"),
                     position_x=pos.get("x", 0),
                     position_y=pos.get("y", 0),
-                    data=node_data.get("data", {})
+                    data=node_data.get("data", {}),
                 )
                 session.add(node)
             # Add edges
@@ -54,7 +57,7 @@ class FlowRepository:
                     flow_id=flow.id,
                     source=edge_data.get("source", ""),
                     target=edge_data.get("target", ""),
-                    animated=edge_data.get("animated", False)
+                    animated=edge_data.get("animated", False),
                 )
                 session.add(edge)
             await session.commit()
@@ -65,6 +68,7 @@ class FlowRepository:
             )
             complete_flow = result.scalars().first()
             return complete_flow.to_dict()
+
     @staticmethod
     async def get_by_id(flow_id: str) -> dict[str, Any] | None:
         async with get_db_session() as session:
@@ -96,8 +100,10 @@ class FlowRepository:
             await session.commit()
             return True
 
+
 class WorkflowRunRepository:
     """Async repository for WorkflowRun operations."""
+
     @staticmethod
     async def save(run_data: dict[str, Any]) -> dict[str, Any]:
         run_id = run_data.get("run_id") or str(uuid.uuid4())
@@ -106,7 +112,18 @@ class WorkflowRunRepository:
             run = result.scalars().first()
             if run:
                 # Update
-                for field in ["status", "current_applet", "progress", "total_steps", "end_time", "results", "error", "error_details", "input_data", "completed_applets"]:
+                for field in [
+                    "status",
+                    "current_applet",
+                    "progress",
+                    "total_steps",
+                    "end_time",
+                    "results",
+                    "error",
+                    "error_details",
+                    "input_data",
+                    "completed_applets",
+                ]:
                     if field in run_data:
                         setattr(run, field, run_data[field])
             else:
@@ -123,21 +140,22 @@ class WorkflowRunRepository:
                     error=run_data.get("error"),
                     error_details=run_data.get("error_details", {}),
                     input_data=run_data.get("input_data"),
-                    completed_applets=run_data.get("completed_applets", [])
+                    completed_applets=run_data.get("completed_applets", []),
                 )
                 session.add(run)
             await session.commit()
             return run.to_dict()
+
     @staticmethod
     async def get_by_run_id(run_id: str) -> dict[str, Any] | None:
         async with get_db_session() as session:
             result = await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
             run = result.scalars().first()
             return run.to_dict() if run else None
+
     @staticmethod
     async def get_all() -> list[dict[str, Any]]:
         async with get_db_session() as session:
             result = await session.execute(select(WorkflowRun))
             runs = result.scalars().all()
             return [run.to_dict() for run in runs]
-

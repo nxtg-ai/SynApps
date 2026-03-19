@@ -3,6 +3,7 @@ Database migration script to add the completed_applets column to workflow_runs.
 
 This script is idempotent and uses SQLAlchemy 2.0 async engine patterns.
 """
+
 from __future__ import annotations
 
 import asyncio

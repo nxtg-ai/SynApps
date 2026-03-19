@@ -25,19 +25,21 @@ logger = logging.getLogger(__name__)
 # Event types
 # -----------------------------------------------------------------------
 
-WEBHOOK_EVENTS = frozenset({
-    # Original workflow lifecycle events
-    "template_started",
-    "template_completed",
-    "template_failed",
-    "step_completed",
-    "step_failed",
-    # Directive-13: operational events
-    "connector.status_changed",
-    "request.failed",
-    "key.rotated",
-    "key.expiring_soon",
-})
+WEBHOOK_EVENTS = frozenset(
+    {
+        # Original workflow lifecycle events
+        "template_started",
+        "template_completed",
+        "template_failed",
+        "step_completed",
+        "step_failed",
+        # Directive-13: operational events
+        "connector.status_changed",
+        "request.failed",
+        "key.rotated",
+        "key.expiring_soon",
+    }
+)
 
 # -----------------------------------------------------------------------
 # Delivery constants
@@ -45,12 +47,13 @@ WEBHOOK_EVENTS = frozenset({
 
 WEBHOOK_MAX_RETRIES = 3
 WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)  # fixed backoff per attempt
-WEBHOOK_DELIVERY_TIMEOUT = 10.0            # seconds per attempt
+WEBHOOK_DELIVERY_TIMEOUT = 10.0  # seconds per attempt
 
 
 # -----------------------------------------------------------------------
 # HMAC signing
 # -----------------------------------------------------------------------
+
 
 def sign_payload(payload_bytes: bytes, secret: str) -> str:
     """Compute HMAC-SHA256 hex digest for *payload_bytes* using *secret*."""
@@ -60,6 +63,7 @@ def sign_payload(payload_bytes: bytes, secret: str) -> str:
 # -----------------------------------------------------------------------
 # WebhookManager
 # -----------------------------------------------------------------------
+
 
 class WebhookManager:
     """In-memory webhook registry with Fernet-encrypted secret storage.
@@ -142,11 +146,7 @@ class WebhookManager:
     def hooks_for_event(self, event: str) -> list[dict[str, Any]]:
         """Return internal copies of all active hooks subscribed to *event*."""
         with self._lock:
-            return [
-                dict(h)
-                for h in self._hooks.values()
-                if h["active"] and event in h["events"]
-            ]
+            return [dict(h) for h in self._hooks.values() if h["active"] and event in h["events"]]
 
     # -- Delivery bookkeeping --------------------------------------------
 
@@ -191,6 +191,7 @@ class WebhookManager:
 # -----------------------------------------------------------------------
 # Delivery helpers (standalone async functions)
 # -----------------------------------------------------------------------
+
 
 async def deliver_webhook(
     hook: dict[str, Any],

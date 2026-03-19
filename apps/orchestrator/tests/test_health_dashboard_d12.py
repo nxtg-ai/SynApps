@@ -57,8 +57,8 @@ def _reset_state():
 # ConnectorStatus enum — DOWN value
 # ---------------------------------------------------------------------------
 
-class TestConnectorStatusDown:
 
+class TestConnectorStatusDown:
     def test_down_value(self):
         assert ConnectorStatus.DOWN == "down"
 
@@ -71,8 +71,8 @@ class TestConnectorStatusDown:
 # ConnectorHealthTracker — latency & error windowed metrics
 # ---------------------------------------------------------------------------
 
-class TestTrackerLatencyMetrics:
 
+class TestTrackerLatencyMetrics:
     def test_record_success_with_latency(self):
         t = ConnectorHealthTracker()
         t.record_success("openai", latency_ms=150.0)
@@ -121,8 +121,8 @@ class TestTrackerLatencyMetrics:
 # Dashboard status derivation
 # ---------------------------------------------------------------------------
 
-class TestDashboardStatus:
 
+class TestDashboardStatus:
     def test_healthy_when_no_errors_low_latency(self):
         t = ConnectorHealthTracker()
         t.record_success("openai", latency_ms=100.0)
@@ -204,8 +204,8 @@ class TestDashboardStatus:
 # all_dashboard_statuses
 # ---------------------------------------------------------------------------
 
-class TestAllDashboardStatuses:
 
+class TestAllDashboardStatuses:
     def test_returns_all_tracked(self):
         t = ConnectorHealthTracker()
         t.record_success("openai", latency_ms=100.0)
@@ -225,8 +225,8 @@ class TestAllDashboardStatuses:
 # probe_connector — latency & HTTP ping
 # ---------------------------------------------------------------------------
 
-class TestProbeConnectorEnhanced:
 
+class TestProbeConnectorEnhanced:
     @pytest.mark.asyncio
     async def test_probe_returns_latency_ms(self):
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
@@ -253,8 +253,8 @@ class TestProbeConnectorEnhanced:
 # probe_all_connectors — caching
 # ---------------------------------------------------------------------------
 
-class TestProbeAllCaching:
 
+class TestProbeAllCaching:
     @pytest.mark.asyncio
     async def test_caches_results(self):
         r1 = await probe_all_connectors()
@@ -290,8 +290,8 @@ class TestProbeAllCaching:
 # GET /connectors/health endpoint — enhanced fields
 # ---------------------------------------------------------------------------
 
-class TestConnectorsHealthDashboard:
 
+class TestConnectorsHealthDashboard:
     def test_returns_200(self, client):
         resp = client.get("/api/v1/connectors/health")
         assert resp.status_code == 200
@@ -338,8 +338,8 @@ class TestConnectorsHealthDashboard:
 # GET /api/v1/health — aggregate status from connectors
 # ---------------------------------------------------------------------------
 
-class TestHealthAggregateStatus:
 
+class TestHealthAggregateStatus:
     def test_healthy_when_no_connectors_tracked(self, client):
         connector_health.reset()
         resp = client.get("/api/v1/health")
@@ -386,18 +386,21 @@ class TestHealthAggregateStatus:
 # Rate limit exemption
 # ---------------------------------------------------------------------------
 
-class TestRateLimitExemption:
 
+class TestRateLimitExemption:
     def test_connectors_health_exempt(self):
         from apps.orchestrator.middleware.rate_limiter import EXEMPT_PATHS
+
         assert "/api/v1/connectors/health" in EXEMPT_PATHS
 
     def test_health_endpoint_exempt(self):
         from apps.orchestrator.middleware.rate_limiter import EXEMPT_PATHS
+
         assert "/api/v1/health" in EXEMPT_PATHS
 
     def test_health_detailed_exempt(self):
         from apps.orchestrator.middleware.rate_limiter import EXEMPT_PATHS
+
         assert "/api/v1/health/detailed" in EXEMPT_PATHS
 
 
@@ -405,8 +408,8 @@ class TestRateLimitExemption:
 # Status transition scenarios
 # ---------------------------------------------------------------------------
 
-class TestStatusTransitions:
 
+class TestStatusTransitions:
     def test_healthy_to_degraded_via_error(self):
         t = ConnectorHealthTracker(disable_threshold=10)
         t.record_success("x", latency_ms=50.0)

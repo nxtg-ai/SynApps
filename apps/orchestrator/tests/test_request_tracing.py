@@ -29,8 +29,13 @@ def test_json_formatter_produces_valid_json():
     """_JSONFormatter outputs valid JSON."""
     fmt = _JSONFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0,
-        msg="hello world", args=(), exc_info=None,
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello world",
+        args=(),
+        exc_info=None,
     )
     output = fmt.format(record)
     parsed = json.loads(output)
@@ -45,8 +50,13 @@ def test_json_formatter_includes_request_id():
     token = _current_request_id.set("test-req-123")
     try:
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="traced", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="traced",
+            args=(),
+            exc_info=None,
         )
         output = fmt.format(record)
         parsed = json.loads(output)
@@ -59,8 +69,13 @@ def test_json_formatter_includes_extra_fields():
     """_JSONFormatter includes endpoint, method, status, duration_ms, client_ip."""
     fmt = _JSONFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0,
-        msg="req done", args=(), exc_info=None,
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="req done",
+        args=(),
+        exc_info=None,
     )
     record.endpoint = "/api/v1/flows"
     record.method = "GET"
@@ -83,10 +98,16 @@ def test_json_formatter_includes_exception():
         raise ValueError("test error")
     except ValueError:
         import sys
+
         exc_info = sys.exc_info()
     record = logging.LogRecord(
-        name="test", level=logging.ERROR, pathname="", lineno=0,
-        msg="failed", args=(), exc_info=exc_info,
+        name="test",
+        level=logging.ERROR,
+        pathname="",
+        lineno=0,
+        msg="failed",
+        args=(),
+        exc_info=exc_info,
     )
     output = fmt.format(record)
     parsed = json.loads(output)
@@ -98,8 +119,13 @@ def test_json_formatter_default_request_id():
     """_JSONFormatter uses '-' when no request_id is set."""
     fmt = _JSONFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0,
-        msg="no context", args=(), exc_info=None,
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="no context",
+        args=(),
+        exc_info=None,
     )
     output = fmt.format(record)
     parsed = json.loads(output)
@@ -110,8 +136,13 @@ def test_json_formatter_has_timestamp():
     """_JSONFormatter output includes timestamp field."""
     fmt = _JSONFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0,
-        msg="ts test", args=(), exc_info=None,
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="ts test",
+        args=(),
+        exc_info=None,
     )
     output = fmt.format(record)
     parsed = json.loads(output)
@@ -165,14 +196,17 @@ def test_request_id_on_error_responses(client):
 
 def test_request_id_on_post(client):
     """X-Request-ID is set on POST responses."""
-    resp = client.post("/api/v1/templates/validate", json={
-        "name": "Test",
-        "nodes": [
-            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
-            {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {}},
-        ],
-        "edges": [{"id": "e1", "source": "start", "target": "end"}],
-    })
+    resp = client.post(
+        "/api/v1/templates/validate",
+        json={
+            "name": "Test",
+            "nodes": [
+                {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
+                {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {}},
+            ],
+            "edges": [{"id": "e1", "source": "start", "target": "end"}],
+        },
+    )
     assert "X-Request-ID" in resp.headers
 
 

@@ -418,7 +418,7 @@ class TestFlowVersioningEndpoints:
         versions = flow_version_registry.list_versions(fid)
         assert len(versions) >= 2
         vid_a = versions[-1]["version_id"]  # oldest
-        vid_b = versions[0]["version_id"]   # newest
+        vid_b = versions[0]["version_id"]  # newest
         resp = client.get(
             f"/api/v1/flows/{fid}/diff?version_a={vid_a}&version_b={vid_b}", headers=headers
         )
@@ -515,7 +515,13 @@ class TestFlowVersioningEndpoints:
         )
         assert resp.status_code == 200
         summary = resp.json()["summary"]
-        for key in ("nodes_added", "nodes_removed", "nodes_changed", "edges_added", "edges_removed"):
+        for key in (
+            "nodes_added",
+            "nodes_removed",
+            "nodes_changed",
+            "edges_added",
+            "edges_removed",
+        ):
             assert key in summary
 
     def test_list_versions_returns_items_key(self, client):

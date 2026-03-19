@@ -7,6 +7,7 @@ Validates: Start → LLM Classifier → Code Structurer → Memory Store → End
 The LLM node is mocked (Ollama not available in CI), but Code and Memory nodes
 execute for real, validating the actual data flow through the pipeline.
 """
+
 import asyncio
 from unittest.mock import AsyncMock, patch
 
@@ -117,6 +118,7 @@ TWOBRAIN_FLOW = {
 # Fixtures
 # ============================================================
 
+
 @pytest_asyncio.fixture(scope="function")
 async def db():
     await init_db()
@@ -127,6 +129,7 @@ async def db():
 # ============================================================
 # Tests
 # ============================================================
+
 
 class TestTwoBrainIntegration:
     """End-to-end validation of the 2Brain Inbox Triage workflow."""
@@ -203,8 +206,7 @@ class TestTwoBrainIntegration:
 
                 assert run is not None
                 assert run["status"] == "success", (
-                    f"Expected success but got {run['status']}. "
-                    f"Error: {run.get('error', 'N/A')}"
+                    f"Expected success but got {run['status']}. Error: {run.get('error', 'N/A')}"
                 )
 
     @pytest.mark.asyncio
@@ -236,8 +238,7 @@ class TestTwoBrainIntegration:
 
                 assert run is not None
                 assert run["status"] == "success", (
-                    f"Expected success but got {run['status']}. "
-                    f"Error: {run.get('error', 'N/A')}"
+                    f"Expected success but got {run['status']}. Error: {run.get('error', 'N/A')}"
                 )
 
     @pytest.mark.asyncio
@@ -269,8 +270,7 @@ class TestTwoBrainIntegration:
 
                 assert run is not None
                 assert run["status"] == "success", (
-                    f"Expected success but got {run['status']}. "
-                    f"Error: {run.get('error', 'N/A')}"
+                    f"Expected success but got {run['status']}. Error: {run.get('error', 'N/A')}"
                 )
 
     @pytest.mark.asyncio
@@ -302,8 +302,7 @@ class TestTwoBrainIntegration:
 
                 assert run is not None
                 assert run["status"] == "success", (
-                    f"Expected success but got {run['status']}. "
-                    f"Error: {run.get('error', 'N/A')}"
+                    f"Expected success but got {run['status']}. Error: {run.get('error', 'N/A')}"
                 )
 
     @pytest.mark.asyncio
@@ -356,9 +355,7 @@ class TestTwoBrainIntegration:
                 new_callable=AsyncMock,
                 return_value=mock_llm_response,
             ):
-                with patch(
-                    "apps.orchestrator.main.broadcast_status", new_callable=AsyncMock
-                ):
+                with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
                     resp = client.post(
                         f"/api/v1/flows/{TWOBRAIN_FLOW['id']}/runs",
                         json={"input": {"text": "Build a visual workflow tool"}},

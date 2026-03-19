@@ -5,14 +5,15 @@ Revises: 3201bb1d2a40
 Create Date: 2025-06-25 14:46:19.883580
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'fd07f894a915'
-down_revision: str | None = '3201bb1d2a40'
+revision: str = "fd07f894a915"
+down_revision: str | None = "3201bb1d2a40"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -20,10 +21,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Add input_data column to the workflow_runs table
-    op.add_column('workflow_runs', sa.Column('input_data', sa.JSON(), nullable=True))
+    op.add_column("workflow_runs", sa.Column("input_data", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # Remove input_data column from the workflow_runs table
-    op.drop_column('workflow_runs', 'input_data')
+    op.drop_column("workflow_runs", "input_data")

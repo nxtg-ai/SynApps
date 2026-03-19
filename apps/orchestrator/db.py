@@ -3,6 +3,7 @@ Database connection module.
 
 This module provides utilities for database connections and session management.
 """
+
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -16,27 +17,18 @@ from apps.orchestrator.models import Base
 logger = logging.getLogger("db")
 
 # Get database URL from environment or use SQLite as default
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", 
-    "sqlite+aiosqlite:///synapps.db"
-)
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///synapps.db")
 
 # Create async engine
 if DATABASE_URL.startswith("sqlite"):
     # SQLite-specific options
     engine = create_async_engine(
-        DATABASE_URL, 
-        connect_args={"check_same_thread": False},
-        pool_pre_ping=True
+        DATABASE_URL, connect_args={"check_same_thread": False}, pool_pre_ping=True
     )
 else:
     # PostgreSQL or other database options
     engine = create_async_engine(
-        DATABASE_URL,
-        pool_size=10,
-        max_overflow=20,
-        pool_recycle=3600,
-        pool_pre_ping=True
+        DATABASE_URL, pool_size=10, max_overflow=20, pool_recycle=3600, pool_pre_ping=True
     )
 
 # Create async session factory
@@ -46,6 +38,7 @@ async_session = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
 
 @asynccontextmanager
 async def get_db_session():

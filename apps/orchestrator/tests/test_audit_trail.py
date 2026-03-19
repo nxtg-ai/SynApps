@@ -103,15 +103,17 @@ class TestAuditLogStoreUnit:
         # Manually inject a stale entry
         stale_ts = (datetime.utcnow() - timedelta(days=100)).isoformat()
         with audit_log_store._lock:
-            audit_log_store._entries.append({
-                "id": "stale-1",
-                "timestamp": stale_ts,
-                "actor": "a@x.com",
-                "action": "workflow_created",
-                "resource_type": "flow",
-                "resource_id": "old-flow",
-                "detail": "",
-            })
+            audit_log_store._entries.append(
+                {
+                    "id": "stale-1",
+                    "timestamp": stale_ts,
+                    "actor": "a@x.com",
+                    "action": "workflow_created",
+                    "resource_type": "flow",
+                    "resource_id": "old-flow",
+                    "detail": "",
+                }
+            )
         recent = audit_log_store.record("a@x.com", "workflow_created", "flow", "new-flow")
         deleted = audit_log_store.purge_old(retention_days=90)
         assert deleted >= 1  # Gate 2: stale entry removed
@@ -134,7 +136,9 @@ class TestAuditWiringFlowEvents:
     def test_create_flow_records_workflow_created(self):
         with TestClient(app) as client:
             token, email = _register(client)
-            client.post("/api/v1/flows", json=SAMPLE_FLOW, headers={"Authorization": f"Bearer {token}"})
+            client.post(
+                "/api/v1/flows", json=SAMPLE_FLOW, headers={"Authorization": f"Bearer {token}"}
+            )
             entries = audit_log_store.query(action="workflow_created")
             assert len(entries) >= 1  # Gate 2
             assert any(e["resource_id"] == FLOW_ID for e in entries)  # Gate 2
@@ -146,7 +150,11 @@ class TestAuditWiringFlowEvents:
             client.post("/api/v1/flows", json=SAMPLE_FLOW, headers=auth)
             client.put(
                 f"/api/v1/flows/{FLOW_ID}",
-                json={"name": "Updated", "nodes": SAMPLE_FLOW["nodes"], "edges": SAMPLE_FLOW["edges"]},
+                json={
+                    "name": "Updated",
+                    "nodes": SAMPLE_FLOW["nodes"],
+                    "edges": SAMPLE_FLOW["edges"],
+                },
                 headers=auth,
             )
             entries = audit_log_store.query(action="workflow_updated")
@@ -297,15 +305,17 @@ class TestAuditEndpoint:
         # Inject a clearly old entry
         old_ts = (datetime.utcnow() - timedelta(hours=2)).isoformat()
         with audit_log_store._lock:
-            audit_log_store._entries.append({
-                "id": "old-1",
-                "timestamp": old_ts,
-                "actor": "a@x.com",
-                "action": "workflow_created",
-                "resource_type": "flow",
-                "resource_id": "old-flow",
-                "detail": "",
-            })
+            audit_log_store._entries.append(
+                {
+                    "id": "old-1",
+                    "timestamp": old_ts,
+                    "actor": "a@x.com",
+                    "action": "workflow_created",
+                    "resource_type": "flow",
+                    "resource_id": "old-flow",
+                    "detail": "",
+                }
+            )
         audit_log_store.record("a@x.com", "workflow_created", "flow", "new-flow")
         since = (datetime.utcnow() - timedelta(hours=1)).isoformat()
         with TestClient(app) as client:

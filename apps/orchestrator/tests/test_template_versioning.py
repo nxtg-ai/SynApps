@@ -168,12 +168,16 @@ class TestRegistryRollback:
 
     def test_rollback_nodes_and_edges_copied(self):
         template_registry.import_template(SAMPLE)
-        template_registry.import_template({
-            **SAMPLE,
-            "name": "V2",
-            "nodes": [{"id": "only-node", "type": "llm", "position": {"x": 0, "y": 0}, "data": {}}],
-            "edges": [],
-        })
+        template_registry.import_template(
+            {
+                **SAMPLE,
+                "name": "V2",
+                "nodes": [
+                    {"id": "only-node", "type": "llm", "position": {"x": 0, "y": 0}, "data": {}}
+                ],
+                "edges": [],
+            }
+        )
         entry = template_registry.rollback("my-template", "1.0.0")
         assert len(entry["nodes"]) == 2  # from v1
         assert len(entry["edges"]) == 1  # from v1

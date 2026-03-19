@@ -16,9 +16,11 @@ from synapps.providers.llm import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def client():
     from apps.orchestrator.main import app
+
     with TestClient(app) as c:
         yield c
 
@@ -81,7 +83,12 @@ def test_auto_discover_skips_private_files():
 def test_auto_discover_directory_returns_count():
     """auto_discover_directory returns the number of newly registered providers."""
     ProviderRegistry.clear_global()
-    providers_dir = pathlib.Path(__file__).resolve().parent.parent.parent.parent / "synapps" / "providers" / "llm"
+    providers_dir = (
+        pathlib.Path(__file__).resolve().parent.parent.parent.parent
+        / "synapps"
+        / "providers"
+        / "llm"
+    )
     count = ProviderRegistry.auto_discover_directory(providers_dir, "synapps.providers.llm")
     assert count >= 2  # at least openai + anthropic
 
@@ -140,6 +147,7 @@ def test_provider_health_unavailable(registry):
     import os
 
     from synapps.providers.llm.openai_provider import OpenAIProvider
+
     old = os.environ.pop("OPENAI_API_KEY", None)
     try:
         registry.register(OpenAIProvider)

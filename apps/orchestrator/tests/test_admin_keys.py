@@ -343,23 +343,29 @@ def test_provider_health_wired(client):
 
 def test_templates_validate_wired(client):
     """POST /templates/validate is accessible (auth dependency wired)."""
-    resp = client.post("/api/v1/templates/validate", json={
-        "name": "Test",
-        "nodes": [
-            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
-            {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {}},
-        ],
-        "edges": [{"id": "e1", "source": "start", "target": "end"}],
-    })
+    resp = client.post(
+        "/api/v1/templates/validate",
+        json={
+            "name": "Test",
+            "nodes": [
+                {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
+                {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {}},
+            ],
+            "edges": [{"id": "e1", "source": "start", "target": "end"}],
+        },
+    )
     assert resp.status_code == 200
 
 
 def test_webhooks_endpoint_wired(client):
     """POST /webhooks is accessible (auth dependency wired)."""
-    resp = client.post("/api/v1/webhooks", json={
-        "url": "https://example.com/hook",
-        "events": ["template_started"],
-    })
+    resp = client.post(
+        "/api/v1/webhooks",
+        json={
+            "url": "https://example.com/hook",
+            "events": ["template_started"],
+        },
+    )
     assert resp.status_code == 201
 
 

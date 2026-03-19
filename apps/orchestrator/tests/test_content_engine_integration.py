@@ -7,6 +7,7 @@ Validates: Start → HTTP (Research) → LLM (Enrich) → Code (Format) → Memo
 HTTP and LLM nodes are mocked (no external APIs in CI). Code and Memory nodes
 execute for real, validating the actual data flow through the pipeline.
 """
+
 import asyncio
 import os
 import time
@@ -142,6 +143,7 @@ CONTENT_ENGINE_FLOW = {
 # Fixtures
 # ============================================================
 
+
 @pytest_asyncio.fixture(scope="function")
 async def db():
     await init_db()
@@ -166,6 +168,7 @@ async def db():
 # ============================================================
 # Tests
 # ============================================================
+
 
 class TestContentEngineTemplateStructure:
     """Validate the template definition is well-formed."""
@@ -247,9 +250,7 @@ class TestContentEngineIntegration:
                 new_callable=AsyncMock,
                 return_value=mock_llm_response,
             ):
-                with patch(
-                    "apps.orchestrator.main.broadcast_status", new_callable=AsyncMock
-                ):
+                with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
                     run_id = await Orchestrator.execute_flow(
                         CONTENT_ENGINE_FLOW,
                         {
@@ -304,9 +305,7 @@ class TestContentEngineIntegration:
                 new_callable=AsyncMock,
                 return_value=mock_llm_response,
             ):
-                with patch(
-                    "apps.orchestrator.main.broadcast_status", new_callable=AsyncMock
-                ):
+                with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
                     run_id = await Orchestrator.execute_flow(
                         CONTENT_ENGINE_FLOW,
                         {"topic": "Empty Test", "url": "https://example.com"},
@@ -361,9 +360,7 @@ class TestContentEngineIntegration:
                     new_callable=AsyncMock,
                     return_value=mock_llm_response,
                 ):
-                    with patch(
-                        "apps.orchestrator.main.broadcast_status", new_callable=AsyncMock
-                    ):
+                    with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
                         resp = client.post(
                             f"/api/v1/flows/{CONTENT_ENGINE_FLOW['id']}/runs",
                             json={

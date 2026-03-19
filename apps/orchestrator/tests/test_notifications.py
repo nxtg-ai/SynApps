@@ -129,9 +129,12 @@ class TestNotificationServiceDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_routes_to_email_adapter(self):
         svc = NotificationService()
-        notification_store.set("f1", {
-            "on_complete": [{"type": "email", "to": "user@example.com"}],
-        })
+        notification_store.set(
+            "f1",
+            {
+                "on_complete": [{"type": "email", "to": "user@example.com"}],
+            },
+        )
         with patch.object(svc, "_send_email", new_callable=AsyncMock) as mock_email:
             await svc.dispatch("on_complete", "f1", "Flow", "r1", "success", 500.0, "out")
         mock_email.assert_called_once()  # Gate 2: email adapter called
@@ -139,9 +142,12 @@ class TestNotificationServiceDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_routes_to_slack_adapter(self):
         svc = NotificationService()
-        notification_store.set("f1", {
-            "on_failure": [{"type": "slack", "webhook_url": "https://hooks.slack.com/x"}],
-        })
+        notification_store.set(
+            "f1",
+            {
+                "on_failure": [{"type": "slack", "webhook_url": "https://hooks.slack.com/x"}],
+            },
+        )
         with patch.object(svc, "_send_slack", new_callable=AsyncMock) as mock_slack:
             await svc.dispatch("on_failure", "f1", "Flow", "r1", "error", None, "err")
         mock_slack.assert_called_once()  # Gate 2: Slack adapter called
@@ -149,9 +155,12 @@ class TestNotificationServiceDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_routes_to_webhook_adapter(self):
         svc = NotificationService()
-        notification_store.set("f1", {
-            "on_complete": [{"type": "webhook", "url": "https://custom.example.com/notify"}],
-        })
+        notification_store.set(
+            "f1",
+            {
+                "on_complete": [{"type": "webhook", "url": "https://custom.example.com/notify"}],
+            },
+        )
         with patch.object(svc, "_send_webhook", new_callable=AsyncMock) as mock_wh:
             await svc.dispatch("on_complete", "f1", "Flow", "r1", "success", 100.0, "out")
         mock_wh.assert_called_once()  # Gate 2: webhook adapter called
@@ -160,12 +169,15 @@ class TestNotificationServiceDispatch:
     async def test_dispatch_multiple_handlers_all_called(self):
         """All handlers in the list must be called."""
         svc = NotificationService()
-        notification_store.set("f1", {
-            "on_complete": [
-                {"type": "email", "to": "a@b.com"},
-                {"type": "slack", "webhook_url": "https://hooks.slack.com/x"},
-            ],
-        })
+        notification_store.set(
+            "f1",
+            {
+                "on_complete": [
+                    {"type": "email", "to": "a@b.com"},
+                    {"type": "slack", "webhook_url": "https://hooks.slack.com/x"},
+                ],
+            },
+        )
         with (
             patch.object(svc, "_send_email", new_callable=AsyncMock) as mock_email,
             patch.object(svc, "_send_slack", new_callable=AsyncMock) as mock_slack,
@@ -178,9 +190,12 @@ class TestNotificationServiceDispatch:
     async def test_dispatch_unknown_handler_type_warns_not_raises(self):
         """Unknown handler type must log a warning and not raise."""
         svc = NotificationService()
-        notification_store.set("f1", {
-            "on_complete": [{"type": "sms"}],  # unknown type
-        })
+        notification_store.set(
+            "f1",
+            {
+                "on_complete": [{"type": "sms"}],  # unknown type
+            },
+        )
         # Should not raise
         await svc.dispatch("on_complete", "f1", "Flow", "r1", "success", 100.0, "out")
 
@@ -188,9 +203,12 @@ class TestNotificationServiceDispatch:
     async def test_dispatch_adapter_error_is_swallowed(self):
         """Gate 5: adapter exceptions must be caught + logged, not propagated."""
         svc = NotificationService()
-        notification_store.set("f1", {
-            "on_failure": [{"type": "email", "to": "x@y.com"}],
-        })
+        notification_store.set(
+            "f1",
+            {
+                "on_failure": [{"type": "email", "to": "x@y.com"}],
+            },
+        )
 
         async def _boom(handler, summary):
             raise ConnectionError("SMTP server down")

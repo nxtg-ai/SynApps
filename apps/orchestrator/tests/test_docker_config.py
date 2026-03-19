@@ -21,6 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]  # repo root
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _read(rel_path: str) -> str:
     path = ROOT / rel_path
     assert path.exists(), f"Missing expected file: {rel_path}"
@@ -34,6 +35,7 @@ def _parse_compose(rel_path: str) -> dict:
 # ---------------------------------------------------------------------------
 # Dockerfile.orchestrator
 # ---------------------------------------------------------------------------
+
 
 class TestDockerfileOrchestrator:
     """Verify multi-stage build structure and best practices."""
@@ -78,8 +80,8 @@ class TestDockerfileOrchestrator:
 # Dockerfile.frontend
 # ---------------------------------------------------------------------------
 
-class TestDockerfileFrontend:
 
+class TestDockerfileFrontend:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.path = ROOT / "infra/docker/Dockerfile.frontend"
@@ -101,8 +103,8 @@ class TestDockerfileFrontend:
 # docker-compose.yml (root)
 # ---------------------------------------------------------------------------
 
-class TestRootDockerCompose:
 
+class TestRootDockerCompose:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.compose = _parse_compose("docker-compose.yml")
@@ -169,8 +171,8 @@ class TestRootDockerCompose:
 # infra/docker/docker-compose.yml
 # ---------------------------------------------------------------------------
 
-class TestInfraDockerCompose:
 
+class TestInfraDockerCompose:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.compose = _parse_compose("infra/docker/docker-compose.yml")
@@ -189,8 +191,8 @@ class TestInfraDockerCompose:
 # .dockerignore
 # ---------------------------------------------------------------------------
 
-class TestDockerignore:
 
+class TestDockerignore:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.content = _read(".dockerignore")

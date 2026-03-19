@@ -42,6 +42,7 @@ def _get_token(client: TestClient) -> str:
     )
     return resp.json()["access_token"]
 
+
 # ---------------------------------------------------------------------------
 # Full-session flow — all 5 active node types in one definition
 # ---------------------------------------------------------------------------
@@ -203,17 +204,21 @@ class TestWebhookTriggerAndAnalytics:
             assert trigger_id  # Gate 2: trigger ID must be non-empty
 
             # 3. Fire via webhook receive (mock LLM + HTTP to avoid real APIs)
-            with patch(
-                "apps.orchestrator.main.LLMNodeApplet.on_message",
-                new_callable=AsyncMock,
-                return_value=_MOCK_LLM,
-            ), patch(
-                "apps.orchestrator.main.HTTPRequestNodeApplet.on_message",
-                new_callable=AsyncMock,
-                return_value=_MOCK_HTTP,
-            ), patch(
-                "apps.orchestrator.main.broadcast_status",
-                new_callable=AsyncMock,
+            with (
+                patch(
+                    "apps.orchestrator.main.LLMNodeApplet.on_message",
+                    new_callable=AsyncMock,
+                    return_value=_MOCK_LLM,
+                ),
+                patch(
+                    "apps.orchestrator.main.HTTPRequestNodeApplet.on_message",
+                    new_callable=AsyncMock,
+                    return_value=_MOCK_HTTP,
+                ),
+                patch(
+                    "apps.orchestrator.main.broadcast_status",
+                    new_callable=AsyncMock,
+                ),
             ):
                 resp = client.post(
                     f"/api/v1/webhook-triggers/{trigger_id}/receive",
@@ -385,8 +390,6 @@ class TestMarketplaceIntegration:
                 "/api/v1/marketplace/search",
                 params={"q": "Full Session"},
             )
-            updated = next(
-                (i for i in resp.json()["items"] if i["id"] == listing_id), None
-            )
+            updated = next((i for i in resp.json()["items"] if i["id"] == listing_id), None)
             assert updated is not None
             assert updated["install_count"] >= 1  # Gate 2: install count updated

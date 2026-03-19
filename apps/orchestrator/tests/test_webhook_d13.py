@@ -74,8 +74,8 @@ def _reset_state():
 # Constants
 # ---------------------------------------------------------------------------
 
-class TestConstants:
 
+class TestConstants:
     def test_max_retries(self):
         assert WEBHOOK_MAX_RETRIES == 3
 
@@ -96,8 +96,8 @@ class TestConstants:
 # New event types
 # ---------------------------------------------------------------------------
 
-class TestNewEventTypes:
 
+class TestNewEventTypes:
     def test_connector_status_changed(self):
         assert "connector.status_changed" in WEBHOOK_EVENTS
 
@@ -118,8 +118,8 @@ class TestNewEventTypes:
 # WebhookManager CRUD
 # ---------------------------------------------------------------------------
 
-class TestWebhookManagerCRUD:
 
+class TestWebhookManagerCRUD:
     def test_register_returns_id(self):
         mgr = WebhookManager()
         hook = mgr.register("https://a.com", ["key.rotated"])
@@ -180,8 +180,8 @@ class TestWebhookManagerCRUD:
 # Fernet-encrypted secrets
 # ---------------------------------------------------------------------------
 
-class TestFernetSecrets:
 
+class TestFernetSecrets:
     def test_encrypt_decrypt_round_trip(self):
         """Secrets are encrypted at rest and decryptable for delivery."""
         encrypted_values = []
@@ -223,8 +223,8 @@ class TestFernetSecrets:
 # Delivery: HMAC signing
 # ---------------------------------------------------------------------------
 
-class TestDeliverySigning:
 
+class TestDeliverySigning:
     def test_sign_payload_hmac_sha256(self):
         payload = b'{"event": "key.rotated"}'
         sig = sign_payload(payload, "my-secret")
@@ -272,8 +272,8 @@ class TestDeliverySigning:
 # Delivery: retry with fixed backoff
 # ---------------------------------------------------------------------------
 
-class TestDeliveryRetry:
 
+class TestDeliveryRetry:
     @pytest.mark.asyncio
     async def test_retry_delays_are_fixed(self):
         """Retries use 1s, 5s, 30s delays (not exponential)."""
@@ -338,68 +338,102 @@ class TestDeliveryRetry:
 # REST endpoints with new event types
 # ---------------------------------------------------------------------------
 
-class TestWebhookEndpointsNewEvents:
 
+class TestWebhookEndpointsNewEvents:
     def test_register_connector_status_changed(self, client):
-        resp = client.post("/api/v1/webhooks", json={
-            "url": "https://ops.example.com/connector",
-            "events": ["connector.status_changed"],
-        })
+        resp = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://ops.example.com/connector",
+                "events": ["connector.status_changed"],
+            },
+        )
         assert resp.status_code == 201
 
     def test_register_request_failed(self, client):
-        resp = client.post("/api/v1/webhooks", json={
-            "url": "https://ops.example.com/errors",
-            "events": ["request.failed"],
-        })
+        resp = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://ops.example.com/errors",
+                "events": ["request.failed"],
+            },
+        )
         assert resp.status_code == 201
 
     def test_register_key_rotated(self, client):
-        resp = client.post("/api/v1/webhooks", json={
-            "url": "https://ops.example.com/keys",
-            "events": ["key.rotated"],
-        })
+        resp = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://ops.example.com/keys",
+                "events": ["key.rotated"],
+            },
+        )
         assert resp.status_code == 201
 
     def test_register_key_expiring_soon(self, client):
-        resp = client.post("/api/v1/webhooks", json={
-            "url": "https://ops.example.com/keys",
-            "events": ["key.expiring_soon"],
-        })
+        resp = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://ops.example.com/keys",
+                "events": ["key.expiring_soon"],
+            },
+        )
         assert resp.status_code == 201
 
     def test_register_mixed_events(self, client):
-        resp = client.post("/api/v1/webhooks", json={
-            "url": "https://ops.example.com/all",
-            "events": ["connector.status_changed", "key.rotated", "template_completed"],
-        })
+        resp = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://ops.example.com/all",
+                "events": ["connector.status_changed", "key.rotated", "template_completed"],
+            },
+        )
         assert resp.status_code == 201
         data = resp.json()
-        assert sorted(data["events"]) == sorted([
-            "connector.status_changed", "key.rotated", "template_completed",
-        ])
+        assert sorted(data["events"]) == sorted(
+            [
+                "connector.status_changed",
+                "key.rotated",
+                "template_completed",
+            ]
+        )
 
     def test_register_invalid_event_still_rejected(self, client):
-        resp = client.post("/api/v1/webhooks", json={
-            "url": "https://ops.example.com/bad",
-            "events": ["totally.made.up"],
-        })
+        resp = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://ops.example.com/bad",
+                "events": ["totally.made.up"],
+            },
+        )
         assert resp.status_code == 422
 
     def test_list_includes_new_hooks(self, client):
-        client.post("/api/v1/webhooks", json={
-            "url": "https://a.com", "events": ["key.rotated"],
-        })
-        client.post("/api/v1/webhooks", json={
-            "url": "https://b.com", "events": ["connector.status_changed"],
-        })
+        client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://a.com",
+                "events": ["key.rotated"],
+            },
+        )
+        client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://b.com",
+                "events": ["connector.status_changed"],
+            },
+        )
         resp = client.get("/api/v1/webhooks")
         assert resp.json()["total"] == 2
 
     def test_delete_new_event_hook(self, client):
-        create = client.post("/api/v1/webhooks", json={
-            "url": "https://d.com", "events": ["request.failed"],
-        })
+        create = client.post(
+            "/api/v1/webhooks",
+            json={
+                "url": "https://d.com",
+                "events": ["request.failed"],
+            },
+        )
         hook_id = create.json()["id"]
         resp = client.delete(f"/api/v1/webhooks/{hook_id}")
         assert resp.status_code == 200
@@ -410,8 +444,8 @@ class TestWebhookEndpointsNewEvents:
 # connector.status_changed emission
 # ---------------------------------------------------------------------------
 
-class TestConnectorStatusChangedEvent:
 
+class TestConnectorStatusChangedEvent:
     @pytest.mark.asyncio
     async def test_emits_on_status_transition(self):
         """Status transition from healthy→degraded emits connector.status_changed."""
@@ -444,11 +478,12 @@ class TestConnectorStatusChangedEvent:
 # key.rotated emission
 # ---------------------------------------------------------------------------
 
-class TestKeyRotatedEvent:
 
+class TestKeyRotatedEvent:
     def test_rotate_endpoint_emits_event(self, client):
         """POST /managed-keys/{id}/rotate should emit key.rotated."""
         import os
+
         master_key = "test-master-key-d13"
         with patch.dict(os.environ, {"SYNAPPS_MASTER_KEY": master_key}):
             with patch("apps.orchestrator.main.SYNAPPS_MASTER_KEY", master_key):
@@ -461,25 +496,30 @@ class TestKeyRotatedEvent:
                     pytest.skip("Managed key creation not available")
                 key_id = create_resp.json()["id"]
 
-                with patch("apps.orchestrator.main.emit_event", new_callable=AsyncMock) as mock_emit:
+                with patch(
+                    "apps.orchestrator.main.emit_event", new_callable=AsyncMock
+                ) as mock_emit:
                     resp = client.post(
                         f"/api/v1/managed-keys/{key_id}/rotate",
                         json={"grace_period": 3600},
                         headers={"X-API-Key": master_key},
                     )
                 if resp.status_code == 200:
-                    mock_emit.assert_called_once_with("key.rotated", {
-                        "key_id": key_id,
-                        "grace_period": 3600,
-                    })
+                    mock_emit.assert_called_once_with(
+                        "key.rotated",
+                        {
+                            "key_id": key_id,
+                            "grace_period": 3600,
+                        },
+                    )
 
 
 # ---------------------------------------------------------------------------
 # keys_expiring_within
 # ---------------------------------------------------------------------------
 
-class TestKeysExpiringWithin:
 
+class TestKeysExpiringWithin:
     def test_no_expiring_keys(self):
         api_key_manager.reset()
         result = api_key_manager.keys_expiring_within(86400)
@@ -521,8 +561,8 @@ class TestKeysExpiringWithin:
 # Signature verification round-trip
 # ---------------------------------------------------------------------------
 
-class TestSignatureVerification:
 
+class TestSignatureVerification:
     @pytest.mark.asyncio
     async def test_receiver_can_verify_signature(self):
         """Simulate a receiver verifying the HMAC signature from delivery."""
@@ -559,9 +599,7 @@ class TestSignatureVerification:
         sig_header = captured_headers["X-Webhook-Signature"]
         assert sig_header.startswith("sha256=")
         received_sig = sig_header[7:]  # strip "sha256="
-        expected_sig = hmac.new(
-            secret.encode(), captured_body, hashlib.sha256
-        ).hexdigest()
+        expected_sig = hmac.new(secret.encode(), captured_body, hashlib.sha256).hexdigest()
         assert received_sig == expected_sig
 
 
@@ -569,14 +607,16 @@ class TestSignatureVerification:
 # emit_webhook_event
 # ---------------------------------------------------------------------------
 
-class TestEmitWebhookEvent:
 
+class TestEmitWebhookEvent:
     @pytest.mark.asyncio
     async def test_emit_to_matching_hooks(self):
         mgr = WebhookManager()
         mgr.register("https://a.com", ["key.rotated"])
         mgr.register("https://b.com", ["request.failed"])
-        with patch("apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock) as mock_del:
+        with patch(
+            "apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock
+        ) as mock_del:
             mock_del.return_value = True
             await emit_webhook_event("key.rotated", {"key_id": "k1"}, mgr)
             await asyncio.sleep(0.05)
@@ -586,7 +626,9 @@ class TestEmitWebhookEvent:
     async def test_no_delivery_for_unmatched_event(self):
         mgr = WebhookManager()
         mgr.register("https://a.com", ["key.rotated"])
-        with patch("apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock) as mock_del:
+        with patch(
+            "apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock
+        ) as mock_del:
             await emit_webhook_event("request.failed", {}, mgr)
             await asyncio.sleep(0.05)
         mock_del.assert_not_called()
@@ -595,7 +637,9 @@ class TestEmitWebhookEvent:
     async def test_payload_structure(self):
         mgr = WebhookManager()
         mgr.register("https://a.com", ["connector.status_changed"])
-        with patch("apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock) as mock_del:
+        with patch(
+            "apps.orchestrator.webhooks.manager.deliver_webhook", new_callable=AsyncMock
+        ) as mock_del:
             mock_del.return_value = True
             await emit_webhook_event("connector.status_changed", {"connector": "openai"}, mgr)
             await asyncio.sleep(0.05)

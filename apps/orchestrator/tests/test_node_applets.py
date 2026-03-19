@@ -5,6 +5,7 @@ Covers: TransformNodeApplet, IfElseNodeApplet, MergeNodeApplet,
 ForEachNodeApplet, HTTPRequestNodeApplet, CodeNodeApplet,
 MemoryNodeApplet, SQLiteFTSMemoryStoreBackend, MemoryStoreFactory.
 """
+
 import json
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -42,6 +43,7 @@ def _msg(content=None, context=None, metadata=None):
 # TransformNodeApplet Tests
 # ============================================================
 
+
 class TestTransformNodeApplet:
     @pytest.fixture
     def applet(self):
@@ -63,7 +65,13 @@ class TestTransformNodeApplet:
     async def test_json_path_operation(self, applet):
         msg = _msg(
             content={"users": [{"name": "Alice"}]},
-            metadata={"node_data": {"operation": "json_path", "source": "{{content}}", "json_path": "$.users[0].name"}},
+            metadata={
+                "node_data": {
+                    "operation": "json_path",
+                    "source": "{{content}}",
+                    "json_path": "$.users[0].name",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -83,12 +91,14 @@ class TestTransformNodeApplet:
     async def test_regex_replace_operation(self, applet):
         msg = _msg(
             content="Hello World 123",
-            metadata={"node_data": {
-                "operation": "regex_replace",
-                "source": "{{content}}",
-                "regex_pattern": r"\d+",
-                "regex_replacement": "NUM",
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "regex_replace",
+                    "source": "{{content}}",
+                    "regex_pattern": r"\d+",
+                    "regex_replacement": "NUM",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -98,14 +108,16 @@ class TestTransformNodeApplet:
     async def test_regex_replace_with_flags(self, applet):
         msg = _msg(
             content="Hello hello HELLO",
-            metadata={"node_data": {
-                "operation": "regex_replace",
-                "source": "{{content}}",
-                "regex_pattern": "hello",
-                "regex_replacement": "HI",
-                "regex_flags": "i",
-                "regex_count": 1,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "regex_replace",
+                    "source": "{{content}}",
+                    "regex_pattern": "hello",
+                    "regex_replacement": "HI",
+                    "regex_flags": "i",
+                    "regex_count": 1,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -115,11 +127,13 @@ class TestTransformNodeApplet:
     async def test_regex_replace_empty_pattern_error(self, applet):
         msg = _msg(
             content="test",
-            metadata={"node_data": {
-                "operation": "regex_replace",
-                "source": "{{content}}",
-                "regex_pattern": "",
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "regex_replace",
+                    "source": "{{content}}",
+                    "regex_pattern": "",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is False
@@ -129,12 +143,14 @@ class TestTransformNodeApplet:
     async def test_split_join_basic(self, applet):
         msg = _msg(
             content="a,b,c",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": ",",
-                "join_delimiter": " | ",
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": ",",
+                    "join_delimiter": " | ",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -144,12 +160,14 @@ class TestTransformNodeApplet:
     async def test_split_join_return_list(self, applet):
         msg = _msg(
             content="x,y,z",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": ",",
-                "return_list": True,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": ",",
+                    "return_list": True,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -159,14 +177,16 @@ class TestTransformNodeApplet:
     async def test_split_join_strip_and_drop_empty(self, applet):
         msg = _msg(
             content=" a , , b , ",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": ",",
-                "strip_items": True,
-                "drop_empty": True,
-                "return_list": True,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": ",",
+                    "strip_items": True,
+                    "drop_empty": True,
+                    "return_list": True,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["output"] == ["a", "b"]
@@ -175,12 +195,14 @@ class TestTransformNodeApplet:
     async def test_split_join_with_index(self, applet):
         msg = _msg(
             content="first,second,third",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": ",",
-                "split_index": 1,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": ",",
+                    "split_index": 1,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["output"] == "second"
@@ -189,12 +211,14 @@ class TestTransformNodeApplet:
     async def test_split_join_index_out_of_range(self, applet):
         msg = _msg(
             content="a,b",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": ",",
-                "split_index": 99,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": ",",
+                    "split_index": 99,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is False
@@ -204,12 +228,14 @@ class TestTransformNodeApplet:
     async def test_split_join_empty_delimiter_splits_chars(self, applet):
         msg = _msg(
             content="abc",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": "",
-                "return_list": True,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": "",
+                    "return_list": True,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["output"] == ["a", "b", "c"]
@@ -218,11 +244,13 @@ class TestTransformNodeApplet:
     async def test_split_join_list_input(self, applet):
         msg = _msg(
             content=["first", "second"],
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "join_delimiter": "-",
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "join_delimiter": "-",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -272,13 +300,15 @@ class TestTransformNodeApplet:
     async def test_split_join_maxsplit(self, applet):
         msg = _msg(
             content="a,b,c,d",
-            metadata={"node_data": {
-                "operation": "split_join",
-                "source": "{{content}}",
-                "split_delimiter": ",",
-                "split_maxsplit": 2,
-                "return_list": True,
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "split_join",
+                    "source": "{{content}}",
+                    "split_delimiter": ",",
+                    "split_maxsplit": 2,
+                    "return_list": True,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["output"] == ["a", "b", "c,d"]
@@ -287,6 +317,7 @@ class TestTransformNodeApplet:
 # ============================================================
 # IfElseNodeApplet Tests
 # ============================================================
+
 
 class TestIfElseNodeApplet:
     @pytest.fixture
@@ -297,7 +328,9 @@ class TestIfElseNodeApplet:
     async def test_equals_true(self, applet):
         msg = _msg(
             content="hello",
-            metadata={"node_data": {"operation": "equals", "source": "{{content}}", "value": "hello"}},
+            metadata={
+                "node_data": {"operation": "equals", "source": "{{content}}", "value": "hello"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -308,7 +341,9 @@ class TestIfElseNodeApplet:
     async def test_equals_false(self, applet):
         msg = _msg(
             content="hello",
-            metadata={"node_data": {"operation": "equals", "source": "{{content}}", "value": "goodbye"}},
+            metadata={
+                "node_data": {"operation": "equals", "source": "{{content}}", "value": "goodbye"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is False
@@ -318,7 +353,14 @@ class TestIfElseNodeApplet:
     async def test_equals_case_insensitive(self, applet):
         msg = _msg(
             content="Hello",
-            metadata={"node_data": {"operation": "equals", "source": "{{content}}", "value": "hello", "case_sensitive": False}},
+            metadata={
+                "node_data": {
+                    "operation": "equals",
+                    "source": "{{content}}",
+                    "value": "hello",
+                    "case_sensitive": False,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -327,7 +369,9 @@ class TestIfElseNodeApplet:
     async def test_contains_string(self, applet):
         msg = _msg(
             content="hello world",
-            metadata={"node_data": {"operation": "contains", "source": "{{content}}", "value": "world"}},
+            metadata={
+                "node_data": {"operation": "contains", "source": "{{content}}", "value": "world"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -336,7 +380,14 @@ class TestIfElseNodeApplet:
     async def test_contains_case_insensitive(self, applet):
         msg = _msg(
             content="Hello World",
-            metadata={"node_data": {"operation": "contains", "source": "{{content}}", "value": "WORLD", "case_sensitive": False}},
+            metadata={
+                "node_data": {
+                    "operation": "contains",
+                    "source": "{{content}}",
+                    "value": "WORLD",
+                    "case_sensitive": False,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -354,7 +405,9 @@ class TestIfElseNodeApplet:
     async def test_contains_dict_key(self, applet):
         msg = _msg(
             content={"name": "Alice", "age": 30},
-            metadata={"node_data": {"operation": "contains", "source": "{{content}}", "value": "name"}},
+            metadata={
+                "node_data": {"operation": "contains", "source": "{{content}}", "value": "name"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -363,7 +416,9 @@ class TestIfElseNodeApplet:
     async def test_contains_dict_value(self, applet):
         msg = _msg(
             content={"name": "Alice"},
-            metadata={"node_data": {"operation": "contains", "source": "{{content}}", "value": "Alice"}},
+            metadata={
+                "node_data": {"operation": "contains", "source": "{{content}}", "value": "Alice"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -381,7 +436,13 @@ class TestIfElseNodeApplet:
     async def test_regex_match(self, applet):
         msg = _msg(
             content="Order #12345",
-            metadata={"node_data": {"operation": "regex", "source": "{{content}}", "regex_pattern": r"#\d+"}},
+            metadata={
+                "node_data": {
+                    "operation": "regex",
+                    "source": "{{content}}",
+                    "regex_pattern": r"#\d+",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -390,7 +451,13 @@ class TestIfElseNodeApplet:
     async def test_regex_no_match(self, applet):
         msg = _msg(
             content="No numbers here",
-            metadata={"node_data": {"operation": "regex", "source": "{{content}}", "regex_pattern": r"\d+"}},
+            metadata={
+                "node_data": {
+                    "operation": "regex",
+                    "source": "{{content}}",
+                    "regex_pattern": r"\d+",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is False
@@ -399,7 +466,14 @@ class TestIfElseNodeApplet:
     async def test_regex_flags(self, applet):
         msg = _msg(
             content="Hello\nworld",
-            metadata={"node_data": {"operation": "regex", "source": "{{content}}", "regex_pattern": "hello.*world", "regex_flags": "is"}},
+            metadata={
+                "node_data": {
+                    "operation": "regex",
+                    "source": "{{content}}",
+                    "regex_pattern": "hello.*world",
+                    "regex_flags": "is",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -408,7 +482,9 @@ class TestIfElseNodeApplet:
     async def test_regex_from_value_fallback(self, applet):
         msg = _msg(
             content="test123",
-            metadata={"node_data": {"operation": "regex", "source": "{{content}}", "value": r"\d+"}},
+            metadata={
+                "node_data": {"operation": "regex", "source": "{{content}}", "value": r"\d+"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -427,7 +503,13 @@ class TestIfElseNodeApplet:
     async def test_json_path_exists(self, applet):
         msg = _msg(
             content={"data": {"status": "active"}},
-            metadata={"node_data": {"operation": "json_path", "source": "{{content}}", "json_path": "$.data.status"}},
+            metadata={
+                "node_data": {
+                    "operation": "json_path",
+                    "source": "{{content}}",
+                    "json_path": "$.data.status",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -436,12 +518,14 @@ class TestIfElseNodeApplet:
     async def test_json_path_with_expected_value(self, applet):
         msg = _msg(
             content={"data": {"status": "active"}},
-            metadata={"node_data": {
-                "operation": "json_path",
-                "source": "{{content}}",
-                "json_path": "$.data.status",
-                "value": "active",
-            }},
+            metadata={
+                "node_data": {
+                    "operation": "json_path",
+                    "source": "{{content}}",
+                    "json_path": "$.data.status",
+                    "value": "active",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is True
@@ -450,7 +534,13 @@ class TestIfElseNodeApplet:
     async def test_json_path_not_found(self, applet):
         msg = _msg(
             content={"foo": 1},
-            metadata={"node_data": {"operation": "json_path", "source": "{{content}}", "json_path": "$.missing"}},
+            metadata={
+                "node_data": {
+                    "operation": "json_path",
+                    "source": "{{content}}",
+                    "json_path": "$.missing",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is False
@@ -459,7 +549,14 @@ class TestIfElseNodeApplet:
     async def test_negate(self, applet):
         msg = _msg(
             content="hello",
-            metadata={"node_data": {"operation": "equals", "source": "{{content}}", "value": "hello", "negate": True}},
+            metadata={
+                "node_data": {
+                    "operation": "equals",
+                    "source": "{{content}}",
+                    "value": "hello",
+                    "negate": True,
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["result"] is False
@@ -487,7 +584,9 @@ class TestIfElseNodeApplet:
     async def test_context_gets_last_response(self, applet):
         msg = _msg(
             content="test",
-            metadata={"node_data": {"operation": "equals", "source": "{{content}}", "value": "test"}},
+            metadata={
+                "node_data": {"operation": "equals", "source": "{{content}}", "value": "test"}
+            },
         )
         result = await applet.on_message(msg)
         assert "last_if_else_response" in result.context
@@ -496,7 +595,9 @@ class TestIfElseNodeApplet:
     async def test_config_from_context_keys(self, applet):
         msg = _msg(
             content="test",
-            context={"if_else_config": {"operation": "equals", "source": "{{content}}", "value": "test"}},
+            context={
+                "if_else_config": {"operation": "equals", "source": "{{content}}", "value": "test"}
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -505,7 +606,13 @@ class TestIfElseNodeApplet:
     async def test_config_from_legacy_context_key(self, applet):
         msg = _msg(
             content="test",
-            context={"condition_config": {"operation": "equals", "source": "{{content}}", "value": "test"}},
+            context={
+                "condition_config": {
+                    "operation": "equals",
+                    "source": "{{content}}",
+                    "value": "test",
+                }
+            },
         )
         result = await applet.on_message(msg)
         assert result.content["ok"] is True
@@ -514,6 +621,7 @@ class TestIfElseNodeApplet:
 # ============================================================
 # MergeNodeApplet Tests
 # ============================================================
+
 
 class TestMergeNodeApplet:
     @pytest.fixture
@@ -611,6 +719,7 @@ class TestMergeNodeApplet:
 # ForEachNodeApplet Tests
 # ============================================================
 
+
 class TestForEachNodeApplet:
     @pytest.fixture
     def applet(self):
@@ -666,7 +775,7 @@ class TestForEachNodeApplet:
     @pytest.mark.asyncio
     async def test_json_string_array(self, applet):
         msg = _msg(
-            content='[1, 2, 3]',
+            content="[1, 2, 3]",
             metadata={"node_data": {"array_source": "{{input}}"}},
         )
         result = await applet.on_message(msg)
@@ -734,6 +843,7 @@ class TestForEachNodeApplet:
 # HTTPRequestNodeApplet Tests
 # ============================================================
 
+
 class TestHTTPRequestNodeApplet:
     @pytest.fixture
     def applet(self):
@@ -754,6 +864,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_successful_get_request(self, applet):
         import httpx
+
         mock_response = MagicMock(spec=httpx.Response)
         mock_response.status_code = 200
         mock_response.is_success = True
@@ -769,7 +880,9 @@ class TestHTTPRequestNodeApplet:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {"url": "https://api.example.com/data", "method": "GET"}})
+            msg = _msg(
+                metadata={"node_data": {"url": "https://api.example.com/data", "method": "GET"}}
+            )
             result = await applet.on_message(msg)
 
         assert result.content["ok"] is True
@@ -779,6 +892,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_http_error(self, applet):
         import httpx
+
         with patch("apps.orchestrator.main.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.request = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
@@ -794,7 +908,9 @@ class TestHTTPRequestNodeApplet:
 
     @pytest.mark.asyncio
     async def test_normalize_headers(self, applet):
-        assert applet._normalize_headers({"X-Key": "val", "empty": None, "": "skip"}) == {"X-Key": "val"}
+        assert applet._normalize_headers({"X-Key": "val", "empty": None, "": "skip"}) == {
+            "X-Key": "val"
+        }
         assert applet._normalize_headers("not_dict") == {}
 
     @pytest.mark.asyncio
@@ -805,7 +921,9 @@ class TestHTTPRequestNodeApplet:
 
     @pytest.mark.asyncio
     async def test_normalize_query_params(self, applet):
-        assert applet._normalize_query_params({"q": "test", "": "skip", "none": None}) == {"q": "test"}
+        assert applet._normalize_query_params({"q": "test", "": "skip", "none": None}) == {
+            "q": "test"
+        }
         assert applet._normalize_query_params("not_dict") == {}
 
     @pytest.mark.asyncio
@@ -870,6 +988,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_parse_response_json(self, applet):
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.headers = {"content-type": "application/json; charset=utf-8"}
         mock_resp.json.return_value = {"parsed": True}
@@ -878,6 +997,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_parse_response_text_json_fallback(self, applet):
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.headers = {"content-type": "text/plain"}
         mock_resp.text = '{"fallback": true}'
@@ -886,6 +1006,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_parse_response_plain_text(self, applet):
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.headers = {"content-type": "text/plain"}
         mock_resp.text = "just a string"
@@ -894,6 +1015,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_parse_response_empty(self, applet):
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.headers = {"content-type": "text/plain"}
         mock_resp.text = ""
@@ -911,6 +1033,7 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_include_response_headers(self, applet):
         import httpx
+
         mock_response = MagicMock(spec=httpx.Response)
         mock_response.status_code = 200
         mock_response.is_success = True
@@ -926,11 +1049,15 @@ class TestHTTPRequestNodeApplet:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {
-                "url": "https://api.example.com",
-                "method": "GET",
-                "include_response_headers": True,
-            }})
+            msg = _msg(
+                metadata={
+                    "node_data": {
+                        "url": "https://api.example.com",
+                        "method": "GET",
+                        "include_response_headers": True,
+                    }
+                }
+            )
             result = await applet.on_message(msg)
 
         assert "headers" in result.content
@@ -955,12 +1082,16 @@ class TestHTTPRequestNodeApplet:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {
-                "url": "https://api.example.com/items/1",
-                "method": "PATCH",
-                "body_type": "json",
-                "body_template": '{"status": "updated"}',
-            }})
+            msg = _msg(
+                metadata={
+                    "node_data": {
+                        "url": "https://api.example.com/items/1",
+                        "method": "PATCH",
+                        "body_type": "json",
+                        "body_template": '{"status": "updated"}',
+                    }
+                }
+            )
             result = await applet.on_message(msg)
 
         assert result.content.get("ok") is True
@@ -990,12 +1121,16 @@ class TestHTTPRequestNodeApplet:
             mock_client.request = AsyncMock(side_effect=capture_request)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {
-                "url": "https://api.example.com/data",
-                "method": "GET",
-                "auth_type": "bearer",
-                "auth_value": "mytoken123",
-            }})
+            msg = _msg(
+                metadata={
+                    "node_data": {
+                        "url": "https://api.example.com/data",
+                        "method": "GET",
+                        "auth_type": "bearer",
+                        "auth_value": "mytoken123",
+                    }
+                }
+            )
             await applet.on_message(msg)
 
         assert "Authorization" in captured_headers
@@ -1028,12 +1163,16 @@ class TestHTTPRequestNodeApplet:
             mock_client.request = AsyncMock(side_effect=capture_request)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {
-                "url": "https://api.example.com/data",
-                "method": "GET",
-                "auth_type": "basic",
-                "auth_value": "user:password",
-            }})
+            msg = _msg(
+                metadata={
+                    "node_data": {
+                        "url": "https://api.example.com/data",
+                        "method": "GET",
+                        "auth_type": "basic",
+                        "auth_value": "user:password",
+                    }
+                }
+            )
             await applet.on_message(msg)
 
         expected = "Basic " + base64.b64encode(b"user:password").decode()
@@ -1064,13 +1203,17 @@ class TestHTTPRequestNodeApplet:
             mock_client.request = AsyncMock(side_effect=capture_request)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {
-                "url": "https://api.example.com/data",
-                "method": "GET",
-                "auth_type": "api_key",
-                "auth_value": "secret-key-abc",
-                "auth_header_name": "X-Custom-API-Key",
-            }})
+            msg = _msg(
+                metadata={
+                    "node_data": {
+                        "url": "https://api.example.com/data",
+                        "method": "GET",
+                        "auth_type": "api_key",
+                        "auth_value": "secret-key-abc",
+                        "auth_header_name": "X-Custom-API-Key",
+                    }
+                }
+            )
             await applet.on_message(msg)
 
         assert captured_headers.get("X-Custom-API-Key") == "secret-key-abc"
@@ -1086,7 +1229,9 @@ class TestHTTPRequestNodeApplet:
     @pytest.mark.asyncio
     async def test_ssrf_127_blocked(self, applet):
         """127.x.x.x loopback must be blocked."""
-        msg = _msg(metadata={"node_data": {"url": "http://127.0.0.1:8000/internal", "method": "GET"}})
+        msg = _msg(
+            metadata={"node_data": {"url": "http://127.0.0.1:8000/internal", "method": "GET"}}
+        )
         result = await applet.on_message(msg)
         assert "error" in result.content
         assert "blocked" in result.content["error"].lower()
@@ -1135,7 +1280,9 @@ class TestHTTPRequestNodeApplet:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {"url": "https://api.example.com/notfound", "method": "GET"}})
+            msg = _msg(
+                metadata={"node_data": {"url": "https://api.example.com/notfound", "method": "GET"}}
+            )
             result = await applet.on_message(msg)
 
         assert result.content.get("ok") is False
@@ -1161,7 +1308,9 @@ class TestHTTPRequestNodeApplet:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {"url": "https://api.example.com/broken", "method": "GET"}})
+            msg = _msg(
+                metadata={"node_data": {"url": "https://api.example.com/broken", "method": "GET"}}
+            )
             result = await applet.on_message(msg)
 
         assert result.content.get("ok") is False
@@ -1178,7 +1327,9 @@ class TestHTTPRequestNodeApplet:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            msg = _msg(metadata={"node_data": {"url": "https://api.example.com/slow", "method": "GET"}})
+            msg = _msg(
+                metadata={"node_data": {"url": "https://api.example.com/slow", "method": "GET"}}
+            )
             result = await applet.on_message(msg)
 
         assert "error" in result.content
@@ -1220,12 +1371,16 @@ class TestHTTPRequestNodeApplet:
             mock_client_cls.return_value = mock_client
 
             with patch("apps.orchestrator.main.asyncio.sleep", new_callable=AsyncMock):
-                msg = _msg(metadata={"node_data": {
-                    "url": "https://api.example.com/flaky",
-                    "method": "GET",
-                    "max_retries": 2,
-                    "retry_backoff_factor": 0.0,
-                }})
+                msg = _msg(
+                    metadata={
+                        "node_data": {
+                            "url": "https://api.example.com/flaky",
+                            "method": "GET",
+                            "max_retries": 2,
+                            "retry_backoff_factor": 0.0,
+                        }
+                    }
+                )
                 result = await applet.on_message(msg)
 
         assert result.content.get("ok") is True
@@ -1235,6 +1390,7 @@ class TestHTTPRequestNodeApplet:
 # ============================================================
 # CodeNodeApplet Tests
 # ============================================================
+
 
 class TestCodeNodeApplet:
     @pytest.fixture
@@ -1265,7 +1421,12 @@ class TestCodeNodeApplet:
             metadata={"node_data": {"code": "", "language": "python"}},
         )
         with patch.object(applet, "_execute_sandboxed_code", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"ok": True, "result": "hello", "timed_out": False, "exit_code": 0}
+            mock_exec.return_value = {
+                "ok": True,
+                "result": "hello",
+                "timed_out": False,
+                "exit_code": 0,
+            }
             result = await applet.on_message(msg)
         assert result.content["ok"] is True
         mock_exec.assert_called_once()
@@ -1277,7 +1438,12 @@ class TestCodeNodeApplet:
             metadata={"node_data": {"code": "print('hello')", "language": "python"}},
         )
         with patch.object(applet, "_execute_sandboxed_code", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"ok": True, "result": "hello", "timed_out": False, "exit_code": 0}
+            mock_exec.return_value = {
+                "ok": True,
+                "result": "hello",
+                "timed_out": False,
+                "exit_code": 0,
+            }
             result = await applet.on_message(msg)
         assert result.content["ok"] is True
         assert result.content["language"] == "python"
@@ -1291,7 +1457,13 @@ class TestCodeNodeApplet:
             metadata={"node_data": {"code": "raise Exception('fail')", "language": "python"}},
         )
         with patch.object(applet, "_execute_sandboxed_code", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"ok": False, "result": None, "timed_out": False, "exit_code": 1, "error": {"message": "fail"}}
+            mock_exec.return_value = {
+                "ok": False,
+                "result": None,
+                "timed_out": False,
+                "exit_code": 1,
+                "error": {"message": "fail"},
+            }
             result = await applet.on_message(msg)
         assert result.content["ok"] is False
         assert result.metadata["status"] == "error"
@@ -1314,6 +1486,7 @@ class TestCodeNodeApplet:
 # ============================================================
 # MemoryNodeApplet Tests
 # ============================================================
+
 
 class TestMemoryNodeApplet:
     @pytest.fixture
@@ -1559,6 +1732,7 @@ class TestMemoryNodeApplet:
     @pytest.mark.asyncio
     async def test_resolve_query_from_string_content(self, applet):
         from apps.orchestrator.models import MemoryNodeConfigModel
+
         config = MemoryNodeConfigModel(operation="retrieve")
         msg = _msg(content="my search query")
         assert applet._resolve_query(msg, config) == "my search query"
@@ -1566,6 +1740,7 @@ class TestMemoryNodeApplet:
     @pytest.mark.asyncio
     async def test_resolve_query_from_dict_content(self, applet):
         from apps.orchestrator.models import MemoryNodeConfigModel
+
         config = MemoryNodeConfigModel(operation="retrieve")
         msg = _msg(content={"query": "dict query"})
         assert applet._resolve_query(msg, config) == "dict query"
@@ -1587,6 +1762,7 @@ class TestMemoryNodeApplet:
 # SQLiteFTSMemoryStoreBackend Tests
 # ============================================================
 
+
 class TestSQLiteFTSBackend:
     @pytest.fixture
     def store(self, tmp_path):
@@ -1594,7 +1770,9 @@ class TestSQLiteFTSBackend:
         return SQLiteFTSMemoryStoreBackend(db_path)
 
     def test_upsert_and_get(self, store):
-        store.upsert("k1", "ns1", "hello world", {"val": 1}, {"timestamp": time.time(), "tags": ["t1"]})
+        store.upsert(
+            "k1", "ns1", "hello world", {"val": 1}, {"timestamp": time.time(), "tags": ["t1"]}
+        )
         result = store.get("k1", "ns1")
         assert result is not None
         assert result["key"] == "k1"
@@ -1670,12 +1848,14 @@ class TestSQLiteFTSBackend:
 # MemoryStoreFactory Tests
 # ============================================================
 
+
 class TestMemoryStoreFactory:
     def setup_method(self):
         MemoryStoreFactory._stores.clear()
 
     def test_get_store_sqlite_default(self, tmp_path):
         from apps.orchestrator.models import MemoryNodeConfigModel
+
         config = MemoryNodeConfigModel(
             operation="store",
             backend="sqlite_fts",
@@ -1686,6 +1866,7 @@ class TestMemoryStoreFactory:
 
     def test_get_store_caching(self, tmp_path):
         from apps.orchestrator.models import MemoryNodeConfigModel
+
         config = MemoryNodeConfigModel(
             operation="store",
             backend="sqlite_fts",
@@ -1697,6 +1878,7 @@ class TestMemoryStoreFactory:
 
     def test_get_store_persist_path_directory(self, tmp_path):
         from apps.orchestrator.models import MemoryNodeConfigModel
+
         config = MemoryNodeConfigModel(
             operation="store",
             backend="sqlite_fts",
@@ -1707,6 +1889,7 @@ class TestMemoryStoreFactory:
 
     def test_get_store_chroma_fallback(self, tmp_path):
         from apps.orchestrator.models import MemoryNodeConfigModel
+
         config = MemoryNodeConfigModel(
             operation="store",
             backend="chroma",
@@ -1720,6 +1903,7 @@ class TestMemoryStoreFactory:
 # ============================================================
 # Helper function tests (expanding coverage)
 # ============================================================
+
 
 class TestHelperFunctions:
     def test_as_text_string(self):

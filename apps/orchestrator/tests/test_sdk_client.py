@@ -34,6 +34,7 @@ from apps.orchestrator.main import app  # noqa: E402
 # Helpers — build SDK clients backed by the test app
 # ---------------------------------------------------------------------------
 
+
 def _make_sync_client(test_client: TestClient) -> SynApps:
     """Create a sync SDK client that shares the TestClient's transport."""
     client = SynApps.__new__(SynApps)
@@ -66,6 +67,7 @@ async def _make_async_client() -> AsyncSynApps:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def test_app():
     """TestClient triggers lifespan (DB creation)."""
@@ -92,8 +94,18 @@ async def async_client(test_app):
 MINIMAL_FLOW = {
     "name": "SDK Test Flow",
     "nodes": [
-        {"id": "start-1", "type": "StartNode", "data": {"label": "Start"}, "position": {"x": 0, "y": 0}},
-        {"id": "end-1", "type": "EndNode", "data": {"label": "End"}, "position": {"x": 200, "y": 0}},
+        {
+            "id": "start-1",
+            "type": "StartNode",
+            "data": {"label": "Start"},
+            "position": {"x": 0, "y": 0},
+        },
+        {
+            "id": "end-1",
+            "type": "EndNode",
+            "data": {"label": "End"},
+            "position": {"x": 200, "y": 0},
+        },
     ],
     "edges": [{"id": "e1", "source": "start-1", "target": "end-1"}],
 }
@@ -103,8 +115,8 @@ MINIMAL_FLOW = {
 # Sync client tests
 # ---------------------------------------------------------------------------
 
-class TestSyncClient:
 
+class TestSyncClient:
     def test_get_health(self, sync_client: SynApps):
         result = sync_client.get_health()
         assert result["status"] == "healthy"
@@ -178,8 +190,8 @@ class TestSyncClient:
 # Async client tests
 # ---------------------------------------------------------------------------
 
-class TestAsyncClient:
 
+class TestAsyncClient:
     @pytest.mark.asyncio
     async def test_get_health(self, async_client: AsyncSynApps):
         result = await async_client.get_health()
@@ -245,8 +257,8 @@ class TestAsyncClient:
 # Exception unit tests
 # ---------------------------------------------------------------------------
 
-class TestExceptions:
 
+class TestExceptions:
     def test_api_error_str(self):
         err = SynAppsAPIError(404, "Not found", {"detail": "Not found"})
         assert "404" in str(err)
@@ -256,10 +268,12 @@ class TestExceptions:
 
     def test_connection_error_is_synapps_error(self):
         from synapps_sdk.exceptions import SynAppsError
+
         assert isinstance(SynAppsConnectionError("refused"), SynAppsError)
 
     def test_timeout_error_is_synapps_error(self):
         from synapps_sdk.exceptions import SynAppsError
+
         assert isinstance(SynAppsTimeoutError("timeout"), SynAppsError)
 
 
@@ -267,16 +281,18 @@ class TestExceptions:
 # Poll task tests (mocked get_task)
 # ---------------------------------------------------------------------------
 
-class TestPollTask:
 
+class TestPollTask:
     def test_sync_poll_completed(self, sync_client: SynApps):
         call_count = 0
+
         def mock_get(tid: str) -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
                 return {"task_id": tid, "status": "running"}
             return {"task_id": tid, "status": "completed", "result": "done"}
+
         sync_client.get_task = mock_get  # type: ignore[assignment]
         result = sync_client.poll_task("t-1", poll_interval=0.01, timeout=5.0)
         assert result["status"] == "completed"
@@ -295,12 +311,14 @@ class TestPollTask:
     @pytest.mark.asyncio
     async def test_async_poll_completed(self, async_client: AsyncSynApps):
         call_count = 0
+
         async def mock_get(tid: str) -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
                 return {"task_id": tid, "status": "running"}
             return {"task_id": tid, "status": "completed", "result": "done"}
+
         async_client.get_task = mock_get  # type: ignore[assignment]
         result = await async_client.poll_task("t-1", poll_interval=0.01, timeout=5.0)
         assert result["status"] == "completed"
@@ -310,6 +328,7 @@ class TestPollTask:
     async def test_async_poll_timeout(self, async_client: AsyncSynApps):
         async def always_running(tid: str) -> dict[str, Any]:
             return {"task_id": tid, "status": "running"}
+
         async_client.get_task = always_running  # type: ignore[assignment]
         with pytest.raises(SynAppsTimeoutError):
             await async_client.poll_task("t-stuck", poll_interval=0.01, timeout=0.05)
@@ -319,8 +338,8 @@ class TestPollTask:
 # Client init tests
 # ---------------------------------------------------------------------------
 
-class TestClientInit:
 
+class TestClientInit:
     def test_default_base_url(self):
         c = SynApps()
         assert c.base_url == "http://localhost:8000/api/v1"
@@ -346,14 +365,22 @@ class TestClientInit:
 # Module exports
 # ---------------------------------------------------------------------------
 
-class TestModuleExports:
 
+class TestModuleExports:
     def test_version(self):
         import synapps_sdk
+
         assert synapps_sdk.__version__ == "0.1.0"
 
     def test_all_exports(self):
         import synapps_sdk
-        for name in ("SynApps", "AsyncSynApps", "SynAppsError",
-                     "SynAppsAPIError", "SynAppsConnectionError", "SynAppsTimeoutError"):
+
+        for name in (
+            "SynApps",
+            "AsyncSynApps",
+            "SynAppsError",
+            "SynAppsAPIError",
+            "SynAppsConnectionError",
+            "SynAppsTimeoutError",
+        ):
             assert hasattr(synapps_sdk, name)

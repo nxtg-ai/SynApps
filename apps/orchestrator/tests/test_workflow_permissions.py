@@ -266,7 +266,11 @@ class TestPermissionEnforcement:
 
             resp = client.put(
                 f"/api/v1/flows/{FLOW_ID}",
-                json={"name": "Updated", "nodes": SAMPLE_FLOW["nodes"], "edges": SAMPLE_FLOW["edges"]},
+                json={
+                    "name": "Updated",
+                    "nodes": SAMPLE_FLOW["nodes"],
+                    "edges": SAMPLE_FLOW["edges"],
+                },
                 headers=editor_auth,
             )
             assert resp.status_code == 200  # Gate 2: editor can edit
@@ -287,7 +291,11 @@ class TestPermissionEnforcement:
 
             resp = client.put(
                 f"/api/v1/flows/{FLOW_ID}",
-                json={"name": "Hacked", "nodes": SAMPLE_FLOW["nodes"], "edges": SAMPLE_FLOW["edges"]},
+                json={
+                    "name": "Hacked",
+                    "nodes": SAMPLE_FLOW["nodes"],
+                    "edges": SAMPLE_FLOW["edges"],
+                },
                 headers=viewer_auth,
             )
             assert resp.status_code == 403  # Gate 2: viewer blocked
@@ -303,7 +311,11 @@ class TestPermissionEnforcement:
 
             resp = client.put(
                 f"/api/v1/flows/{FLOW_ID}",
-                json={"name": "Hijack", "nodes": SAMPLE_FLOW["nodes"], "edges": SAMPLE_FLOW["edges"]},
+                json={
+                    "name": "Hijack",
+                    "nodes": SAMPLE_FLOW["nodes"],
+                    "edges": SAMPLE_FLOW["edges"],
+                },
                 headers=stranger_auth,
             )
             assert resp.status_code == 403  # Gate 2: non-member blocked

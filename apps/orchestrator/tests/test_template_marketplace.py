@@ -290,12 +290,15 @@ def test_versions_not_found(client):
 def test_list_templates_endpoint(client):
     """GET /templates lists all imported templates."""
     client.post("/api/v1/templates/import", json=SAMPLE_TEMPLATE)
-    client.post("/api/v1/templates/import", json={
-        "id": "other-pipeline",
-        "name": "Other Pipeline",
-        "nodes": [],
-        "edges": [],
-    })
+    client.post(
+        "/api/v1/templates/import",
+        json={
+            "id": "other-pipeline",
+            "name": "Other Pipeline",
+            "nodes": [],
+            "edges": [],
+        },
+    )
     resp = client.get("/api/v1/templates")
     assert resp.status_code == 200
     data = resp.json()
@@ -427,12 +430,19 @@ def _create_flow(client, name="My Workflow", nodes=None, edges=None):
     """Helper: create a flow and return its ID."""
     flow_data = {
         "name": name,
-        "nodes": nodes or [
+        "nodes": nodes
+        or [
             {"id": "s1", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
-            {"id": "llm1", "type": "llm", "position": {"x": 200, "y": 0}, "data": {"provider": "openai"}},
+            {
+                "id": "llm1",
+                "type": "llm",
+                "position": {"x": 200, "y": 0},
+                "data": {"provider": "openai"},
+            },
             {"id": "e1", "type": "end", "position": {"x": 400, "y": 0}, "data": {}},
         ],
-        "edges": edges or [
+        "edges": edges
+        or [
             {"id": "edge1", "source": "s1", "target": "llm1"},
             {"id": "edge2", "source": "llm1", "target": "e1"},
         ],
@@ -445,13 +455,16 @@ def _create_flow(client, name="My Workflow", nodes=None, edges=None):
 def test_publish_template_from_flow(client):
     """POST /templates publishes a flow as a marketplace template."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "RSS to Slack",
-        "description": "Send RSS feed items to a Slack channel",
-        "category": "notification",
-        "author": "alice",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "RSS to Slack",
+            "description": "Send RSS feed items to a Slack channel",
+            "category": "notification",
+            "author": "alice",
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "RSS to Slack"
@@ -466,12 +479,15 @@ def test_publish_template_from_flow(client):
 def test_publish_template_appears_in_list(client):
     """Published template is discoverable via GET /templates."""
     flow_id = _create_flow(client)
-    client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Data Sync Pipeline",
-        "category": "data-sync",
-        "author": "bob",
-    })
+    client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Data Sync Pipeline",
+            "category": "data-sync",
+            "author": "bob",
+        },
+    )
     resp = client.get("/api/v1/templates?category=data-sync")
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
@@ -480,11 +496,14 @@ def test_publish_template_appears_in_list(client):
 
 def test_publish_template_flow_not_found(client):
     """POST /templates with nonexistent flow_id returns 404."""
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": "nonexistent-flow-id",
-        "name": "Phantom Template",
-        "category": "notification",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": "nonexistent-flow-id",
+            "name": "Phantom Template",
+            "category": "notification",
+        },
+    )
     assert resp.status_code == 404
     assert "not found" in resp.json()["error"]["message"].lower()
 
@@ -492,11 +511,14 @@ def test_publish_template_flow_not_found(client):
 def test_publish_template_invalid_category(client):
     """POST /templates with invalid category returns 422."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Bad Category Template",
-        "category": "invalid-category",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Bad Category Template",
+            "category": "invalid-category",
+        },
+    )
     assert resp.status_code == 422
 
 
@@ -504,12 +526,15 @@ def test_publish_template_all_valid_categories(client):
     """POST /templates accepts all defined marketplace categories."""
     flow_id = _create_flow(client)
     for cat in sorted(MARKETPLACE_CATEGORIES):
-        resp = client.post("/api/v1/templates", json={
-            "flow_id": flow_id,
-            "name": f"Template for {cat}",
-            "category": cat,
-            "author": "test",
-        })
+        resp = client.post(
+            "/api/v1/templates",
+            json={
+                "flow_id": flow_id,
+                "name": f"Template for {cat}",
+                "category": cat,
+                "author": "test",
+            },
+        )
         assert resp.status_code == 201, f"Category '{cat}' should be valid"
         assert resp.json()["metadata"]["category"] == cat
 
@@ -517,11 +542,14 @@ def test_publish_template_all_valid_categories(client):
 def test_publish_template_category_case_insensitive(client):
     """POST /templates normalizes category to lowercase."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Mixed Case",
-        "category": "Notification",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Mixed Case",
+            "category": "Notification",
+        },
+    )
     assert resp.status_code == 201
     assert resp.json()["metadata"]["category"] == "notification"
 
@@ -529,11 +557,14 @@ def test_publish_template_category_case_insensitive(client):
 def test_publish_template_default_author(client):
     """POST /templates defaults author to 'anonymous'."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Anonymous Template",
-        "category": "content",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Anonymous Template",
+            "category": "content",
+        },
+    )
     assert resp.status_code == 201
     assert resp.json()["metadata"]["author"] == "anonymous"
 
@@ -541,12 +572,15 @@ def test_publish_template_default_author(client):
 def test_publish_template_with_explicit_version(client):
     """POST /templates with explicit semver version stores it."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Versioned Template",
-        "category": "monitoring",
-        "version": "2.0.0",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Versioned Template",
+            "category": "monitoring",
+            "version": "2.0.0",
+        },
+    )
     assert resp.status_code == 201
     assert resp.json()["semver"] == "2.0.0"
 
@@ -554,20 +588,26 @@ def test_publish_template_with_explicit_version(client):
 def test_publish_template_missing_name(client):
     """POST /templates without name returns 422."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "category": "devops",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "category": "devops",
+        },
+    )
     assert resp.status_code == 422
 
 
 def test_publish_template_missing_category(client):
     """POST /templates without category returns 422."""
     flow_id = _create_flow(client)
-    resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Missing Category",
-    })
+    resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Missing Category",
+        },
+    )
     assert resp.status_code == 422
 
 
@@ -579,11 +619,14 @@ def test_publish_template_missing_category(client):
 def test_instantiate_template_creates_flow(client):
     """POST /templates/{id}/instantiate creates a new flow from the template."""
     flow_id = _create_flow(client)
-    pub_resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Instantiable Template",
-        "category": "notification",
-    })
+    pub_resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Instantiable Template",
+            "category": "notification",
+        },
+    )
     template_id = pub_resp.json()["id"]
 
     resp = client.post(f"/api/v1/templates/{template_id}/instantiate", json={})
@@ -602,15 +645,18 @@ def test_instantiate_template_creates_flow(client):
 def test_instantiate_template_custom_name(client):
     """POST /templates/{id}/instantiate uses custom flow_name if given."""
     flow_id = _create_flow(client)
-    pub = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Template Name",
-        "category": "devops",
-    }).json()
+    pub = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Template Name",
+            "category": "devops",
+        },
+    ).json()
 
-    resp = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={
-        "flow_name": "My Custom Flow"
-    })
+    resp = client.post(
+        f"/api/v1/templates/{pub['id']}/instantiate", json={"flow_name": "My Custom Flow"}
+    )
     assert resp.status_code == 201
     flow_resp = client.get(f"/api/v1/flows/{resp.json()['flow_id']}")
     assert flow_resp.json()["name"] == "My Custom Flow"
@@ -619,11 +665,14 @@ def test_instantiate_template_custom_name(client):
 def test_instantiate_template_remaps_node_ids(client):
     """Instantiation re-maps all node IDs to avoid collisions."""
     flow_id = _create_flow(client)
-    pub = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "ID Remap Test",
-        "category": "data-sync",
-    }).json()
+    pub = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "ID Remap Test",
+            "category": "data-sync",
+        },
+    ).json()
 
     resp = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={})
     new_flow_id = resp.json()["flow_id"]
@@ -640,11 +689,14 @@ def test_instantiate_template_remaps_node_ids(client):
 def test_instantiate_template_remaps_edge_references(client):
     """Instantiation updates edge source/target to new node IDs."""
     flow_id = _create_flow(client)
-    pub = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Edge Remap Test",
-        "category": "monitoring",
-    }).json()
+    pub = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Edge Remap Test",
+            "category": "monitoring",
+        },
+    ).json()
 
     resp = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={})
     flow = client.get(f"/api/v1/flows/{resp.json()['flow_id']}").json()
@@ -657,21 +709,38 @@ def test_instantiate_template_remaps_edge_references(client):
 
 def test_instantiate_template_with_connector_overrides(client):
     """Instantiation merges connector_overrides into node data."""
-    flow_id = _create_flow(client, nodes=[
-        {"id": "http1", "type": "http", "position": {"x": 0, "y": 0},
-         "data": {"url": "https://placeholder.example.com", "method": "GET"}},
-    ], edges=[])
-    pub = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Override Test",
-        "category": "notification",
-    }).json()
+    flow_id = _create_flow(
+        client,
+        nodes=[
+            {
+                "id": "http1",
+                "type": "http",
+                "position": {"x": 0, "y": 0},
+                "data": {"url": "https://placeholder.example.com", "method": "GET"},
+            },
+        ],
+        edges=[],
+    )
+    pub = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Override Test",
+            "category": "notification",
+        },
+    ).json()
 
-    resp = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={
-        "connector_overrides": {
-            "http1": {"url": "https://my-real-api.example.com", "headers": {"Authorization": "Bearer xyz"}}
-        }
-    })
+    resp = client.post(
+        f"/api/v1/templates/{pub['id']}/instantiate",
+        json={
+            "connector_overrides": {
+                "http1": {
+                    "url": "https://my-real-api.example.com",
+                    "headers": {"Authorization": "Bearer xyz"},
+                }
+            }
+        },
+    )
     assert resp.status_code == 201
     flow = client.get(f"/api/v1/flows/{resp.json()['flow_id']}").json()
     node_data = flow["nodes"][0]["data"]
@@ -691,11 +760,14 @@ def test_instantiate_template_not_found(client):
 def test_instantiate_template_multiple_times(client):
     """Instantiating same template twice creates distinct flows."""
     flow_id = _create_flow(client)
-    pub = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Multi-Instantiate",
-        "category": "content",
-    }).json()
+    pub = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Multi-Instantiate",
+            "category": "content",
+        },
+    ).json()
 
     resp1 = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={})
     resp2 = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={})
@@ -705,11 +777,14 @@ def test_instantiate_template_multiple_times(client):
 def test_instantiate_returns_template_version(client):
     """Instantiate response includes the template version that was used."""
     flow_id = _create_flow(client)
-    pub = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "Version Track",
-        "category": "devops",
-    }).json()
+    pub = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "Version Track",
+            "category": "devops",
+        },
+    ).json()
 
     resp = client.post(f"/api/v1/templates/{pub['id']}/instantiate", json={})
     assert resp.json()["template_version"] == 1
@@ -726,13 +801,16 @@ def test_full_marketplace_roundtrip(client):
     flow_id = _create_flow(client, name="Source Workflow")
 
     # 2) Publish as template
-    pub_resp = client.post("/api/v1/templates", json={
-        "flow_id": flow_id,
-        "name": "RSS to Slack",
-        "description": "Send RSS items to Slack",
-        "category": "notification",
-        "author": "marketplace-test",
-    })
+    pub_resp = client.post(
+        "/api/v1/templates",
+        json={
+            "flow_id": flow_id,
+            "name": "RSS to Slack",
+            "description": "Send RSS items to Slack",
+            "category": "notification",
+            "author": "marketplace-test",
+        },
+    )
     assert pub_resp.status_code == 201
     template_id = pub_resp.json()["id"]
 
@@ -744,9 +822,9 @@ def test_full_marketplace_roundtrip(client):
     assert found[0]["metadata"]["author"] == "marketplace-test"
 
     # 4) Instantiate the template into a new flow
-    inst_resp = client.post(f"/api/v1/templates/{template_id}/instantiate", json={
-        "flow_name": "My RSS to Slack"
-    })
+    inst_resp = client.post(
+        f"/api/v1/templates/{template_id}/instantiate", json={"flow_name": "My RSS to Slack"}
+    )
     assert inst_resp.status_code == 201
     new_flow_id = inst_resp.json()["flow_id"]
 

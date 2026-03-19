@@ -326,8 +326,7 @@ class TestListFailedRequests:
         assert resp.json() == []
 
     def test_returns_failures_after_404(self, client):
-        client.get("/api/v1/nonexistent-for-list-test",
-                    headers={"X-Request-ID": "list-001"})
+        client.get("/api/v1/nonexistent-for-list-test", headers={"X-Request-ID": "list-001"})
         resp = client.get("/api/v1/requests/failed")
         assert resp.status_code == 200
         data = resp.json()
@@ -336,8 +335,7 @@ class TestListFailedRequests:
         assert "list-001" in ids
 
     def test_summary_fields(self, client):
-        client.get("/api/v1/nonexistent-endpoint",
-                    headers={"X-Request-ID": "sum-001"})
+        client.get("/api/v1/nonexistent-endpoint", headers={"X-Request-ID": "sum-001"})
         resp = client.get("/api/v1/requests/failed")
         data = resp.json()
         entry = next(e for e in data if e["request_id"] == "sum-001")
@@ -378,18 +376,20 @@ class TestReplayRequest:
 
     def test_replay_returns_new_response(self, client):
         # Inject a failed request directly
-        failed_request_store.add({
-            "request_id": "replay-001",
-            "timestamp": time.time(),
-            "method": "GET",
-            "path": "/api/v1/health",
-            "request_headers": {"accept": "application/json"},
-            "request_body": "",
-            "response_status": 500,
-            "response_headers": {},
-            "response_body": '{"error": "upstream failed"}',
-            "duration_ms": 10.0,
-        })
+        failed_request_store.add(
+            {
+                "request_id": "replay-001",
+                "timestamp": time.time(),
+                "method": "GET",
+                "path": "/api/v1/health",
+                "request_headers": {"accept": "application/json"},
+                "request_body": "",
+                "response_status": 500,
+                "response_headers": {},
+                "response_body": '{"error": "upstream failed"}',
+                "duration_ms": 10.0,
+            }
+        )
 
         # Mock httpx to simulate a successful replay
         mock_resp = MagicMock()
@@ -423,25 +423,26 @@ class TestReplayRequest:
 
     def test_replay_with_httpx_error(self, client):
         import httpx as _httpx
+
         # Inject a fake entry pointing to an unreachable upstream
-        failed_request_store.add({
-            "request_id": "replay-err-001",
-            "timestamp": time.time(),
-            "method": "GET",
-            "path": "/api/v1/health",
-            "request_headers": {},
-            "request_body": "",
-            "response_status": 500,
-            "response_headers": {},
-            "response_body": "",
-            "duration_ms": 10.0,
-        })
+        failed_request_store.add(
+            {
+                "request_id": "replay-err-001",
+                "timestamp": time.time(),
+                "method": "GET",
+                "path": "/api/v1/health",
+                "request_headers": {},
+                "request_body": "",
+                "response_status": 500,
+                "response_headers": {},
+                "response_body": "",
+                "duration_ms": 10.0,
+            }
+        )
         # Patch httpx to fail with a connection error
         with patch("apps.orchestrator.main.httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
-            mock_client.request = AsyncMock(
-                side_effect=_httpx.ConnectError("connection refused")
-            )
+            mock_client.request = AsyncMock(side_effect=_httpx.ConnectError("connection refused"))
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_cls.return_value = mock_client
@@ -635,30 +636,31 @@ class TestEdgeCases:
     def test_multiple_failures_same_session(self, client):
         """Multiple failures in rapid succession are all captured."""
         for i in range(10):
-            client.get(f"/api/v1/no-such-{i}",
-                        headers={"X-Request-ID": f"multi-{i}"})
+            client.get(f"/api/v1/no-such-{i}", headers={"X-Request-ID": f"multi-{i}"})
         for i in range(10):
             assert failed_request_store.get(f"multi-{i}") is not None
 
     def test_replay_strips_hop_by_hop_headers(self):
         """Replay should strip host, content-length, transfer-encoding."""
-        failed_request_store.add({
-            "request_id": "hop-test",
-            "timestamp": time.time(),
-            "method": "GET",
-            "path": "/api/v1/health",
-            "request_headers": {
-                "host": "original.example.com",
-                "content-length": "42",
-                "transfer-encoding": "chunked",
-                "accept": "application/json",
-            },
-            "request_body": "",
-            "response_status": 500,
-            "response_headers": {},
-            "response_body": "",
-            "duration_ms": 5.0,
-        })
+        failed_request_store.add(
+            {
+                "request_id": "hop-test",
+                "timestamp": time.time(),
+                "method": "GET",
+                "path": "/api/v1/health",
+                "request_headers": {
+                    "host": "original.example.com",
+                    "content-length": "42",
+                    "transfer-encoding": "chunked",
+                    "accept": "application/json",
+                },
+                "request_body": "",
+                "response_status": 500,
+                "response_headers": {},
+                "response_body": "",
+                "duration_ms": 5.0,
+            }
+        )
         entry = failed_request_store.get("hop-test")
         assert entry is not None
         # The route handler should strip these — we verify via the store's raw headers

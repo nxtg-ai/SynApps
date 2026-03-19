@@ -4,6 +4,7 @@ Database and API models for the SynApps orchestrator.
 This module defines SQLAlchemy ORM models for database persistence
 and Pydantic models for API validation.
 """
+
 from __future__ import annotations
 
 import time
@@ -421,9 +422,7 @@ class LLMNodeConfigModel(BaseModel):
     def validate_provider(cls, value: str) -> str:
         provider = value.strip().lower()
         if provider not in SUPPORTED_LLM_PROVIDERS:
-            raise ValueError(
-                f"provider must be one of: {', '.join(SUPPORTED_LLM_PROVIDERS)}"
-            )
+            raise ValueError(f"provider must be one of: {', '.join(SUPPORTED_LLM_PROVIDERS)}")
         return provider
 
 
@@ -517,9 +516,7 @@ class ImageGenNodeConfigModel(BaseModel):
     def validate_provider(cls, value: str) -> str:
         provider = value.strip().lower()
         if provider not in SUPPORTED_IMAGE_PROVIDERS:
-            raise ValueError(
-                f"provider must be one of: {', '.join(SUPPORTED_IMAGE_PROVIDERS)}"
-            )
+            raise ValueError(f"provider must be one of: {', '.join(SUPPORTED_IMAGE_PROVIDERS)}")
         return provider
 
     @field_validator("response_format")
@@ -617,9 +614,7 @@ class MemoryNodeConfigModel(BaseModel):
     def validate_backend(cls, value: str) -> str:
         backend = value.strip().lower()
         if backend not in SUPPORTED_MEMORY_BACKENDS:
-            raise ValueError(
-                f"backend must be one of: {', '.join(SUPPORTED_MEMORY_BACKENDS)}"
-            )
+            raise ValueError(f"backend must be one of: {', '.join(SUPPORTED_MEMORY_BACKENDS)}")
         return backend
 
     @field_validator("query")
@@ -689,9 +684,7 @@ class HTTPRequestNodeConfigModel(BaseModel):
     def validate_method(cls, value: str) -> str:
         method = value.strip().upper()
         if method not in SUPPORTED_HTTP_METHODS:
-            raise ValueError(
-                f"method must be one of: {', '.join(SUPPORTED_HTTP_METHODS)}"
-            )
+            raise ValueError(f"method must be one of: {', '.join(SUPPORTED_HTTP_METHODS)}")
         return method
 
     @field_validator("body_type")
@@ -742,9 +735,7 @@ class CodeNodeConfigModel(BaseModel):
         }
         normalized = alias_map.get(normalized, normalized)
         if normalized not in SUPPORTED_CODE_LANGUAGES:
-            raise ValueError(
-                f"language must be one of: {', '.join(SUPPORTED_CODE_LANGUAGES)}"
-            )
+            raise ValueError(f"language must be one of: {', '.join(SUPPORTED_CODE_LANGUAGES)}")
         return normalized
 
     @field_validator("working_dir")
@@ -876,9 +867,7 @@ class IfElseNodeConfigModel(BaseModel):
         }
         normalized = alias_map.get(normalized, normalized)
         if normalized not in SUPPORTED_IF_ELSE_OPERATIONS:
-            raise ValueError(
-                f"operation must be one of: {', '.join(SUPPORTED_IF_ELSE_OPERATIONS)}"
-            )
+            raise ValueError(f"operation must be one of: {', '.join(SUPPORTED_IF_ELSE_OPERATIONS)}")
         return normalized
 
     @field_validator("regex_flags")
@@ -941,9 +930,7 @@ class MergeNodeConfigModel(BaseModel):
         }
         normalized = alias_map.get(normalized, normalized)
         if normalized not in SUPPORTED_MERGE_STRATEGIES:
-            raise ValueError(
-                f"strategy must be one of: {', '.join(SUPPORTED_MERGE_STRATEGIES)}"
-            )
+            raise ValueError(f"strategy must be one of: {', '.join(SUPPORTED_MERGE_STRATEGIES)}")
         return normalized
 
 

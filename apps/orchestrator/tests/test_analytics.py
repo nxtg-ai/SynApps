@@ -105,9 +105,7 @@ class TestAnalyticsServiceWorkflows:
     @pytest.mark.asyncio
     async def test_single_run_error_increments_error_count(self, db):
         flow_id = f"flow-{uuid.uuid4().hex[:8]}"
-        await WorkflowRunRepository.save(
-            _run_data(flow_id=flow_id, status="error", error="boom")
-        )
+        await WorkflowRunRepository.save(_run_data(flow_id=flow_id, status="error", error="boom"))
 
         result = await AnalyticsService.get_workflow_analytics()
         assert isinstance(result, list)
@@ -444,7 +442,9 @@ class TestAnalyticsNodesEndpoint:
         fid_a = f"flow-na-{uuid.uuid4().hex[:6]}"
         fid_b = f"flow-nb-{uuid.uuid4().hex[:6]}"
         await WorkflowRunRepository.save(
-            _run_data(flow_id=fid_a, status="success", results={"node-alpha": {"status": "success"}})
+            _run_data(
+                flow_id=fid_a, status="success", results={"node-alpha": {"status": "success"}}
+            )
         )
         await WorkflowRunRepository.save(
             _run_data(flow_id=fid_b, status="success", results={"node-beta": {"status": "success"}})

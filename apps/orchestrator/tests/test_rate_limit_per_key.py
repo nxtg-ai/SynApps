@@ -126,7 +126,7 @@ def test_per_key_rate_limit_enforced(client):
 
     for i in range(3):
         resp = client.get("/api/v1/flows", headers=headers)
-        assert resp.status_code == 200, f"Request {i+1} should succeed"
+        assert resp.status_code == 200, f"Request {i + 1} should succeed"
 
     # 4th request should be rate limited
     resp = client.get("/api/v1/flows", headers=headers)

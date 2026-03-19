@@ -18,31 +18,39 @@ def client():
 async def _create_flow(name="Test Flow"):
     """Helper to create a flow and return its dict."""
     import uuid
+
     uid = uuid.uuid4().hex[:8]
-    return await FlowRepository.save({
-        "name": name,
-        "nodes": [
-            {"id": f"start-{uid}", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
-            {"id": f"end-{uid}", "type": "end", "position": {"x": 0, "y": 100}, "data": {}},
-        ],
-        "edges": [{"id": f"e-{uid}", "source": f"start-{uid}", "target": f"end-{uid}"}],
-    })
+    return await FlowRepository.save(
+        {
+            "name": name,
+            "nodes": [
+                {"id": f"start-{uid}", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
+                {"id": f"end-{uid}", "type": "end", "position": {"x": 0, "y": 100}, "data": {}},
+            ],
+            "edges": [{"id": f"e-{uid}", "source": f"start-{uid}", "target": f"end-{uid}"}],
+        }
+    )
 
 
 async def _create_run(flow_id, status="success", start_time=None, input_data=None):
     """Helper to create a run and return its dict."""
     import uuid
-    return await WorkflowRunRepository.save({
-        "run_id": str(uuid.uuid4()),
-        "flow_id": flow_id,
-        "status": status,
-        "start_time": start_time or time.time(),
-        "end_time": (start_time or time.time()) + 1.5 if status in ("success", "error") else None,
-        "input_data": input_data or {"text": "hello"},
-        "results": {},
-        "total_steps": 2,
-        "progress": 2 if status == "success" else 0,
-    })
+
+    return await WorkflowRunRepository.save(
+        {
+            "run_id": str(uuid.uuid4()),
+            "flow_id": flow_id,
+            "status": status,
+            "start_time": start_time or time.time(),
+            "end_time": (start_time or time.time()) + 1.5
+            if status in ("success", "error")
+            else None,
+            "input_data": input_data or {"text": "hello"},
+            "results": {},
+            "total_steps": 2,
+            "progress": 2 if status == "success" else 0,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -264,16 +272,18 @@ def test_history_detail_not_found(client):
 async def test_history_detail_error_run(client):
     """GET /history/{run_id} for a failed run includes error info."""
     flow = await _create_flow("Error Flow")
-    await WorkflowRunRepository.save({
-        "run_id": "err-run-123",
-        "flow_id": flow["id"],
-        "status": "error",
-        "start_time": time.time(),
-        "end_time": time.time() + 0.5,
-        "input_data": {},
-        "results": {},
-        "error": "Node 'llm' timed out after 30s",
-    })
+    await WorkflowRunRepository.save(
+        {
+            "run_id": "err-run-123",
+            "flow_id": flow["id"],
+            "status": "error",
+            "start_time": time.time(),
+            "end_time": time.time() + 0.5,
+            "input_data": {},
+            "results": {},
+            "error": "Node 'llm' timed out after 30s",
+        }
+    )
 
     resp = client.get("/api/v1/history/err-run-123")
     data = resp.json()

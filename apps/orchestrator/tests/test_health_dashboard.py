@@ -30,8 +30,8 @@ def client():
 # Ring Buffer unit tests
 # ---------------------------------------------------------------------------
 
-class TestMetricsRingBuffer:
 
+class TestMetricsRingBuffer:
     def test_push_and_query_all(self):
         buf = _MetricsRingBuffer(capacity=5)
         now = time.time()
@@ -45,7 +45,7 @@ class TestMetricsRingBuffer:
         now = time.time()
         buf.push(1.0, ts=now - 7200)  # 2h ago — outside 1h window
         buf.push(2.0, ts=now - 1800)  # 30min ago — inside 1h window
-        buf.push(3.0, ts=now)          # now — inside
+        buf.push(3.0, ts=now)  # now — inside
         values = buf.query(3600)
         assert values == [2.0, 3.0]
 
@@ -106,8 +106,8 @@ class TestMetricsRingBuffer:
 # Metrics Collector unit tests
 # ---------------------------------------------------------------------------
 
-class TestMetricsCollector:
 
+class TestMetricsCollector:
     def test_record_request_increments_total(self):
         m = _MetricsCollector(ring_capacity=100)
         m.record_request(10.0, 200, "/test")
@@ -222,8 +222,8 @@ class TestMetricsCollector:
 # Health endpoint tests
 # ---------------------------------------------------------------------------
 
-class TestHealthEndpoint:
 
+class TestHealthEndpoint:
     def test_health_returns_healthy(self, client):
         resp = client.get("/api/v1/health")
         assert resp.status_code == 200
@@ -257,8 +257,8 @@ class TestHealthEndpoint:
 # Health detailed endpoint tests
 # ---------------------------------------------------------------------------
 
-class TestHealthDetailedEndpoint:
 
+class TestHealthDetailedEndpoint:
     def test_detailed_health_structure(self, client):
         resp = client.get("/api/v1/health/detailed")
         assert resp.status_code == 200
@@ -282,8 +282,8 @@ class TestHealthDetailedEndpoint:
 # Metrics endpoint tests
 # ---------------------------------------------------------------------------
 
-class TestMetricsEndpoint:
 
+class TestMetricsEndpoint:
     def test_metrics_returns_requests_block(self, client):
         resp = client.get("/api/v1/metrics")
         assert resp.status_code == 200

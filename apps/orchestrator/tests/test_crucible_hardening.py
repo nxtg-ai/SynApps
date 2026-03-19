@@ -9,6 +9,7 @@ Covers:
   - HTTP node: edge-case config and response handling
   - LLM provider registry structure invariants
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -88,6 +89,7 @@ class TestFernetDecryptLogging:
         the module-level logger directly and assert it was called.
         """
         import apps.orchestrator.main as _main
+
         enc, dec = _get_fernet_encrypt()
         with patch.object(_main.logger, "debug") as mock_debug:
             result = dec("not-valid-base64-fernet-token!!!")
@@ -226,6 +228,7 @@ class TestHTTPNodeConfigEdgeCases:
     async def test_delete_method_accepted(self, applet):
         """DELETE method must be accepted and issued."""
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 204
         mock_resp.is_success = True
@@ -251,6 +254,7 @@ class TestHTTPNodeConfigEdgeCases:
     async def test_put_method_with_json_body(self, applet):
         """PUT with a JSON body must serialize body and set content-type."""
         import httpx
+
         captured = {}
 
         mock_resp = MagicMock(spec=httpx.Response)
@@ -272,12 +276,14 @@ class TestHTTPNodeConfigEdgeCases:
             mock_client.request = AsyncMock(side_effect=capture_request)
             mock_cls.return_value = mock_client
 
-            msg = self._msg({
-                "url": "https://api.example.com/resource/1",
-                "method": "PUT",
-                "body_template": {"name": "updated"},
-                "body_type": "json",
-            })
+            msg = self._msg(
+                {
+                    "url": "https://api.example.com/resource/1",
+                    "method": "PUT",
+                    "body_template": {"name": "updated"},
+                    "body_type": "json",
+                }
+            )
             result = await applet.on_message(msg)
 
         assert result.content.get("ok") is True
@@ -287,6 +293,7 @@ class TestHTTPNodeConfigEdgeCases:
     async def test_zero_retries_no_retry_on_5xx(self, applet):
         """With max_retries=0, a single 500 must be returned immediately (no retry)."""
         import httpx
+
         call_count = 0
 
         mock_resp = MagicMock(spec=httpx.Response)
@@ -309,7 +316,9 @@ class TestHTTPNodeConfigEdgeCases:
             mock_client.request = AsyncMock(side_effect=always_500)
             mock_cls.return_value = mock_client
 
-            msg = self._msg({"url": "https://api.example.com/fail", "method": "GET", "max_retries": 0})
+            msg = self._msg(
+                {"url": "https://api.example.com/fail", "method": "GET", "max_retries": 0}
+            )
             result = await applet.on_message(msg)
 
         assert call_count == 1
@@ -336,6 +345,7 @@ class TestHTTPNodeAPIKeyHeader:
     async def test_api_key_custom_header_injected(self, applet):
         """api_key auth_type must inject key into the named header."""
         import httpx
+
         captured_kwargs = {}
 
         mock_resp = MagicMock(spec=httpx.Response)
@@ -357,13 +367,15 @@ class TestHTTPNodeAPIKeyHeader:
             mock_client.request = AsyncMock(side_effect=capture)
             mock_cls.return_value = mock_client
 
-            msg = self._msg({
-                "url": "https://api.example.com/data",
-                "method": "GET",
-                "auth_type": "api_key",
-                "auth_value": "my-api-key-value",
-                "auth_header_name": "X-Custom-Key",
-            })
+            msg = self._msg(
+                {
+                    "url": "https://api.example.com/data",
+                    "method": "GET",
+                    "auth_type": "api_key",
+                    "auth_value": "my-api-key-value",
+                    "auth_header_name": "X-Custom-Key",
+                }
+            )
             result = await applet.on_message(msg)
 
         headers = captured_kwargs.get("headers", {})
@@ -392,11 +404,13 @@ class TestHTTPNodeAPIKeyHeader:
             mock_client.request = AsyncMock(return_value=mock_resp)
             mock_cls.return_value = mock_client
 
-            msg = self._msg({
-                "url": "https://api.example.com/data",
-                "method": "GET",
-                "auth_type": "none",
-            })
+            msg = self._msg(
+                {
+                    "url": "https://api.example.com/data",
+                    "method": "GET",
+                    "auth_type": "none",
+                }
+            )
             result = await applet.on_message(msg)
 
         assert result.content.get("ok") is True
@@ -481,6 +495,7 @@ class TestHTTPNodeResponseHeaders:
     async def test_headers_included_by_default(self, applet):
         """include_response_headers=True (default) should include headers in output."""
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 200
         mock_resp.is_success = True
@@ -505,6 +520,7 @@ class TestHTTPNodeResponseHeaders:
     async def test_headers_excluded_when_disabled(self, applet):
         """include_response_headers=False should omit headers from output."""
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 200
         mock_resp.is_success = True
@@ -520,11 +536,13 @@ class TestHTTPNodeResponseHeaders:
             mock_client.request = AsyncMock(return_value=mock_resp)
             mock_cls.return_value = mock_client
 
-            msg = self._msg({
-                "url": "https://api.example.com/",
-                "method": "GET",
-                "include_response_headers": False,
-            })
+            msg = self._msg(
+                {
+                    "url": "https://api.example.com/",
+                    "method": "GET",
+                    "include_response_headers": False,
+                }
+            )
             result = await applet.on_message(msg)
 
         assert "headers" not in result.content
@@ -546,6 +564,7 @@ class TestHTTPNodeContextPropagation:
     async def test_last_http_response_in_context(self, applet):
         """A successful HTTP call must populate context['last_http_response']."""
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 200
         mock_resp.is_success = True
@@ -577,6 +596,7 @@ class TestHTTPNodeContextPropagation:
     async def test_original_context_preserved(self, applet):
         """Existing context keys must be preserved after HTTP call."""
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 200
         mock_resp.is_success = True

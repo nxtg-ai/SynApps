@@ -246,7 +246,9 @@ class TestNotificationsOnFlow:
             client.post("/api/v1/flows", json=E2E_FLOW)
             client.put(
                 f"/api/v1/workflows/{E2E_FLOW['id']}/notifications",
-                json={"on_complete": [{"type": "slack", "webhook_url": "https://hooks.slack.com/x"}]},
+                json={
+                    "on_complete": [{"type": "slack", "webhook_url": "https://hooks.slack.com/x"}]
+                },
             )
             resp = client.get(f"/api/v1/workflows/{E2E_FLOW['id']}/notifications")
             assert resp.status_code == 200
@@ -293,20 +295,25 @@ class TestWebhookExecutionWithLogsAndNotifications:
             assert trigger_id  # Gate 2: trigger ID returned
 
             # 5. Fire via webhook receive
-            with patch(
-                "apps.orchestrator.main.LLMNodeApplet.on_message",
-                new_callable=AsyncMock,
-                return_value=_MOCK_LLM,
-            ), patch(
-                "apps.orchestrator.main.HTTPRequestNodeApplet.on_message",
-                new_callable=AsyncMock,
-                return_value=_MOCK_HTTP,
-            ), patch(
-                "apps.orchestrator.main.broadcast_status",
-                new_callable=AsyncMock,
-            ), patch(
-                "apps.orchestrator.main.NotificationService._send_webhook",
-                new_callable=AsyncMock,
+            with (
+                patch(
+                    "apps.orchestrator.main.LLMNodeApplet.on_message",
+                    new_callable=AsyncMock,
+                    return_value=_MOCK_LLM,
+                ),
+                patch(
+                    "apps.orchestrator.main.HTTPRequestNodeApplet.on_message",
+                    new_callable=AsyncMock,
+                    return_value=_MOCK_HTTP,
+                ),
+                patch(
+                    "apps.orchestrator.main.broadcast_status",
+                    new_callable=AsyncMock,
+                ),
+                patch(
+                    "apps.orchestrator.main.NotificationService._send_webhook",
+                    new_callable=AsyncMock,
+                ),
             ):
                 resp = client.post(
                     f"/api/v1/webhook-triggers/{trigger_id}/receive",

@@ -101,26 +101,34 @@ class TestTokenBucket:
 
 class TestTokenBucketRegistry:
     def test_creates_bucket_on_first_access(self):
-        reg = TokenBucketRegistry(default_rate=1.0, default_burst=5, global_rate=10.0, global_burst=50)
+        reg = TokenBucketRegistry(
+            default_rate=1.0, default_burst=5, global_rate=10.0, global_burst=50
+        )
         bucket = reg.get_or_create("key1")
         assert isinstance(bucket, TokenBucket)
 
     def test_reuses_existing_bucket(self):
-        reg = TokenBucketRegistry(default_rate=1.0, default_burst=5, global_rate=10.0, global_burst=50)
+        reg = TokenBucketRegistry(
+            default_rate=1.0, default_burst=5, global_rate=10.0, global_burst=50
+        )
         b1 = reg.get_or_create("key1")
         b2 = reg.get_or_create("key1")
         assert b1 is b2
 
     def test_different_keys_get_different_buckets(self):
-        reg = TokenBucketRegistry(default_rate=1.0, default_burst=5, global_rate=10.0, global_burst=50)
+        reg = TokenBucketRegistry(
+            default_rate=1.0, default_burst=5, global_rate=10.0, global_burst=50
+        )
         b1 = reg.get_or_create("key1")
         b2 = reg.get_or_create("key2")
         assert b1 is not b2
 
     def test_consume_checks_per_key(self):
         reg = TokenBucketRegistry(
-            default_rate=0.0, default_burst=2,
-            global_rate=100.0, global_burst=1000,
+            default_rate=0.0,
+            default_burst=2,
+            global_rate=100.0,
+            global_burst=1000,
         )
         # First two succeed
         ok1, _, _, _ = reg.consume("k1")
@@ -134,8 +142,10 @@ class TestTokenBucketRegistry:
 
     def test_consume_checks_global(self):
         reg = TokenBucketRegistry(
-            default_rate=100.0, default_burst=1000,
-            global_rate=0.0, global_burst=2,
+            default_rate=100.0,
+            default_burst=1000,
+            global_rate=0.0,
+            global_burst=2,
         )
         # First two succeed (global has 2 tokens)
         ok1, _, _, _ = reg.consume("k1")
@@ -149,8 +159,10 @@ class TestTokenBucketRegistry:
 
     def test_global_refunds_on_per_key_reject(self):
         reg = TokenBucketRegistry(
-            default_rate=0.0, default_burst=1,
-            global_rate=0.0, global_burst=10,
+            default_rate=0.0,
+            default_burst=1,
+            global_rate=0.0,
+            global_burst=10,
         )
         # Consume once per-key (succeeds for both global + key)
         reg.consume("k1")
@@ -163,7 +175,9 @@ class TestTokenBucketRegistry:
         assert global_after >= global_before
 
     def test_reset_clears_all(self):
-        reg = TokenBucketRegistry(default_rate=0.0, default_burst=5, global_rate=0.0, global_burst=5)
+        reg = TokenBucketRegistry(
+            default_rate=0.0, default_burst=5, global_rate=0.0, global_burst=5
+        )
         reg.consume("k1")
         reg.consume("k1")
         reg.reset()
@@ -173,8 +187,10 @@ class TestTokenBucketRegistry:
 
     def test_custom_rate_for_key(self):
         reg = TokenBucketRegistry(
-            default_rate=0.0, default_burst=1,
-            global_rate=100.0, global_burst=1000,
+            default_rate=0.0,
+            default_burst=1,
+            global_rate=100.0,
+            global_burst=1000,
         )
         # Create with custom high rate
         reg.consume("fast-key", rate=100.0, burst=50)
@@ -233,8 +249,10 @@ class TestMiddlewareTokenBucket:
         """When global bucket is exhausted, 429 is returned."""
         # Tiny global bucket, generous per-key
         tight = TokenBucketRegistry(
-            default_rate=100.0, default_burst=1000,
-            global_rate=0.0, global_burst=2,
+            default_rate=100.0,
+            default_burst=1000,
+            global_rate=0.0,
+            global_burst=2,
         )
         monkeypatch.setattr("apps.orchestrator.middleware.rate_limiter._token_buckets", tight)
 
@@ -255,8 +273,10 @@ class TestMiddlewareTokenBucket:
     def test_per_key_bucket_enforced(self, monkeypatch):
         """When per-key bucket is exhausted, 429 is returned."""
         tight = TokenBucketRegistry(
-            default_rate=0.0, default_burst=2,
-            global_rate=100.0, global_burst=1000,
+            default_rate=0.0,
+            default_burst=2,
+            global_rate=100.0,
+            global_burst=1000,
         )
         monkeypatch.setattr("apps.orchestrator.middleware.rate_limiter._token_buckets", tight)
 
@@ -274,8 +294,10 @@ class TestMiddlewareTokenBucket:
 
     def test_429_from_token_bucket_has_retry_after(self, monkeypatch):
         tight = TokenBucketRegistry(
-            default_rate=0.0, default_burst=1,
-            global_rate=100.0, global_burst=1000,
+            default_rate=0.0,
+            default_burst=1,
+            global_rate=100.0,
+            global_burst=1000,
         )
         monkeypatch.setattr("apps.orchestrator.middleware.rate_limiter._token_buckets", tight)
 
@@ -291,8 +313,10 @@ class TestMiddlewareTokenBucket:
     def test_exempt_paths_bypass_token_bucket(self, monkeypatch):
         """Health endpoint should not be rate limited even with tiny bucket."""
         tight = TokenBucketRegistry(
-            default_rate=0.0, default_burst=0,
-            global_rate=0.0, global_burst=0,
+            default_rate=0.0,
+            default_burst=0,
+            global_rate=0.0,
+            global_burst=0,
         )
         monkeypatch.setattr("apps.orchestrator.middleware.rate_limiter._token_buckets", tight)
 
@@ -313,8 +337,10 @@ class TestMiddlewareTokenBucket:
 
     def test_429_global_includes_all_headers(self, monkeypatch):
         tight = TokenBucketRegistry(
-            default_rate=100.0, default_burst=1000,
-            global_rate=0.0, global_burst=1,
+            default_rate=100.0,
+            default_burst=1000,
+            global_rate=0.0,
+            global_burst=1,
         )
         monkeypatch.setattr("apps.orchestrator.middleware.rate_limiter._token_buckets", tight)
 

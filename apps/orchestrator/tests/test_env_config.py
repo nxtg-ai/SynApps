@@ -258,6 +258,7 @@ def test_dotenv_loaded():
     # The main module imports and calls load_dotenv at module level.
     # If .env or .env.development exists, BACKEND_CORS_ORIGINS should be set.
     from apps.orchestrator.main import env_path
+
     if env_path.exists():
         # The env file was loaded — CORS origins should be set
         cors = os.environ.get("BACKEND_CORS_ORIGINS", "")

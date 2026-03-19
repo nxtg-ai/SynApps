@@ -196,13 +196,16 @@ class TestLogEventsEmittedDuringRun:
             resp = client.post("/api/v1/flows", json=flow)
             assert resp.status_code == 201
 
-            with patch(
-                "apps.orchestrator.main.LLMNodeApplet.on_message",
-                new_callable=AsyncMock,
-                return_value=_MOCK_LLM,
-            ), patch(
-                "apps.orchestrator.main.broadcast_status",
-                new_callable=AsyncMock,
+            with (
+                patch(
+                    "apps.orchestrator.main.LLMNodeApplet.on_message",
+                    new_callable=AsyncMock,
+                    return_value=_MOCK_LLM,
+                ),
+                patch(
+                    "apps.orchestrator.main.broadcast_status",
+                    new_callable=AsyncMock,
+                ),
             ):
                 resp = client.post(
                     f"/api/v1/flows/{flow['id']}/runs",
@@ -300,11 +303,14 @@ class TestGetExecutionLogsEndpoint:
             flow = {**_LLM_FLOW, "id": f"log-order-{uuid.uuid4().hex[:8]}"}
             client.post("/api/v1/flows", json=flow)
 
-            with patch(
-                "apps.orchestrator.main.LLMNodeApplet.on_message",
-                new_callable=AsyncMock,
-                return_value=_MOCK_LLM,
-            ), patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
+            with (
+                patch(
+                    "apps.orchestrator.main.LLMNodeApplet.on_message",
+                    new_callable=AsyncMock,
+                    return_value=_MOCK_LLM,
+                ),
+                patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock),
+            ):
                 resp = client.post(
                     f"/api/v1/flows/{flow['id']}/runs",
                     json={"input": {}},
@@ -316,7 +322,9 @@ class TestGetExecutionLogsEndpoint:
             logs = resp.json()["logs"]
             assert len(logs) >= 2  # Gate 2: need at least 2 to check order
             timestamps = [e["timestamp"] for e in logs]
-            assert timestamps == sorted(timestamps), "Log entries must be in ascending timestamp order"
+            assert timestamps == sorted(timestamps), (
+                "Log entries must be in ascending timestamp order"
+            )
 
 
 # ===========================================================================

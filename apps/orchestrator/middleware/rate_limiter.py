@@ -32,25 +32,27 @@ RATE_LIMIT_ANONYMOUS = int(os.environ.get("RATE_LIMIT_ANONYMOUS", "30"))
 # Token bucket defaults
 TOKEN_BUCKET_RATE = int(os.environ.get("TOKEN_BUCKET_RATE", "60"))  # tokens/min per key
 TOKEN_BUCKET_BURST = int(os.environ.get("TOKEN_BUCKET_BURST", "10"))  # extra burst tokens
-TOKEN_BUCKET_GLOBAL_RATE = int(os.environ.get("TOKEN_BUCKET_GLOBAL_RATE", "300"))  # tokens/min global
+TOKEN_BUCKET_GLOBAL_RATE = int(
+    os.environ.get("TOKEN_BUCKET_GLOBAL_RATE", "300")
+)  # tokens/min global
 TOKEN_BUCKET_GLOBAL_BURST = int(os.environ.get("TOKEN_BUCKET_GLOBAL_BURST", "50"))  # global burst
 
 # Paths that are exempt from rate limiting (health checks, docs)
-EXEMPT_PATHS = frozenset({
-    "/",
-    "/health",
-    "/api/v1/health",
-    "/api/v1/health/detailed",
-    "/api/v1/connectors/health",
-    "/api/v1/docs",
-    "/api/v1/redoc",
-    "/api/v1/openapi.json",
-})
+EXEMPT_PATHS = frozenset(
+    {
+        "/",
+        "/health",
+        "/api/v1/health",
+        "/api/v1/health/detailed",
+        "/api/v1/connectors/health",
+        "/api/v1/docs",
+        "/api/v1/redoc",
+        "/api/v1/openapi.json",
+    }
+)
 
 # Prefix-based exemptions (for dynamic path segments like /requests/{id}/replay)
-EXEMPT_PATH_PREFIXES: tuple = (
-    "/api/v1/requests/",
-)
+EXEMPT_PATH_PREFIXES: tuple = ("/api/v1/requests/",)
 
 _TIER_LIMITS: dict[str, int] = {
     "free": RATE_LIMIT_FREE,
@@ -72,9 +74,7 @@ class _SlidingWindowCounter:
         # key -> deque of timestamps
         self._windows: dict[str, deque[float]] = defaultdict(deque)
 
-    def check_and_record(
-        self, key: str, limit: int, window: int
-    ) -> tuple[bool, int, int]:
+    def check_and_record(self, key: str, limit: int, window: int) -> tuple[bool, int, int]:
         """Check whether request is allowed and record it.
 
         Returns (allowed, remaining, retry_after_seconds).
@@ -102,9 +102,7 @@ class _SlidingWindowCounter:
         now = time.monotonic()
         cutoff = now - window
         with self._lock:
-            stale_keys = [
-                k for k, q in self._windows.items() if not q or q[-1] <= cutoff
-            ]
+            stale_keys = [k for k, q in self._windows.items() if not q or q[-1] <= cutoff]
             for k in stale_keys:
                 del self._windows[k]
 
@@ -184,16 +182,22 @@ class TokenBucketRegistry:
         self._buckets: dict[str, TokenBucket] = {}
         self.global_bucket = TokenBucket(rate=global_rate, burst=global_burst)
 
-    def get_or_create(self, key: str, rate: float | None = None, burst: int | None = None) -> TokenBucket:
+    def get_or_create(
+        self, key: str, rate: float | None = None, burst: int | None = None
+    ) -> TokenBucket:
         with self._lock:
             if key not in self._buckets:
                 self._buckets[key] = TokenBucket(
                     rate=rate if rate is not None else self.default_rate,
-                    burst=burst if burst is not None else self.default_burst + int((rate or self.default_rate) * 60),
+                    burst=burst
+                    if burst is not None
+                    else self.default_burst + int((rate or self.default_rate) * 60),
                 )
             return self._buckets[key]
 
-    def consume(self, key: str, rate: float | None = None, burst: int | None = None) -> tuple[bool, float, float, str]:
+    def consume(
+        self, key: str, rate: float | None = None, burst: int | None = None
+    ) -> tuple[bool, float, float, str]:
         """Consume a token from both the per-key and global buckets.
 
         Returns ``(allowed, remaining, retry_after, limited_by)`` where
@@ -311,9 +315,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         # Attach rate-limit info headers to successful responses
         response.headers["X-RateLimit-Limit"] = str(limit)
         response.headers["X-RateLimit-Remaining"] = str(sw_remaining)
-        response.headers["X-RateLimit-Reset"] = str(
-            int(time.time()) + window
-        )
+        response.headers["X-RateLimit-Reset"] = str(int(time.time()) + window)
 
         return response
 

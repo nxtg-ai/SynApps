@@ -46,8 +46,8 @@ def _reset_tracker():
 # ConnectorStatus enum
 # ---------------------------------------------------------------------------
 
-class TestConnectorStatus:
 
+class TestConnectorStatus:
     def test_values(self):
         assert ConnectorStatus.HEALTHY == "healthy"
         assert ConnectorStatus.DEGRADED == "degraded"
@@ -58,8 +58,8 @@ class TestConnectorStatus:
 # ConnectorHealthTracker unit tests
 # ---------------------------------------------------------------------------
 
-class TestConnectorHealthTracker:
 
+class TestConnectorHealthTracker:
     def test_new_connector_is_healthy(self):
         t = ConnectorHealthTracker()
         s = t.get_status("test")
@@ -177,8 +177,8 @@ class TestConnectorHealthTracker:
 # probe_connector() tests
 # ---------------------------------------------------------------------------
 
-class TestProbeConnector:
 
+class TestProbeConnector:
     @pytest.mark.asyncio
     async def test_probe_configured_provider(self):
         """Probing a provider with a valid API key should return reachable=True."""
@@ -194,6 +194,7 @@ class TestProbeConnector:
         with patch.dict("os.environ", {}, clear=False):
             # Remove the key if present
             import os
+
             old = os.environ.pop("OPENAI_API_KEY", None)
             try:
                 result = await probe_connector("openai")
@@ -224,8 +225,8 @@ class TestProbeConnector:
 # probe_all_connectors() tests
 # ---------------------------------------------------------------------------
 
-class TestProbeAllConnectors:
 
+class TestProbeAllConnectors:
     @pytest.mark.asyncio
     async def test_returns_all_known_connectors(self):
         connector_health.reset()
@@ -252,8 +253,8 @@ class TestProbeAllConnectors:
 # GET /connectors/health endpoint
 # ---------------------------------------------------------------------------
 
-class TestConnectorsHealthEndpoint:
 
+class TestConnectorsHealthEndpoint:
     def test_returns_200(self, client):
         resp = client.get("/api/v1/connectors/health")
         assert resp.status_code == 200
@@ -297,8 +298,8 @@ class TestConnectorsHealthEndpoint:
 # POST /connectors/{name}/probe endpoint
 # ---------------------------------------------------------------------------
 
-class TestProbeEndpoint:
 
+class TestProbeEndpoint:
     def test_probe_known_connector(self, client):
         resp = client.post("/api/v1/connectors/openai/probe")
         assert resp.status_code == 200
@@ -319,12 +320,13 @@ class TestProbeEndpoint:
 # Auto-disable / auto-re-enable integration
 # ---------------------------------------------------------------------------
 
-class TestAutoDisableIntegration:
 
+class TestAutoDisableIntegration:
     @pytest.mark.asyncio
     async def test_repeated_failures_disable_connector(self):
         connector_health.reset()
         import os
+
         old = os.environ.pop("OPENAI_API_KEY", None)
         try:
             for _ in range(3):
@@ -338,6 +340,7 @@ class TestAutoDisableIntegration:
     async def test_success_re_enables_disabled_connector(self):
         connector_health.reset()
         import os
+
         old = os.environ.pop("OPENAI_API_KEY", None)
         try:
             # Disable with 3 failures

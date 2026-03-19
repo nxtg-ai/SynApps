@@ -133,7 +133,10 @@ def test_metrics_template_runs_after_flow_execution(client):
     deadline = time.time() + 5.0
     while time.time() < deadline:
         status_resp = client.get(f"/api/v1/history/{run_id}")
-        if status_resp.status_code == 200 and status_resp.json().get("status") in _TERMINAL_STATUSES:
+        if (
+            status_resp.status_code == 200
+            and status_resp.json().get("status") in _TERMINAL_STATUSES
+        ):
             break
         time.sleep(0.05)
 

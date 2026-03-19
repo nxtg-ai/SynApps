@@ -5,6 +5,7 @@ Covers: auth helpers, password hashing, JWT tokens, API key encryption,
 pagination, helper functions (trace, diff, json path, template rendering),
 orchestrator static methods, API endpoints with auth, and node applets.
 """
+
 import asyncio
 import json
 import time
@@ -64,6 +65,7 @@ from apps.orchestrator.repositories import FlowRepository, WorkflowRunRepository
 # ============================================================
 # Fixtures
 # ============================================================
+
 
 @pytest.fixture
 def client():
@@ -152,6 +154,7 @@ class TestAPIKeyEncryption:
 class TestJWTTokens:
     def test_decode_expired_token(self):
         import jwt as pyjwt
+
         payload = {
             "sub": "user-1",
             "email": "test@example.com",
@@ -161,6 +164,7 @@ class TestJWTTokens:
         }
         token = pyjwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             _decode_token(token, "access")
         assert exc_info.value.status_code == 401
@@ -168,12 +172,14 @@ class TestJWTTokens:
 
     def test_decode_invalid_token(self):
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             _decode_token("not.a.valid.jwt", "access")
         assert exc_info.value.status_code == 401
 
     def test_decode_wrong_token_type(self):
         import jwt as pyjwt
+
         payload = {
             "sub": "user-1",
             "email": "test@example.com",
@@ -183,12 +189,14 @@ class TestJWTTokens:
         }
         token = pyjwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             _decode_token(token, "access")
         assert "Invalid token type" in str(exc_info.value.detail)
 
     def test_decode_valid_access_token(self):
         import jwt as pyjwt
+
         now = int(time.time())
         payload = {
             "sub": "user-1",
@@ -649,7 +657,7 @@ class TestExtractSandboxResult:
         assert "__SYNAPPS_RESULT_START__" not in stdout
 
     def test_invalid_json_between_markers(self):
-        text = '__SYNAPPS_RESULT_START__\nnot json\n__SYNAPPS_RESULT_END__'
+        text = "__SYNAPPS_RESULT_START__\nnot json\n__SYNAPPS_RESULT_END__"
         stdout, result = _extract_sandbox_result(text)
         assert result is None
 
@@ -729,9 +737,7 @@ class TestErrorResponse:
 
 class TestRequestModels:
     def test_flow_node_request_valid(self):
-        node = FlowNodeRequest(
-            id="n1", type="writer", position={"x": 10.0, "y": 20.0}
-        )
+        node = FlowNodeRequest(id="n1", type="writer", position={"x": 10.0, "y": 20.0})
         assert node.id == "n1"
 
     def test_flow_node_request_missing_position_keys(self):
@@ -1009,8 +1015,15 @@ class TestLegacyMigrations:
         # Clear registry for clean test
         with patch.dict("apps.orchestrator.main.applet_registry", {}, clear=True):
             for applet_type in [
-                "llm", "image", "memory", "http_request",
-                "code", "transform", "if_else", "merge", "for_each",
+                "llm",
+                "image",
+                "memory",
+                "http_request",
+                "code",
+                "transform",
+                "if_else",
+                "merge",
+                "for_each",
             ]:
                 applet = await Orchestrator.load_applet(applet_type)
                 assert isinstance(applet, BaseApplet)
@@ -1169,6 +1182,7 @@ class TestAPIEndpoints:
 def _disable_rate_limit_for_auth(monkeypatch_class=None):
     """Give auth tests a very high rate limit so they don't get 429."""
     import apps.orchestrator.middleware.rate_limiter as rl
+
     original = rl._TIER_LIMITS.copy()
     rl._TIER_LIMITS.update({"anonymous": 10000, "free": 10000, "pro": 10000, "enterprise": 10000})
     # Also reset the counter
@@ -1184,76 +1198,112 @@ class TestAuthEndpoints:
     @pytest.fixture(autouse=True)
     def _reset_rate_limit(self):
         import apps.orchestrator.middleware.rate_limiter as rl
+
         rl._counter = rl._SlidingWindowCounter()
-        rl._TIER_LIMITS.update({"anonymous": 10000, "free": 10000, "pro": 10000, "enterprise": 10000})
+        rl._TIER_LIMITS.update(
+            {"anonymous": 10000, "free": 10000, "pro": 10000, "enterprise": 10000}
+        )
 
     def test_register_and_login(self, client):
         email = f"test-{uuid.uuid4().hex[:8]}@example.com"
         # Register
-        resp = client.post("/api/v1/auth/register", json={
-            "email": email,
-            "password": "SecurePassword123!",
-        })
+        resp = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "SecurePassword123!",
+            },
+        )
         assert resp.status_code == 201
         data = resp.json()
         assert "access_token" in data
         assert "refresh_token" in data
 
         # Login
-        resp = client.post("/api/v1/auth/login", json={
-            "email": email,
-            "password": "SecurePassword123!",
-        })
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": email,
+                "password": "SecurePassword123!",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "access_token" in data
 
     def test_login_wrong_password(self, client):
         email = f"test-{uuid.uuid4().hex[:8]}@example.com"
-        client.post("/api/v1/auth/register", json={
-            "email": email,
-            "password": "CorrectPassword",
-        })
-        resp = client.post("/api/v1/auth/login", json={
-            "email": email,
-            "password": "WrongPassword",
-        })
+        client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "CorrectPassword",
+            },
+        )
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": email,
+                "password": "WrongPassword",
+            },
+        )
         assert resp.status_code == 401
 
     def test_login_nonexistent_user(self, client):
-        resp = client.post("/api/v1/auth/login", json={
-            "email": "nonexistent@example.com",
-            "password": "whatever",
-        })
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "nonexistent@example.com",
+                "password": "whatever",
+            },
+        )
         assert resp.status_code == 401
 
     def test_register_duplicate_email(self, client):
         email = f"dup-{uuid.uuid4().hex[:8]}@example.com"
-        client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
-        resp = client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
+        client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
+        resp = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
         assert resp.status_code == 409
 
     def test_register_invalid_email(self, client):
-        resp = client.post("/api/v1/auth/register", json={
-            "email": "not-an-email",
-            "password": "pass1234",
-        })
+        resp = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "not-an-email",
+                "password": "pass1234",
+            },
+        )
         assert resp.status_code == 422
 
     def test_me_with_token(self, client):
         email = f"me-{uuid.uuid4().hex[:8]}@example.com"
-        reg = client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
+        reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
         token = reg.json()["access_token"]
 
-        resp = client.get("/api/v1/auth/me", headers={
-            "Authorization": f"Bearer {token}",
-        })
+        resp = client.get(
+            "/api/v1/auth/me",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["email"] == email
 
@@ -1261,30 +1311,45 @@ class TestAuthEndpoints:
         """Without a token and when users exist, should fail."""
         # First register so anonymous bootstrap is disabled
         email = f"block-{uuid.uuid4().hex[:8]}@example.com"
-        client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
+        client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
         resp = client.get("/api/v1/auth/me")
         assert resp.status_code == 401
 
     def test_refresh_token(self, client):
         email = f"refresh-{uuid.uuid4().hex[:8]}@example.com"
-        reg = client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
+        reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
         refresh_token = reg.json()["refresh_token"]
 
-        resp = client.post("/api/v1/auth/refresh", json={
-            "refresh_token": refresh_token,
-        })
+        resp = client.post(
+            "/api/v1/auth/refresh",
+            json={
+                "refresh_token": refresh_token,
+            },
+        )
         assert resp.status_code == 200
         assert "access_token" in resp.json()
 
     def test_logout(self, client):
         email = f"logout-{uuid.uuid4().hex[:8]}@example.com"
-        reg = client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
+        reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
         token = reg.json()["access_token"]
         refresh = reg.json()["refresh_token"]
 
@@ -1297,16 +1362,24 @@ class TestAuthEndpoints:
 
     def test_api_keys_crud(self, client):
         email = f"apikey-{uuid.uuid4().hex[:8]}@example.com"
-        reg = client.post("/api/v1/auth/register", json={
-            "email": email, "password": "pass1234",
-        })
+        reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": "pass1234",
+            },
+        )
         token = reg.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
         # Create API key
-        resp = client.post("/api/v1/auth/api-keys", json={
-            "name": "test-key",
-        }, headers=headers)
+        resp = client.post(
+            "/api/v1/auth/api-keys",
+            json={
+                "name": "test-key",
+            },
+            headers=headers,
+        )
         assert resp.status_code == 201
         api_key_data = resp.json()
         assert "api_key" in api_key_data
@@ -1321,9 +1394,12 @@ class TestAuthEndpoints:
         assert any(k["id"] == api_key_id for k in keys)
 
         # Use API key for auth
-        resp = client.get("/api/v1/auth/me", headers={
-            "X-API-Key": api_key_value,
-        })
+        resp = client.get(
+            "/api/v1/auth/me",
+            headers={
+                "X-API-Key": api_key_value,
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["email"] == email
 
@@ -1383,9 +1459,7 @@ class TestFlowExecution:
             ],
         }
 
-        mock_response = AppletMessage(
-            content="Mocked LLM output", context={}, metadata={}
-        )
+        mock_response = AppletMessage(content="Mocked LLM output", context={}, metadata={})
         with patch(
             "apps.orchestrator.main.LLMNodeApplet.on_message",
             new_callable=AsyncMock,
@@ -1421,9 +1495,12 @@ class TestFlowExecution:
 
         # Run it via API
         with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
-            resp = client.post("/api/v1/flows/run-test-flow/runs", json={
-                "input": {"test": "data"},
-            })
+            resp = client.post(
+                "/api/v1/flows/run-test-flow/runs",
+                json={
+                    "input": {"test": "data"},
+                },
+            )
             assert resp.status_code == 202
             data = resp.json()
             assert "run_id" in data

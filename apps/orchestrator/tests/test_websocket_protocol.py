@@ -183,7 +183,11 @@ class TestWebSocketAuth:
     def test_legacy_ws_token_auth(self):
         """Auth via legacy WS_AUTH_TOKEN."""
         with patch("apps.orchestrator.main.WS_AUTH_TOKEN", "test-secret"):
-            with patch("apps.orchestrator.main._can_use_anonymous_bootstrap", new_callable=AsyncMock, return_value=False):
+            with patch(
+                "apps.orchestrator.main._can_use_anonymous_bootstrap",
+                new_callable=AsyncMock,
+                return_value=False,
+            ):
                 client = TestClient(app)
                 with client.websocket_connect("/api/v1/ws") as ws:
                     ws.send_json({"type": "auth", "token": "test-secret"})
@@ -194,7 +198,11 @@ class TestWebSocketAuth:
     def test_auth_timeout(self):
         """Connection should close with 4002 if no auth message is sent."""
         with patch("apps.orchestrator.main.WS_AUTH_TIMEOUT_SECONDS", 1):
-            with patch("apps.orchestrator.main._can_use_anonymous_bootstrap", new_callable=AsyncMock, return_value=False):
+            with patch(
+                "apps.orchestrator.main._can_use_anonymous_bootstrap",
+                new_callable=AsyncMock,
+                return_value=False,
+            ):
                 client = TestClient(app)
                 try:
                     with client.websocket_connect("/api/v1/ws") as ws:
@@ -208,7 +216,11 @@ class TestWebSocketAuth:
     def test_auth_bad_credentials(self):
         """Connection should close with 4001 on invalid credentials."""
         with patch("apps.orchestrator.main.WS_AUTH_TOKEN", "secret"):
-            with patch("apps.orchestrator.main._can_use_anonymous_bootstrap", new_callable=AsyncMock, return_value=False):
+            with patch(
+                "apps.orchestrator.main._can_use_anonymous_bootstrap",
+                new_callable=AsyncMock,
+                return_value=False,
+            ):
                 client = TestClient(app)
                 try:
                     with client.websocket_connect("/api/v1/ws") as ws:
@@ -221,7 +233,11 @@ class TestWebSocketAuth:
 
     def test_auth_wrong_message_type(self):
         """First message must be type 'auth'."""
-        with patch("apps.orchestrator.main._can_use_anonymous_bootstrap", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "apps.orchestrator.main._can_use_anonymous_bootstrap",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("apps.orchestrator.main.WS_AUTH_TOKEN", "secret"):
                 client = TestClient(app)
                 try:
@@ -253,11 +269,13 @@ class TestMessageProtocol:
         client = TestClient(app)
         with client.websocket_connect("/api/v1/ws") as ws:
             ws.receive_json()  # auth.result
-            ws.send_json({
-                "type": "subscribe",
-                "id": "sub-1",
-                "data": {"channel": "workflow.updates"},
-            })
+            ws.send_json(
+                {
+                    "type": "subscribe",
+                    "id": "sub-1",
+                    "data": {"channel": "workflow.updates"},
+                }
+            )
             msg = ws.receive_json()
             assert msg["type"] == "subscribe.ack"
             assert msg["data"]["channel"] == "workflow.updates"
@@ -267,10 +285,12 @@ class TestMessageProtocol:
         client = TestClient(app)
         with client.websocket_connect("/api/v1/ws") as ws:
             ws.receive_json()  # auth.result
-            ws.send_json({
-                "type": "unsubscribe",
-                "data": {"channel": "workflow.updates"},
-            })
+            ws.send_json(
+                {
+                    "type": "unsubscribe",
+                    "data": {"channel": "workflow.updates"},
+                }
+            )
             msg = ws.receive_json()
             assert msg["type"] == "unsubscribe.ack"
             assert msg["data"]["channel"] == "workflow.updates"

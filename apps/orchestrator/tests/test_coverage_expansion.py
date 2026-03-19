@@ -112,17 +112,20 @@ async def test_get_flow_404():
     assert data["error"]["code"] == "NOT_FOUND"
     assert data["error"]["message"] == "Flow not found"
 
+
 @pytest.mark.asyncio
 async def test_delete_flow_404():
     client = TestClient(app)
     response = client.delete("/api/v1/flows/non-existent-flow")
     assert response.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_get_run_404():
     client = TestClient(app)
     response = client.get("/api/v1/runs/non-existent-run")
     assert response.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_ai_suggest_501():
@@ -132,14 +135,11 @@ async def test_ai_suggest_501():
     data = response.json()
     assert data["error"]["code"] == "NOT_IMPLEMENTED"
 
+
 @pytest.mark.asyncio
 async def test_create_flow_auto_id():
     client = TestClient(app)
-    flow_data = {
-        "name": "Auto ID Flow",
-        "nodes": [],
-        "edges": []
-    }
+    flow_data = {"name": "Auto ID Flow", "nodes": [], "edges": []}
     response = client.post("/api/v1/flows", json=flow_data)
     assert response.status_code == 201
     assert "id" in response.json()
@@ -149,6 +149,7 @@ async def test_create_flow_auto_id():
     response = client.get(f"/api/v1/flows/{generated_id}")
     assert response.status_code == 200
     assert response.json()["name"] == "Auto ID Flow"
+
 
 @pytest.mark.asyncio
 async def test_execute_flow_with_parsed_input():
@@ -161,13 +162,11 @@ async def test_execute_flow_with_parsed_input():
                 "id": "start",
                 "type": "start",
                 "data": {"parsedInputData": {"key": "value"}},
-                "position": {"x": 0, "y": 0}
+                "position": {"x": 0, "y": 0},
             },
-            {"id": "end", "type": "end", "position": {"x": 100, "y": 0}}
+            {"id": "end", "type": "end", "position": {"x": 100, "y": 0}},
         ],
-        "edges": [
-            {"id": "e1", "source": "start", "target": "end"}
-        ]
+        "edges": [{"id": "e1", "source": "start", "target": "end"}],
     }
 
     with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
@@ -175,6 +174,7 @@ async def test_execute_flow_with_parsed_input():
 
         # Wait for completion
         from apps.orchestrator.repositories import WorkflowRunRepository
+
         for _ in range(10):
             await asyncio.sleep(0.1)
             run = await WorkflowRunRepository.get_by_run_id(run_id)
@@ -183,6 +183,7 @@ async def test_execute_flow_with_parsed_input():
 
         assert run["status"] == "success"
         assert run["input_data"] == {"key": "value"}
+
 
 @pytest.mark.asyncio
 async def test_execute_flow_with_artist_config():
@@ -196,14 +197,14 @@ async def test_execute_flow_with_artist_config():
                 "id": "artist-node",
                 "type": "artist",
                 "data": {"systemPrompt": "draw a cat", "generator": "dall-e-3"},
-                "position": {"x": 100, "y": 0}
+                "position": {"x": 100, "y": 0},
             },
-            {"id": "end", "type": "end", "position": {"x": 200, "y": 0}}
+            {"id": "end", "type": "end", "position": {"x": 200, "y": 0}},
         ],
         "edges": [
             {"id": "e1", "source": "start", "target": "artist-node"},
-            {"id": "e2", "source": "artist-node", "target": "end"}
-        ]
+            {"id": "e2", "source": "artist-node", "target": "end"},
+        ],
     }
 
     # Mock ArtistApplet.on_message
@@ -211,7 +212,9 @@ async def test_execute_flow_with_artist_config():
     mock_response.content = "Image URL"
     mock_response.context = {}
 
-    with patch("apps.applets.artist.applet.ArtistApplet.on_message", new_callable=AsyncMock) as mock_on_message:
+    with patch(
+        "apps.applets.artist.applet.ArtistApplet.on_message", new_callable=AsyncMock
+    ) as mock_on_message:
         mock_on_message.return_value = mock_response
 
         with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
@@ -219,6 +222,7 @@ async def test_execute_flow_with_artist_config():
 
             # Wait for completion
             from apps.orchestrator.repositories import WorkflowRunRepository
+
             for _ in range(20):
                 await asyncio.sleep(0.1)
                 run = await WorkflowRunRepository.get_by_run_id(run_id)
@@ -231,6 +235,7 @@ async def test_execute_flow_with_artist_config():
             message = args[0]
             assert message.metadata["system_prompt"] == "draw a cat"
             assert message.metadata["generator"] == "dall-e-3"
+
 
 @pytest.mark.asyncio
 async def test_broadcast_status_error_handling():
@@ -245,15 +250,23 @@ async def test_broadcast_status_error_handling():
         if mock_ws in connected_clients:
             connected_clients.remove(mock_ws)
 
+
 @pytest.mark.asyncio
 async def test_list_applets_discovery():
     client = TestClient(app)
     # Mocking os.path.exists and os.listdir to simulate discovering applets
     with patch("os.path.exists", return_value=True):
         with patch("os.listdir", return_value=["writer", "memory", "new_applet"]):
-            with patch("apps.orchestrator.main.Orchestrator.load_applet", new_callable=AsyncMock) as mock_load:
+            with patch(
+                "apps.orchestrator.main.Orchestrator.load_applet", new_callable=AsyncMock
+            ) as mock_load:
                 mock_applet = MagicMock()
-                mock_applet.get_metadata.return_value = {"name": "NewApplet", "description": "Desc", "version": "0.1.0", "capabilities": []}
+                mock_applet.get_metadata.return_value = {
+                    "name": "NewApplet",
+                    "description": "Desc",
+                    "version": "0.1.0",
+                    "capabilities": [],
+                }
                 mock_load.return_value = mock_applet
 
                 response = client.get("/api/v1/applets")
@@ -264,33 +277,57 @@ async def test_list_applets_discovery():
                 applets = data["items"]
                 assert any(a["type"] == "new_applet" for a in applets)
 
+
 @pytest.mark.asyncio
 async def test_orchestrator_execute_flow_full():
     flow = {
         "id": "full-flow",
         "nodes": [
-            {"id": "s1", "type": "start", "data": {"parsedInputData": {"init": "val"}}, "position": {"x":0, "y":0}},
-            {"id": "w1", "type": "writer", "data": {"systemPrompt": "be helpful"}, "position": {"x":100, "y":0}},
-            {"id": "a1", "type": "artist", "data": {"generator": "openai"}, "position": {"x":200, "y":0}},
-            {"id": "e1", "type": "end", "position": {"x":300, "y":0}}
+            {
+                "id": "s1",
+                "type": "start",
+                "data": {"parsedInputData": {"init": "val"}},
+                "position": {"x": 0, "y": 0},
+            },
+            {
+                "id": "w1",
+                "type": "writer",
+                "data": {"systemPrompt": "be helpful"},
+                "position": {"x": 100, "y": 0},
+            },
+            {
+                "id": "a1",
+                "type": "artist",
+                "data": {"generator": "openai"},
+                "position": {"x": 200, "y": 0},
+            },
+            {"id": "e1", "type": "end", "position": {"x": 300, "y": 0}},
         ],
         "edges": [
             {"id": "e1", "source": "s1", "target": "w1"},
             {"id": "e2", "source": "w1", "target": "a1"},
-            {"id": "e3", "source": "a1", "target": "e1"}
-        ]
+            {"id": "e3", "source": "a1", "target": "e1"},
+        ],
     }
 
     mock_run = {"run_id": "test-run", "status": "running", "progress": 0, "nodes": flow["nodes"]}
 
     from apps.orchestrator.repositories import WorkflowRunRepository
-    with patch("apps.orchestrator.repositories.WorkflowRunRepository.save", new_callable=AsyncMock) as mock_save:
-        with patch("apps.orchestrator.repositories.WorkflowRunRepository.get_by_run_id", new_callable=AsyncMock) as mock_get:
+
+    with patch(
+        "apps.orchestrator.repositories.WorkflowRunRepository.save", new_callable=AsyncMock
+    ) as mock_save:
+        with patch(
+            "apps.orchestrator.repositories.WorkflowRunRepository.get_by_run_id",
+            new_callable=AsyncMock,
+        ) as mock_get:
             mock_get.return_value = mock_run
 
             # Mock applets
             mock_writer = MagicMock()
-            mock_writer.on_message = AsyncMock(return_value=MagicMock(content="written", context={}))
+            mock_writer.on_message = AsyncMock(
+                return_value=MagicMock(content="written", context={})
+            )
 
             mock_artist = MagicMock()
             mock_artist.on_message = AsyncMock(return_value=MagicMock(content="drawn", context={}))
@@ -302,11 +339,15 @@ async def test_orchestrator_execute_flow_full():
                     return mock_artist
                 raise ValueError("Unknown")
 
-            with patch("apps.orchestrator.main.Orchestrator.load_applet", side_effect=mock_load_applet):
+            with patch(
+                "apps.orchestrator.main.Orchestrator.load_applet", side_effect=mock_load_applet
+            ):
                 mock_broadcast = AsyncMock()
                 repo = WorkflowRunRepository()
 
-                await Orchestrator._execute_flow_async("test-run", flow, {"input": "initial"}, repo, mock_broadcast)
+                await Orchestrator._execute_flow_async(
+                    "test-run", flow, {"input": "initial"}, repo, mock_broadcast
+                )
 
                 # Check results
                 last_status = mock_save.call_args[0][0]
@@ -314,26 +355,33 @@ async def test_orchestrator_execute_flow_full():
                 assert "w1" in last_status["results"]
                 assert "a1" in last_status["results"]
 
+
 @pytest.mark.asyncio
 async def test_orchestrator_execute_flow_multiple_starts():
     flow = {
         "id": "multi-start",
         "nodes": [
-            {"id": "s1", "type": "start", "position": {"x":0, "y":0}},
-            {"id": "s2", "type": "start", "position": {"x":0, "y":100}},
-            {"id": "e1", "type": "end", "position": {"x":100, "y":50}}
+            {"id": "s1", "type": "start", "position": {"x": 0, "y": 0}},
+            {"id": "s2", "type": "start", "position": {"x": 0, "y": 100}},
+            {"id": "e1", "type": "end", "position": {"x": 100, "y": 50}},
         ],
         "edges": [
             {"id": "e1", "source": "s1", "target": "e1"},
-            {"id": "e2", "source": "s2", "target": "e1"}
-        ]
+            {"id": "e2", "source": "s2", "target": "e1"},
+        ],
     }
 
     mock_run = {"run_id": "test-run", "status": "running", "progress": 0}
 
     from apps.orchestrator.repositories import WorkflowRunRepository
-    with patch("apps.orchestrator.repositories.WorkflowRunRepository.save", new_callable=AsyncMock) as mock_save:
-        with patch("apps.orchestrator.repositories.WorkflowRunRepository.get_by_run_id", new_callable=AsyncMock) as mock_get:
+
+    with patch(
+        "apps.orchestrator.repositories.WorkflowRunRepository.save", new_callable=AsyncMock
+    ) as mock_save:
+        with patch(
+            "apps.orchestrator.repositories.WorkflowRunRepository.get_by_run_id",
+            new_callable=AsyncMock,
+        ) as mock_get:
             mock_get.return_value = mock_run
 
             mock_broadcast = AsyncMock()
@@ -343,17 +391,22 @@ async def test_orchestrator_execute_flow_multiple_starts():
 
             assert mock_save.call_args[0][0]["status"] == "success"
 
+
 @pytest.mark.asyncio
 async def test_orchestrator_execute_flow_generic_error():
     flow = {
         "id": "error-flow",
-        "nodes": [{"id": "s1", "type": "start", "position": {"x":0, "y":0}}],
-        "edges": []
+        "nodes": [{"id": "s1", "type": "start", "position": {"x": 0, "y": 0}}],
+        "edges": [],
     }
 
     from apps.orchestrator.repositories import WorkflowRunRepository
+
     # Force a generic exception
-    with patch("apps.orchestrator.repositories.WorkflowRunRepository.get_by_run_id", side_effect=Exception("DB Error")):
+    with patch(
+        "apps.orchestrator.repositories.WorkflowRunRepository.get_by_run_id",
+        side_effect=Exception("DB Error"),
+    ):
         repo = WorkflowRunRepository()
         mock_broadcast = AsyncMock()
 
@@ -378,7 +431,12 @@ async def test_export_flow():
         "name": "Export Test",
         "nodes": [
             {"id": "n1", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "Start"}},
-            {"id": "n2", "type": "llm", "position": {"x": 0, "y": 100}, "data": {"label": "LLM", "provider": "openai"}},
+            {
+                "id": "n2",
+                "type": "llm",
+                "position": {"x": 0, "y": 100},
+                "data": {"label": "LLM", "provider": "openai"},
+            },
         ],
         "edges": [
             {"id": "e1", "source": "n1", "target": "n2"},
@@ -465,8 +523,18 @@ async def test_export_import_roundtrip():
         "id": "roundtrip-flow",
         "name": "Roundtrip Test",
         "nodes": [
-            {"id": "a", "type": "start", "position": {"x": 10, "y": 20}, "data": {"label": "Begin"}},
-            {"id": "b", "type": "llm", "position": {"x": 10, "y": 120}, "data": {"label": "Think", "provider": "ollama"}},
+            {
+                "id": "a",
+                "type": "start",
+                "position": {"x": 10, "y": 20},
+                "data": {"label": "Begin"},
+            },
+            {
+                "id": "b",
+                "type": "llm",
+                "position": {"x": 10, "y": 120},
+                "data": {"label": "Think", "provider": "ollama"},
+            },
             {"id": "c", "type": "end", "position": {"x": 10, "y": 220}, "data": {"label": "Done"}},
         ],
         "edges": [

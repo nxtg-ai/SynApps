@@ -58,6 +58,7 @@ def client():
 
 def _register_and_login(client):
     import uuid
+
     email = f"dlquser-{uuid.uuid4().hex[:8]}@test.com"
     resp = client.post(
         "/api/v1/auth/register",
@@ -295,7 +296,9 @@ class TestDLQEndpoints:
         token = _register_and_login(client)
         dead_letter_queue.push("run-1", "flow-F1", None, {}, "err")
         dead_letter_queue.push("run-2", "flow-F2", None, {}, "err")
-        resp = client.get("/api/v1/dlq?flow_id=flow-F1", headers={"Authorization": f"Bearer {token}"})
+        resp = client.get(
+            "/api/v1/dlq?flow_id=flow-F1", headers={"Authorization": f"Bearer {token}"}
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert all(item["flow_id"] == "flow-F1" for item in data["items"])
@@ -312,7 +315,9 @@ class TestDLQEndpoints:
 
     def test_get_dlq_entry_not_found(self, client):
         token = _register_and_login(client)
-        resp = client.get("/api/v1/dlq/does-not-exist", headers={"Authorization": f"Bearer {token}"})
+        resp = client.get(
+            "/api/v1/dlq/does-not-exist", headers={"Authorization": f"Bearer {token}"}
+        )
         assert resp.status_code == 404
 
     def test_delete_dlq_entry_success(self, client):

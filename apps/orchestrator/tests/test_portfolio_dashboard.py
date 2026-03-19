@@ -108,7 +108,12 @@ def test_portfolio_template_last_run_present_after_run(client):
     flow_payload = {
         "name": flow_name,
         "nodes": [
-            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "Start"}},
+            {
+                "id": "start",
+                "type": "start",
+                "position": {"x": 0, "y": 0},
+                "data": {"label": "Start"},
+            },
             {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {"label": "End"}},
         ],
         "edges": [

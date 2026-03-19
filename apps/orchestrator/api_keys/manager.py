@@ -289,10 +289,7 @@ class APIKeyManager:
 
     def _safe_record(self, entry: dict[str, Any]) -> dict[str, Any]:
         """Return a record without sensitive fields."""
-        return {
-            k: v for k, v in entry.items()
-            if k not in ("encrypted_key", "key_hash")
-        }
+        return {k: v for k, v in entry.items() if k not in ("encrypted_key", "key_hash")}
 
     def reset(self) -> None:
         """Clear all keys (for testing)."""

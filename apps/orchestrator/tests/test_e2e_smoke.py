@@ -203,8 +203,7 @@ class TestSmokePipelineDirectExecution:
         run = await _poll_until_terminal(run_id)
         assert run is not None, "Run record not found in DB"
         assert run["status"] == "success", (
-            f"Expected success but got '{run['status']}'. "
-            f"Error: {run.get('error', 'N/A')}"
+            f"Expected success but got '{run['status']}'. Error: {run.get('error', 'N/A')}"
         )
 
     @pytest.mark.asyncio
@@ -295,9 +294,7 @@ class TestSmokePipelineViaReceiveEndpoint:
                     new_callable=AsyncMock,
                     return_value=_MOCK_HTTP,
                 ):
-                    with patch(
-                        "apps.orchestrator.main.broadcast_status", new_callable=AsyncMock
-                    ):
+                    with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
                         resp = client.post(
                             f"/api/v1/webhook-triggers/{trigger['id']}/receive",
                             json={"event": "smoke", "source": "e2e"},
@@ -356,9 +353,7 @@ class TestSmokePipelineViaReceiveEndpoint:
                     new_callable=AsyncMock,
                     return_value=_MOCK_HTTP,
                 ):
-                    with patch(
-                        "apps.orchestrator.main.broadcast_status", new_callable=AsyncMock
-                    ):
+                    with patch("apps.orchestrator.main.broadcast_status", new_callable=AsyncMock):
                         resp = client.post(
                             f"/api/v1/webhook-triggers/{trigger_id}/receive",
                             content=body,
@@ -382,9 +377,7 @@ class TestSmokePipelineViaReceiveEndpoint:
         with TestClient(app) as client:
             client.post("/api/v1/flows", json=SMOKE_FLOW)
 
-            resp = client.post(
-                "/api/v1/webhook-triggers", json={"flow_id": SMOKE_FLOW["id"]}
-            )
+            resp = client.post("/api/v1/webhook-triggers", json={"flow_id": SMOKE_FLOW["id"]})
             trigger_id = resp.json()["id"]
 
             # Delete it
