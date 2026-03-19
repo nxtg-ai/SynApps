@@ -264,6 +264,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260318-162 — P1: N-31 Workflow Import from External Tools
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-18 23:30 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **n8n import** — parse n8n workflow JSON, map to SynApps node types.
+2. [ ] **Zapier import** — parse Zapier zap export, map triggers/actions to SynApps equivalents.
+3. [ ] **`POST /workflows/import`** — accept external format, return converted SynApps workflow.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260318-163.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260318-163 — P2: Final Portfolio README + Docker Compose
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-18 23:30 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] README — all 31 initiatives. 2. [ ] Docker compose final. 3. [ ] Final test count.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-152 — P1: N-30 Audit Trail — Compliance Logging
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 22:50 | **Estimate**: M | **Status**: DONE
