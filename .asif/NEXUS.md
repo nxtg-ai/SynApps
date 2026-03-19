@@ -43,6 +43,7 @@
 | N-31 | Workflow Import from External Tools | PLATFORM | SHIPPED | P1 | 2026-03-18 |
 | N-32 | Real-Time Execution Streaming — SSE Progress | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 | N-33 | Workflow Analytics Dashboard — Execution Insights | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-34 | Workflow Testing Framework — Automated Validation | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 
 ---
 
@@ -270,6 +271,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-19 | DIRECTIVE-NXTG-20260318-165 (Final Archive + README) → DONE. README N-32, all 32 initiatives. 2,017 total tests. |
 | 2026-03-19 | DIRECTIVE-NXTG-20260319-12 (N-33 Analytics Dashboard) → DONE. WorkflowAnalyticsDashboard, GET /analytics/dashboard, CSV export, React page. 18 tests. 1,946 backend. |
 | 2026-03-19 | DIRECTIVE-NXTG-20260319-13 (D-13 API Rate Limiting + Quotas) → DONE. ExecutionQuotaStore, GET /usage/me, 429+Retry-After. 23 tests. 1,946 backend total. |
+| 2026-03-19 | DIRECTIVE-NXTG-20260319-24 (N-34 Workflow Testing Framework) → DONE. WorkflowAssertionEngine DSL, WorkflowTestStore, 4 endpoints. 35 tests. 1,981 backend. |
+| 2026-03-19 | DIRECTIVE-NXTG-20260319-25 (Final Summary) → DONE. README N-34, 2,094 total tests. All 34 initiatives listed. |
 
 ---
 
@@ -281,27 +284,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260319-24 — P1: N-34 Workflow Testing Framework — Automated Validation
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-19 02:15 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 02:15 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Test runner for workflows** — `POST /workflows/:id/test` with mock inputs → validate expected outputs.
-2. [ ] **Assertion DSL** — `output.field == "expected"`, `output.count > 5`, type checks.
-3. [ ] **Test history** — store pass/fail results per workflow version.
-4. [ ] Tests.
+1. [x] **Test runner for workflows** — `POST /workflows/:id/test` with mock inputs → validate expected outputs.
+2. [x] **Assertion DSL** — `output.field == "expected"`, `output.count > 5`, type checks.
+3. [x] **Test history** — store pass/fail results per workflow version.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260319-25.
-**Response** (filled by team): >
+**Response** (filled by team): N-34 shipped. `WorkflowTestStore` — thread-safe per-workflow test suite definitions + run history (most-recent-first). `WorkflowAssertionEngine` — parses `path op value` string assertions; path forms: `status`, `output.X` (any node output), `results.NODE.output.X`, `results.NODE.status`; ops: `==`, `!=`, `>`, `>=`, `<`, `<=`, `type(path)==typename`; coerces RHS to match LHS type. 4 endpoints: `POST /workflows/{id}/test` (execute with mock input, evaluate assertions, optional history save, returns `passed/pass_count/fail_count/assertion_results`), `GET /workflows/{id}/test-history` (paginated), `POST /workflows/{id}/test-suites` (save named suite), `GET /workflows/{id}/test-suites`. 35 tests in `test_workflow_testing.py`. 1,981 backend passed. 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260319-25 — P2: Final Session Summary
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-19 02:15 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-19 02:15 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Final test count. 2. [ ] All initiatives. 3. [ ] README.
+1. [x] Final test count. 2. [x] All initiatives. 3. [x] README.
 
-**Response** (filled by team): >
+**Response** (filled by team): Final counts — **2,094 tests** (1,981 backend + 109 frontend unit + 4 E2E). README updated with N-34 row (all 34 N-series initiatives). CHANGELOG updated. Executive Dashboard updated. All PENDING directives in this session cleared. 2026-03-19.
 
 ---
 

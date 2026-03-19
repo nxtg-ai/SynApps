@@ -2672,6 +2672,15 @@ class AISuggestRequest(StrictRequestModel):
     )
 
 
+class WorkflowTestRequest(StrictRequestModel):
+    """Request body for POST /workflows/{id}/test."""
+
+    assertions: list[str] = Field(..., description="Assertion strings to evaluate.")
+    input: dict[str, Any] = Field(default_factory=dict, description="Mock input for the workflow.")
+    save_result: bool = Field(True, description="Whether to persist this test run in history.")
+    suite_name: str | None = Field(None, description="Optional label for this test run.")
+
+
 class AuthRegisterRequestStrict(AuthRegisterRequestModel):
     """Strict request model that rejects unknown registration fields."""
 
@@ -14458,6 +14467,374 @@ async def export_analytics_dashboard_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=analytics_dashboard.csv"},
     )
+
+
+# ============================================================
+# Workflow Testing Framework — N-34
+# ============================================================
+
+
+class WorkflowTestStore:
+    """Thread-safe in-memory store for workflow test suites and test run history.
+
+    Test suite: {id, workflow_id, name, assertions: [{path, op, expected}]}
+    Test result: {id, workflow_id, suite_id, run_id, passed, results, timestamp, version_id}
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._suites: dict[str, list[dict[str, Any]]] = {}  # workflow_id -> [suite]
+        self._history: dict[str, list[dict[str, Any]]] = {}  # workflow_id -> [result]
+
+    def save_suite(self, workflow_id: str, suite: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            suites = self._suites.setdefault(workflow_id, [])
+            suite["workflow_id"] = workflow_id
+            if "id" not in suite:
+                suite["id"] = str(uuid.uuid4())
+            # Replace existing suite with same id or append
+            for i, s in enumerate(suites):
+                if s["id"] == suite["id"]:
+                    suites[i] = suite
+                    return suite
+            suites.append(suite)
+            return suite
+
+    def list_suites(self, workflow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return list(self._suites.get(workflow_id, []))
+
+    def record_result(self, workflow_id: str, result: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            history = self._history.setdefault(workflow_id, [])
+            result.setdefault("id", str(uuid.uuid4()))
+            history.append(result)
+            return result
+
+    def get_history(self, workflow_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            history = self._history.get(workflow_id, [])
+            # Most recent first
+            return list(reversed(history[-limit:]))
+
+    def reset(self) -> None:
+        with self._lock:
+            self._suites.clear()
+            self._history.clear()
+
+
+workflow_test_store = WorkflowTestStore()
+
+
+class WorkflowAssertionEngine:
+    """Evaluates assertions against a workflow run result.
+
+    Assertion string format:  ``path op value``
+
+    Examples:
+      ``status == success``
+      ``output.text == Hello world``
+      ``output.count > 5``
+      ``results.node1.output.score >= 0.8``
+      ``type(output.result) == list``
+
+    Path resolution:
+    - ``status``                  → run["status"]
+    - ``output.X``                → looks for X in the output of the last
+                                   non-terminal node (or any node with output X)
+    - ``results.NODE.output.X``   → run["results"][NODE]["output"][X]
+    - ``results.NODE.status``     → run["results"][NODE]["status"]
+    """
+
+    _OPS = {"==", "!=", ">", ">=", "<", "<="}
+    _TYPE_MAP = {
+        "str": str,
+        "string": str,
+        "int": int,
+        "float": float,
+        "number": (int, float),
+        "bool": bool,
+        "boolean": bool,
+        "list": list,
+        "array": list,
+        "dict": dict,
+        "object": dict,
+        "null": type(None),
+        "none": type(None),
+    }
+
+    @classmethod
+    def evaluate(cls, assertion: str, run: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate a single assertion string against *run*.
+
+        Returns a dict:
+        {assertion, passed, actual, expected, op, error}
+        """
+        out: dict[str, Any] = {
+            "assertion": assertion,
+            "passed": False,
+            "actual": None,
+            "expected": None,
+            "op": None,
+            "error": None,
+        }
+        try:
+            path, op, raw_expected = cls._parse(assertion)
+            out["op"] = op
+            actual = cls._resolve(path, run)
+            out["actual"] = actual
+
+            if op == "type==":
+                type_name = raw_expected.strip().lower()
+                expected_type = cls._TYPE_MAP.get(type_name)
+                out["expected"] = type_name
+                if expected_type is None:
+                    out["error"] = f"Unknown type '{raw_expected}'"
+                else:
+                    out["passed"] = isinstance(actual, expected_type)
+            else:
+                expected = cls._coerce(raw_expected, actual)
+                out["expected"] = expected
+                out["passed"] = cls._compare(actual, op, expected)
+        except Exception as exc:
+            out["error"] = str(exc)
+        return out
+
+    @classmethod
+    def _parse(cls, assertion: str) -> tuple[str, str, str]:
+        """Split assertion into (path, op, raw_expected)."""
+        # Handle type() assertions
+        if assertion.startswith("type("):
+            close = assertion.index(")")
+            path = assertion[5:close]
+            rest = assertion[close + 1 :].strip()
+            if not rest.startswith("=="):
+                raise ValueError("type() assertion must use == operator")
+            return path.strip(), "type==", rest[2:].strip()
+
+        # Try longest operators first to avoid partial matches
+        for op in (">=", "<=", "!=", "==", ">", "<"):
+            idx = assertion.find(op)
+            if idx != -1:
+                path = assertion[:idx].strip()
+                value = assertion[idx + len(op) :].strip()
+                # Strip surrounding quotes
+                if (value.startswith('"') and value.endswith('"')) or (
+                    value.startswith("'") and value.endswith("'")
+                ):
+                    value = value[1:-1]
+                return path, op, value
+        raise ValueError(f"Cannot parse assertion: {assertion!r}")
+
+    @classmethod
+    def _resolve(cls, path: str, run: dict[str, Any]) -> Any:
+        """Resolve a dot-notation path against a run dict."""
+        parts = path.split(".")
+
+        # Top-level shortcuts
+        if parts[0] == "status":
+            return run.get("status")
+
+        if parts[0] == "results" and len(parts) >= 2:
+            results = run.get("results") or {}
+            node_id = parts[1]
+            node = results.get(node_id)
+            if node is None:
+                raise KeyError(f"Node '{node_id}' not found in results")
+            return cls._dig(node, parts[2:])
+
+        if parts[0] == "output":
+            # Search all node results for the output key
+            results = run.get("results") or {}
+            output_key = parts[1] if len(parts) > 1 else None
+            # Prefer last node result that has this output key
+            candidate = None
+            for node_result in results.values():
+                if not isinstance(node_result, dict):
+                    continue
+                output = node_result.get("output")
+                if not isinstance(output, dict):
+                    continue
+                if output_key is None or output_key in output:
+                    candidate = output
+            if candidate is None:
+                raise KeyError(f"No node output found with key '{output_key}'")
+            if output_key is None:
+                return candidate
+            return cls._dig(candidate, parts[1:])
+
+        # Fallback: treat as top-level run key
+        return cls._dig(run, parts)
+
+    @classmethod
+    def _dig(cls, obj: Any, parts: list[str]) -> Any:
+        for part in parts:
+            if isinstance(obj, dict):
+                obj = obj[part]
+            elif isinstance(obj, (list, tuple)):
+                obj = obj[int(part)]
+            else:
+                raise KeyError(f"Cannot traverse '{part}' on {type(obj).__name__}")
+        return obj
+
+    @classmethod
+    def _coerce(cls, raw: str, reference: Any) -> Any:
+        """Coerce raw string to the same type as reference if possible."""
+        if isinstance(reference, bool):
+            return raw.lower() in ("true", "1", "yes")
+        if isinstance(reference, int):
+            try:
+                return int(raw)
+            except ValueError:
+                pass
+        if isinstance(reference, float):
+            try:
+                return float(raw)
+            except ValueError:
+                pass
+        if raw.lower() in ("null", "none"):
+            return None
+        if raw.lower() == "true":
+            return True
+        if raw.lower() == "false":
+            return False
+        # Try numeric
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+        return raw
+
+    @classmethod
+    def _compare(cls, actual: Any, op: str, expected: Any) -> bool:
+        try:
+            if op == "==":
+                return actual == expected
+            if op == "!=":
+                return actual != expected
+            if op == ">":
+                return actual > expected
+            if op == ">=":
+                return actual >= expected
+            if op == "<":
+                return actual < expected
+            if op == "<=":
+                return actual <= expected
+        except TypeError:
+            return False  # incomparable types — return safe error value
+        return False
+
+
+@v1.post("/workflows/{flow_id}/test", tags=["Testing"])
+async def run_workflow_test(
+    flow_id: str,
+    body: WorkflowTestRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Run a workflow with mock inputs and evaluate assertions against the results (N-34).
+
+    Each assertion is a string in the form ``path op value``, e.g.:
+    - ``status == success``
+    - ``output.text == Hello``
+    - ``output.count > 3``
+    - ``results.llm1.output.score >= 0.8``
+    - ``type(output.items) == list``
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
+
+    # Execute the flow with mock inputs and wait for completion (max 60 s)
+    run_id = await Orchestrator.execute_flow(flow, body.input)
+    deadline = time.time() + 60.0
+    run: dict[str, Any] | None = None
+    while time.time() < deadline:
+        await asyncio.sleep(0.1)
+        run = await WorkflowRunRepository.get_by_run_id(run_id)
+        if run and run.get("status") in ("success", "error"):
+            break
+
+    if run is None:
+        run = {"status": "unknown", "results": {}}
+
+    # Evaluate assertions
+    assertion_results = [WorkflowAssertionEngine.evaluate(a, run) for a in body.assertions]
+    passed = all(r["passed"] for r in assertion_results)
+
+    # Determine current flow version (if versioning store has one)
+    versions = flow_version_registry.list_versions(flow_id)
+    version_id = versions[-1]["version_id"] if versions else None
+
+    result_record = {
+        "id": str(uuid.uuid4()),
+        "workflow_id": flow_id,
+        "run_id": run_id,
+        "suite_name": body.suite_name,
+        "version_id": version_id,
+        "passed": passed,
+        "assertion_count": len(body.assertions),
+        "pass_count": sum(1 for r in assertion_results if r["passed"]),
+        "fail_count": sum(1 for r in assertion_results if not r["passed"]),
+        "assertion_results": assertion_results,
+        "run_status": run.get("status"),
+        "timestamp": time.time(),
+    }
+
+    if body.save_result:
+        workflow_test_store.record_result(flow_id, result_record)
+
+    return result_record
+
+
+@v1.get("/workflows/{flow_id}/test-history", tags=["Testing"])
+async def get_workflow_test_history(
+    flow_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return test run history for a workflow (N-34)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    history = workflow_test_store.get_history(flow_id, limit=limit)
+    return {
+        "workflow_id": flow_id,
+        "total": len(history),
+        "history": history,
+    }
+
+
+@v1.post("/workflows/{flow_id}/test-suites", tags=["Testing"])
+async def save_test_suite(
+    flow_id: str,
+    body: dict[str, Any],
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Save a named test suite definition for a workflow (N-34)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    body.setdefault("name", "Unnamed Suite")
+    return workflow_test_store.save_suite(flow_id, body)
+
+
+@v1.get("/workflows/{flow_id}/test-suites", tags=["Testing"])
+async def list_test_suites(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List saved test suite definitions for a workflow (N-34)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    suites = workflow_test_store.list_suites(flow_id)
+    return {"workflow_id": flow_id, "total": len(suites), "suites": suites}
 
 
 # ============================================================
