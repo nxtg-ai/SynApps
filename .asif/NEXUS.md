@@ -282,6 +282,49 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-128 — P1: SynApps CLI — Command-Line Workflow Management
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 07:30 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **`synapps run <workflow-id>`** — execute workflow from terminal.
+2. [ ] **`synapps list`** — list workflows with status.
+3. [ ] **`synapps logs <execution-id>`** — stream execution logs.
+4. [ ] **`synapps marketplace search <query>`** — find templates.
+5. [ ] Package as `synapps-cli` (pip installable).
+6. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-129.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-129 — P1: SynApps SDK — Python Client Library
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 07:30 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **`synapps.Client`** — create/list/run workflows, manage templates, read analytics.
+2. [ ] **Async support** — `await client.run(workflow_id)`.
+3. [ ] **Type hints** throughout. PyPI-ready `pyproject.toml`.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-130.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-130 — P2: Integration Tests — Full Platform E2E
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 07:30 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] E2E: create workflow via SDK → run via CLI → check analytics → verify audit trail. 2. [ ] Final test count.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260319-111 — P0: OPERATION FIRST DOLLAR — Faultline Compliance Workflow Template
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P0
 **Injected**: 2026-03-19 06:00 | **Estimate**: M | **Status**: DONE
