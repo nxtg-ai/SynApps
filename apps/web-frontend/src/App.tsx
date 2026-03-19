@@ -15,6 +15,7 @@ const EditorPage = React.lazy(() => import('./pages/EditorPage/EditorPage'));
 const HistoryPage = React.lazy(() => import('./pages/HistoryPage/HistoryPage'));
 const AppletLibraryPage = React.lazy(() => import('./pages/AppletLibraryPage/AppletLibraryPage'));
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage/SettingsPage'));
+const AnalyticsDashboard = React.lazy(() => import('./pages/AnalyticsDashboard/AnalyticsDashboard'));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage/NotFoundPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
 const RegisterPage = React.lazy(() => import('./pages/RegisterPage/RegisterPage'));
@@ -55,6 +56,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
           <Route path="/applets" element={<ProtectedRoute><AppletLibraryPage /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </React.Suspense>

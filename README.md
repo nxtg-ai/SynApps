@@ -144,6 +144,7 @@ All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-30 | Audit Trail — Compliance Logging | PLATFORM | Global compliance log (actor, action, resource, timestamp), 90-day retention with auto-purge, query filters — `GET /audit?actor=&action=&resource_id=&since=&limit=` |
 | N-31 | Workflow Import from External Tools | PLATFORM | Import n8n and Zapier workflows; auto-detects format, maps 20+ node types, optional `save=true` — `POST /workflows/import` |
 | N-32 | Real-Time Execution Streaming — SSE Progress | EXECUTION | Node-by-node execution progress via Server-Sent Events; `SSEEventBus` pub/sub, `useExecutionStream` React hook — `GET /executions/:id/stream` |
+| N-33 | Workflow Analytics Dashboard — Execution Insights | PLATFORM | Top workflows by executions, avg duration by node type, 24h error rate trends, peak usage hours; CSV export — `GET /analytics/dashboard` |
 
 ## Tech Stack
 
@@ -177,7 +178,7 @@ CI/CD pipelines are set up using GitHub Actions.
 
 ## Testing
 
-**2,017 tests** (1,904 backend + 109 frontend unit + 4 E2E) — all passing.
+**2,059 tests** (1,946 backend + 109 frontend unit + 4 E2E) — all passing.
 
 ### Backend
 

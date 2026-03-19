@@ -42,6 +42,7 @@
 | N-30 | Audit Trail — Compliance Logging | SECURITY | SHIPPED | P1 | 2026-03-18 |
 | N-31 | Workflow Import from External Tools | PLATFORM | SHIPPED | P1 | 2026-03-18 |
 | N-32 | Real-Time Execution Streaming — SSE Progress | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-33 | Workflow Analytics Dashboard — Execution Insights | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 
 ---
 
@@ -267,6 +268,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-163 (Final Portfolio README + Docker) → DONE. README N-31 + 1,992 total tests. All 31 initiatives listed. |
 | 2026-03-19 | DIRECTIVE-NXTG-20260318-164 (N-32 SSE Execution Streaming) → DONE. SSEEventBus + ExecutionLogStore wiring + GET /executions/{id}/stream + useExecutionStream hook. 26 tests. 1,904 backend. |
 | 2026-03-19 | DIRECTIVE-NXTG-20260318-165 (Final Archive + README) → DONE. README N-32, all 32 initiatives. 2,017 total tests. |
+| 2026-03-19 | DIRECTIVE-NXTG-20260319-12 (N-33 Analytics Dashboard) → DONE. WorkflowAnalyticsDashboard, GET /analytics/dashboard, CSV export, React page. 18 tests. 1,946 backend. |
+| 2026-03-19 | DIRECTIVE-NXTG-20260319-13 (D-13 API Rate Limiting + Quotas) → DONE. ExecutionQuotaStore, GET /usage/me, 429+Retry-After. 23 tests. 1,946 backend total. |
 
 ---
 
@@ -278,27 +281,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260319-12 — P1: N-33 Workflow Analytics Dashboard — Execution Insights
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Dashboard endpoint** — `GET /analytics/dashboard`: top workflows by execution count, avg duration by node type, error rate trends, peak usage hours.
-2. [ ] **Frontend dashboard** — React page with charts (reuse patterns from execution analytics).
-3. [ ] **Export** — CSV download of analytics data.
-4. [ ] Tests.
+1. [x] **Dashboard endpoint** — `GET /analytics/dashboard`: top workflows by execution count, avg duration by node type, error rate trends, peak usage hours.
+2. [x] **Frontend dashboard** — React page with charts (reuse patterns from execution analytics).
+3. [x] **Export** — CSV download of analytics data.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260319-13.
-**Response** (filled by team): >
+**Response** (filled by team): N-33 shipped. `WorkflowAnalyticsDashboard` class with 4 static async methods: `top_workflows(limit)` (reuses `AnalyticsService`), `avg_duration_by_node_type()` (aggregates from `execution_log_store` by node_type), `error_rate_trends()` (24-hour rolling buckets with total/error/rate per hour), `peak_usage_hours()` (executions per hour-of-day 0-23). `GET /api/v1/analytics/dashboard` — auth required, runs all 4 with `asyncio.gather`, returns combined JSON. `GET /api/v1/analytics/dashboard/export.csv` — streams two-section CSV (top workflows + node durations) with `Content-Disposition: attachment`. React page `AnalyticsDashboard.tsx` — fetches dashboard, renders 4 sections: top workflows table, node duration table, 24h error rate trend bars (emerald/red), peak usage hour histogram. Added `/analytics` route to `App.tsx`. 18 tests in `test_analytics_dashboard.py`. 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260319-13 — P2: API Rate Limiting + Usage Quotas
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] Per-user rate limits (executions/hour). 2. [ ] Usage quotas (total executions/month). 3. [ ] `GET /usage` endpoint. 4. [ ] 429 responses with retry-after.
+1. [x] Per-user rate limits (executions/hour). 2. [x] Usage quotas (total executions/month). 3. [x] `GET /usage/me` endpoint. 4. [x] 429 responses with retry-after.
 
-**Response** (filled by team): >
+**Response** (filled by team): D-13 shipped. `ExecutionQuotaStore` — thread-safe per-user execution rate limiter: rolling hourly window (60 exec/hour default) + calendar-month quota (1000/month default). `check_and_record(email)` raises `HTTPException(429)` with `Retry-After` header when either limit hit. `get_usage(email)` returns full status dict. `set_limits(email, ...)` for per-user overrides. Wired into `_run_flow_impl` (called before flow execution starts). `GET /api/v1/usage/me` — auth required, returns own quota status (user, executions_this_hour, hourly_limit, hourly_remaining, hourly_reset_in_seconds, executions_this_month, monthly_limit, monthly_remaining). Endpoint registered BEFORE `/usage/{key_id}` to avoid path conflict. HTTPException header forwarding added to error handler. 23 tests in `test_execution_quotas.py` (14 unit + 5 endpoint + 4 enforcement). 2026-03-19.
 
 ---
 

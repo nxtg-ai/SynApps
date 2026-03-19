@@ -838,6 +838,140 @@ class ConsumerUsageTracker:
 usage_tracker = ConsumerUsageTracker()
 
 
+# ---------------------------------------------------------------------------
+# ExecutionQuotaStore — per-user execution rate limits + monthly quotas (D-13)
+# ---------------------------------------------------------------------------
+
+
+class ExecutionQuotaStore:
+    """Thread-safe per-user execution rate limiter and monthly quota tracker.
+
+    Tracks:
+    - Executions this rolling hour (reset every 60 min)
+    - Executions this calendar month (reset on month rollover)
+
+    Default limits:
+    - 60 executions/hour
+    - 1 000 executions/month
+    """
+
+    DEFAULT_HOURLY_LIMIT = 60
+    DEFAULT_MONTHLY_LIMIT = 1000
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # user_email -> {"hourly": int, "monthly": int, "hour_start": float, "month_key": str}
+        self._records: dict[str, dict[str, Any]] = {}
+        # user_email -> {"hourly_limit": int | None, "monthly_limit": int | None}
+        self._limits: dict[str, dict[str, int | None]] = {}
+
+    def _month_key(self) -> str:
+        now = datetime.now(UTC)
+        return f"{now.year}-{now.month:02d}"
+
+    def _ensure(self, user_email: str) -> dict[str, Any]:
+        """Return (creating if needed) the record for user_email. Caller holds lock."""
+        now_ts = time.time()
+        mk = self._month_key()
+        if user_email not in self._records:
+            self._records[user_email] = {
+                "hourly": 0,
+                "monthly": 0,
+                "hour_start": now_ts,
+                "month_key": mk,
+            }
+        rec = self._records[user_email]
+        # Roll hourly counter if > 3600s elapsed
+        if now_ts - rec["hour_start"] >= 3600:
+            rec["hourly"] = 0
+            rec["hour_start"] = now_ts
+        # Roll monthly counter if month changed
+        if rec["month_key"] != mk:
+            rec["monthly"] = 0
+            rec["month_key"] = mk
+        return rec
+
+    def check_and_record(self, user_email: str) -> None:
+        """Check quota then increment counters.
+
+        Raises HTTPException(429) with Retry-After header if any limit is exceeded.
+        """
+        with self._lock:
+            rec = self._ensure(user_email)
+            limits = self._limits.get(user_email, {})
+            hourly_limit = limits.get("hourly_limit") or self.DEFAULT_HOURLY_LIMIT
+            monthly_limit = limits.get("monthly_limit") or self.DEFAULT_MONTHLY_LIMIT
+
+            if rec["hourly"] >= hourly_limit:
+                seconds_remaining = max(1, int(3600 - (time.time() - rec["hour_start"])))
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "execution_rate_limit_exceeded",
+                        "message": f"Hourly execution limit of {hourly_limit} reached.",
+                        "retry_after_seconds": seconds_remaining,
+                    },
+                    headers={"Retry-After": str(seconds_remaining)},
+                )
+
+            if rec["monthly"] >= monthly_limit:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "execution_monthly_quota_exceeded",
+                        "message": f"Monthly execution quota of {monthly_limit} reached.",
+                        "retry_after_seconds": 86400,
+                    },
+                    headers={"Retry-After": "86400"},
+                )
+
+            rec["hourly"] += 1
+            rec["monthly"] += 1
+
+    def get_usage(self, user_email: str) -> dict[str, Any]:
+        """Return current quota status for user_email."""
+        with self._lock:
+            rec = self._ensure(user_email)
+            limits = self._limits.get(user_email, {})
+            hourly_limit = limits.get("hourly_limit") or self.DEFAULT_HOURLY_LIMIT
+            monthly_limit = limits.get("monthly_limit") or self.DEFAULT_MONTHLY_LIMIT
+            now_ts = time.time()
+            hourly_reset_in = max(0, int(3600 - (now_ts - rec["hour_start"])))
+            return {
+                "user": user_email,
+                "executions_this_hour": rec["hourly"],
+                "hourly_limit": hourly_limit,
+                "hourly_remaining": max(0, hourly_limit - rec["hourly"]),
+                "hourly_reset_in_seconds": hourly_reset_in,
+                "executions_this_month": rec["monthly"],
+                "monthly_limit": monthly_limit,
+                "monthly_remaining": max(0, monthly_limit - rec["monthly"]),
+                "month": rec["month_key"],
+            }
+
+    def set_limits(
+        self,
+        user_email: str,
+        hourly_limit: int | None = None,
+        monthly_limit: int | None = None,
+    ) -> None:
+        """Override default limits for user_email (admin use)."""
+        with self._lock:
+            self._limits.setdefault(user_email, {})
+            if hourly_limit is not None:
+                self._limits[user_email]["hourly_limit"] = hourly_limit
+            if monthly_limit is not None:
+                self._limits[user_email]["monthly_limit"] = monthly_limit
+
+    def reset(self) -> None:
+        with self._lock:
+            self._records.clear()
+            self._limits.clear()
+
+
+execution_quota_store = ExecutionQuotaStore()
+
+
 # ============================================================
 # API Deprecation Registry
 # ============================================================
@@ -2393,7 +2527,12 @@ def _error_response(
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     code = _HTTP_ERROR_CODES.get(exc.status_code, "ERROR")
-    return _error_response(exc.status_code, code, str(exc.detail))
+    # Preserve headers from the HTTPException (e.g. Retry-After from quota enforcement)
+    extra_headers: dict[str, str] = dict(exc.headers) if exc.headers else {}
+    response = _error_response(exc.status_code, code, str(exc.detail))
+    for header_name, header_value in extra_headers.items():
+        response.headers[header_name] = header_value
+    return response
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -13218,6 +13357,8 @@ async def _run_flow_impl(
 ) -> dict[str, str]:
     """Execute a flow and return a run identifier."""
     _check_flow_permission(flow_id, current_user.get("email", "") if current_user else "", "editor")
+    if current_user:
+        execution_quota_store.check_and_record(current_user.get("email", "anonymous"))
     flow = await FlowRepository.get_by_id(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -13875,6 +14016,17 @@ async def debug_request(
 # ============================================================
 
 
+@v1.get("/usage/me", tags=["Usage"])
+async def get_my_execution_usage(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return current authenticated user's execution quota status (D-13).
+
+    Shows executions consumed this hour and this month, limits, and remaining quota.
+    """
+    return execution_quota_store.get_usage(current_user.get("email", ""))
+
+
 @v1.get("/usage", tags=["Usage"])
 async def list_usage(
     current_user: dict[str, Any] = Depends(get_authenticated_user),
@@ -14109,6 +14261,203 @@ async def get_node_analytics(
     """Per-node execution analytics: execution counts, success/error rates, avg duration."""
     nodes = await analytics_service.get_node_analytics(flow_id=flow_id)
     return {"nodes": nodes, "total_nodes": len(nodes)}
+
+
+# ============================================================
+# Workflow Analytics Dashboard — N-33
+# ============================================================
+
+
+class WorkflowAnalyticsDashboard:
+    """Aggregates execution data into dashboard metrics for N-33."""
+
+    @staticmethod
+    async def top_workflows(limit: int = 10) -> list[dict]:
+        """Top workflows by execution count (descending)."""
+        workflows = await AnalyticsService.get_workflow_analytics()
+        workflows_sorted = sorted(workflows, key=lambda x: x["run_count"], reverse=True)
+        return workflows_sorted[:limit]
+
+    @staticmethod
+    async def avg_duration_by_node_type() -> list[dict]:
+        """Average execution duration (ms) grouped by node type from execution logs."""
+        # Gather all log entries across all runs
+        with execution_log_store._lock:
+            all_logs = {
+                run_id: list(entries) for run_id, entries in execution_log_store._logs.items()
+            }
+        type_durations: dict[str, list[float]] = {}
+        for entries in all_logs.values():
+            for entry in entries:
+                node_type = entry.get("node_type")
+                duration_ms = entry.get("duration_ms")
+                if node_type and duration_ms is not None:
+                    try:
+                        type_durations.setdefault(node_type, []).append(float(duration_ms))
+                    except (TypeError, ValueError):
+                        pass  # non-numeric — skip gracefully
+        result = []
+        for node_type, durations in type_durations.items():
+            result.append(
+                {
+                    "node_type": node_type,
+                    "avg_duration_ms": sum(durations) / len(durations),
+                    "sample_count": len(durations),
+                }
+            )
+        result.sort(key=lambda x: x["avg_duration_ms"], reverse=True)
+        return result
+
+    @staticmethod
+    async def error_rate_trends() -> list[dict]:
+        """Error rate per hour for the last 24 hours (UTC).
+
+        Returns a list of 24 dicts: {hour_label, total, errors, error_rate}.
+        hour_label is ISO-8601 truncated to the hour, e.g. "2026-03-19T14".
+        """
+
+        now = datetime.now(UTC)
+        # Build 24-hour bucket keys newest-first then reverse
+        hour_keys: list[str] = []
+        for i in range(23, -1, -1):
+            ts = now - timedelta(hours=i)
+            hour_keys.append(ts.strftime("%Y-%m-%dT%H"))
+
+        buckets: dict[str, dict[str, int]] = {k: {"total": 0, "errors": 0} for k in hour_keys}
+
+        all_runs = await WorkflowRunRepository.get_all()
+        for run in all_runs:
+            start_time = run.get("start_time")
+            if start_time is None:
+                continue
+            try:
+                ts = datetime.fromtimestamp(float(start_time), tz=UTC)
+                key = ts.strftime("%Y-%m-%dT%H")
+            except (TypeError, ValueError, OSError):
+                continue
+            if key not in buckets:
+                continue
+            buckets[key]["total"] += 1
+            if run.get("status") == "error":
+                buckets[key]["errors"] += 1
+
+        result = []
+        for key in hour_keys:
+            b = buckets[key]
+            total = b["total"]
+            errors = b["errors"]
+            result.append(
+                {
+                    "hour_label": key,
+                    "total": total,
+                    "errors": errors,
+                    "error_rate": errors / total if total > 0 else 0.0,
+                }
+            )
+        return result
+
+    @staticmethod
+    async def peak_usage_hours() -> list[dict]:
+        """Total executions per hour-of-day (0–23) across all time."""
+
+        hour_counts: dict[int, int] = {h: 0 for h in range(24)}
+        all_runs = await WorkflowRunRepository.get_all()
+        for run in all_runs:
+            start_time = run.get("start_time")
+            if start_time is None:
+                continue
+            try:
+                ts = datetime.fromtimestamp(float(start_time), tz=UTC)
+                hour_counts[ts.hour] += 1
+            except (TypeError, ValueError, OSError):
+                continue
+        return [{"hour": h, "execution_count": c} for h, c in sorted(hour_counts.items())]
+
+
+@v1.get("/analytics/dashboard", tags=["Analytics"])
+async def get_analytics_dashboard(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Aggregated execution insights dashboard (N-33).
+
+    Returns:
+    - top_workflows: top 10 by execution count
+    - avg_duration_by_node_type: average duration per node type (ms)
+    - error_rate_trends: hourly error rates for the last 24 h
+    - peak_usage_hours: executions per hour-of-day (0–23)
+    """
+    top_workflows, avg_durations, trends, peak_hours = await asyncio.gather(
+        WorkflowAnalyticsDashboard.top_workflows(),
+        WorkflowAnalyticsDashboard.avg_duration_by_node_type(),
+        WorkflowAnalyticsDashboard.error_rate_trends(),
+        WorkflowAnalyticsDashboard.peak_usage_hours(),
+    )
+    return {
+        "top_workflows": top_workflows,
+        "avg_duration_by_node_type": avg_durations,
+        "error_rate_trends": trends,
+        "peak_usage_hours": peak_hours,
+    }
+
+
+@v1.get("/analytics/dashboard/export.csv", tags=["Analytics"])
+async def export_analytics_dashboard_csv(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Download analytics dashboard data as CSV (N-33).
+
+    Returns a multi-section CSV with top workflows and node duration data.
+    """
+    import csv
+    import io
+
+    top_workflows = await WorkflowAnalyticsDashboard.top_workflows(limit=50)
+    avg_durations = await WorkflowAnalyticsDashboard.avg_duration_by_node_type()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    # Section 1: top workflows
+    writer.writerow(["# Top Workflows"])
+    writer.writerow(
+        [
+            "flow_id",
+            "run_count",
+            "success_count",
+            "error_count",
+            "success_rate",
+            "error_rate",
+            "avg_duration_seconds",
+        ]
+    )
+    for wf in top_workflows:
+        writer.writerow(
+            [
+                wf["flow_id"],
+                wf["run_count"],
+                wf["success_count"],
+                wf["error_count"],
+                wf["success_rate"],
+                wf["error_rate"],
+                wf.get("avg_duration_seconds", ""),
+            ]
+        )
+
+    writer.writerow([])  # blank separator
+
+    # Section 2: avg duration by node type
+    writer.writerow(["# Avg Duration by Node Type (ms)"])
+    writer.writerow(["node_type", "avg_duration_ms", "sample_count"])
+    for nd in avg_durations:
+        writer.writerow([nd["node_type"], nd["avg_duration_ms"], nd["sample_count"]])
+
+    from fastapi.responses import StreamingResponse
+
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=analytics_dashboard.csv"},
+    )
 
 
 # ============================================================
