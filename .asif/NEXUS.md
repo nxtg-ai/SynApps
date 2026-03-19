@@ -276,6 +276,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-12 — P1: N-33 Workflow Analytics Dashboard — Execution Insights
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Dashboard endpoint** — `GET /analytics/dashboard`: top workflows by execution count, avg duration by node type, error rate trends, peak usage hours.
+2. [ ] **Frontend dashboard** — React page with charts (reuse patterns from execution analytics).
+3. [ ] **Export** — CSV download of analytics data.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-13.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-13 — P2: API Rate Limiting + Usage Quotas
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Per-user rate limits (executions/hour). 2. [ ] Usage quotas (total executions/month). 3. [ ] `GET /usage` endpoint. 4. [ ] 429 responses with retry-after.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260318-164 — P1: N-32 Real-Time Execution Streaming — SSE Progress
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-18 23:45 | **Estimate**: M | **Status**: DONE
