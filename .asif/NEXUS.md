@@ -255,6 +255,8 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-145 (Docker + Deployment) → DONE. Redis added to docker-compose.yml, docs/deployment.md written (env vars, Fly.io/Vercel deploy, scaling, monitoring). |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-152 (N-30 Audit Trail) → DONE. AuditLogStore, 6 lifecycle events wired, GET /audit endpoint, 90-day retention. set_owner bugfix. 21 tests. 1,844 backend. |
 | 2026-03-18 | DIRECTIVE-NXTG-20260318-153 (Final Session Summary) → DONE. 1,957 total tests (1,844+109+4). All 30 N-series initiatives complete. README+CHANGELOG updated. SynApps v1.0-alpha feature-complete. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-162 (N-31 Workflow Import n8n+Zapier) → DONE. WorkflowImportService, POST /workflows/import, 35 tests. 1,879 backend. |
+| 2026-03-18 | DIRECTIVE-NXTG-20260318-163 (Final Portfolio README + Docker) → DONE. README N-31 + 1,992 total tests. All 31 initiatives listed. |
 
 ---
 
@@ -266,27 +268,27 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260318-162 — P1: N-31 Workflow Import from External Tools
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-18 23:30 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-18 23:30 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **n8n import** — parse n8n workflow JSON, map to SynApps node types.
-2. [ ] **Zapier import** — parse Zapier zap export, map triggers/actions to SynApps equivalents.
-3. [ ] **`POST /workflows/import`** — accept external format, return converted SynApps workflow.
-4. [ ] Tests.
+1. [x] **n8n import** — parse n8n workflow JSON, map to SynApps node types.
+2. [x] **Zapier import** — parse Zapier zap export, map triggers/actions to SynApps equivalents.
+3. [x] **`POST /workflows/import`** — accept external format, return converted SynApps workflow.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260318-163.
-**Response** (filled by team): >
+**Response** (filled by team): `WorkflowImportService` added to `main.py` — static methods `from_n8n`, `from_zapier`, `detect_format`, `convert`. n8n node-type map covers 20+ types (start/http/code/llm/if_else/merge/for_each/transform). Zapier step-type map covers trigger/http_action/ai_action/filter/loop/etc. Both converters generate `start`+`end` nodes if missing. `POST /api/v1/workflows/import` accepts `{data, format?, save?}` — auto-detects format, returns converted workflow JSON with `node_count`/`edge_count`. `save=true` persists to flow store, sets ownership, records audit log. 35 tests — all passing.
 
 ---
 
 ### DIRECTIVE-NXTG-20260318-163 — P2: Final Portfolio README + Docker Compose
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-18 23:30 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-18 23:30 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] README — all 31 initiatives. 2. [ ] Docker compose final. 3. [ ] Final test count.
+1. [x] README — all 31 initiatives. 2. [x] Docker compose final. 3. [x] Final test count.
 
-**Response** (filled by team): >
+**Response** (filled by team): README updated with N-31 in initiatives table. Docker Compose is final (Redis + Postgres + Orchestrator + Frontend, all with healthchecks). Final test count: **1,992 tests** (1,879 backend + 109 frontend unit + 4 E2E). All passing. SynApps v1.0-alpha: 31 N-series initiatives complete.
 
 ---
 

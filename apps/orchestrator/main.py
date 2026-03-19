@@ -8456,6 +8456,232 @@ class AuditLogStore:
 audit_log_store = AuditLogStore(retention_days=int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "90")))
 
 
+# ---------------------------------------------------------------------------
+# WorkflowImportService — N-31 Import from External Tools
+# ---------------------------------------------------------------------------
+
+class WorkflowImportService:
+    """Convert n8n or Zapier workflow JSON to SynApps format.
+
+    Auto-detects the source format from payload structure, then maps
+    node types and connectivity to SynApps equivalents.  Unknown node
+    types fall back to ``transform``.
+    """
+
+    # ---- n8n → SynApps node-type mapping ----
+    _N8N_TYPE_MAP: dict[str, str] = {
+        "n8n-nodes-base.start": "start",
+        "n8n-nodes-base.manualTrigger": "start",
+        "n8n-nodes-base.webhook": "start",
+        "n8n-nodes-base.scheduleTrigger": "start",
+        "n8n-nodes-base.httpRequest": "http",
+        "n8n-nodes-base.code": "code",
+        "n8n-nodes-base.function": "code",
+        "n8n-nodes-base.functionItem": "code",
+        "n8n-nodes-base.if": "if_else",
+        "n8n-nodes-base.switch": "if_else",
+        "n8n-nodes-base.merge": "merge",
+        "n8n-nodes-base.splitInBatches": "for_each",
+        "n8n-nodes-base.itemLists": "for_each",
+        "n8n-nodes-base.set": "transform",
+        "n8n-nodes-base.noOp": "transform",
+        # LLM / AI nodes
+        "n8n-nodes-base.openAi": "llm",
+        "@n8n/n8n-nodes-langchain.openAi": "llm",
+        "@n8n/n8n-nodes-langchain.lmOpenAi": "llm",
+        "@n8n/n8n-nodes-langchain.agent": "llm",
+        "@n8n/n8n-nodes-langchain.chainLlm": "llm",
+    }
+
+    # ---- Zapier action-type → SynApps node-type mapping ----
+    _ZAPIER_TYPE_MAP: dict[str, str] = {
+        "trigger": "start",
+        "webhook_trigger": "start",
+        "schedule_trigger": "start",
+        "action": "transform",
+        "http_action": "http",
+        "webhook_action": "http",
+        "code_action": "code",
+        "filter": "if_else",
+        "conditional": "if_else",
+        "delay": "transform",
+        "formatter": "transform",
+        "ai_action": "llm",
+        "openai_action": "llm",
+        "loop": "for_each",
+        "sub_zap": "for_each",
+    }
+
+    # ---- Format detection ----
+
+    @staticmethod
+    def detect_format(data: dict[str, Any]) -> str:
+        """Return 'n8n', 'zapier', or 'unknown'."""
+        if "nodes" in data and "connections" in data:
+            nodes = data.get("nodes", [])
+            if nodes and isinstance(nodes[0], dict) and "type" in nodes[0]:
+                n8n_type: str = nodes[0]["type"]
+                if "n8n" in n8n_type or "." in n8n_type:
+                    return "n8n"
+        if "steps" in data or "zap" in data or "trigger" in data:
+            return "zapier"
+        # Fallback heuristics
+        if "connections" in data:
+            return "n8n"
+        return "unknown"
+
+    # ---- n8n conversion ----
+
+    @classmethod
+    def from_n8n(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Convert an n8n workflow export to SynApps format."""
+        flow_id = str(uuid.uuid4())
+        name: str = data.get("name", "Imported n8n Workflow")
+        raw_nodes: list[dict[str, Any]] = data.get("nodes", [])
+        connections: dict[str, Any] = data.get("connections", {})
+
+        # Build name→id mapping (n8n uses node names as connection keys)
+        name_to_id: dict[str, str] = {}
+        synapps_nodes: list[dict[str, Any]] = []
+
+        for i, raw in enumerate(raw_nodes):
+            node_id = f"n8n-{i}"
+            name_to_id[raw.get("name", node_id)] = node_id
+            n8n_type: str = raw.get("type", "")
+            snap_type = cls._N8N_TYPE_MAP.get(n8n_type, "transform")
+            pos = raw.get("position", [i * 200, 0])
+            params: dict[str, Any] = raw.get("parameters", {})
+            node_data: dict[str, Any] = {"label": raw.get("name", snap_type)}
+            # Map common parameters
+            if snap_type == "http":
+                node_data["url"] = params.get("url", "")
+                node_data["method"] = params.get("method", "GET")
+            elif snap_type == "code":
+                node_data["code"] = params.get("jsCode", params.get("functionCode", ""))
+            elif snap_type == "llm":
+                node_data["prompt"] = params.get("prompt", params.get("text", ""))
+                node_data["model"] = params.get("model", "gpt-4o-mini")
+            elif snap_type == "if_else":
+                node_data["condition"] = params.get("conditions", {})
+            synapps_nodes.append({
+                "id": node_id,
+                "type": snap_type,
+                "position": {"x": pos[0] if isinstance(pos, list) else 0, "y": pos[1] if isinstance(pos, list) else 0},
+                "data": node_data,
+            })
+
+        # Ensure start and end nodes exist
+        has_start = any(n["type"] == "start" for n in synapps_nodes)
+        has_end = any(n["type"] == "end" for n in synapps_nodes)
+        if not has_start:
+            synapps_nodes.insert(0, {"id": "imported-start", "type": "start", "position": {"x": 0, "y": 0}, "data": {}})
+            name_to_id["__start__"] = "imported-start"
+        if not has_end:
+            last_x = max((n["position"]["x"] for n in synapps_nodes), default=0) + 200
+            synapps_nodes.append({"id": "imported-end", "type": "end", "position": {"x": last_x, "y": 0}, "data": {}})
+
+        # Build edges from n8n connections dict
+        edges: list[dict[str, Any]] = []
+        edge_counter = 0
+        for src_name, output_groups in connections.items():
+            src_id = name_to_id.get(src_name)
+            if not src_id:
+                continue
+            main_outputs = output_groups.get("main", [])
+            for output_list in main_outputs:
+                if not isinstance(output_list, list):
+                    continue
+                for conn in output_list:
+                    tgt_name = conn.get("node", "")
+                    tgt_id = name_to_id.get(tgt_name)
+                    if tgt_id:
+                        edges.append({
+                            "id": f"e{edge_counter}",
+                            "source": src_id,
+                            "target": tgt_id,
+                        })
+                        edge_counter += 1
+
+        return {"id": flow_id, "name": name, "nodes": synapps_nodes, "edges": edges}
+
+    # ---- Zapier conversion ----
+
+    @classmethod
+    def from_zapier(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Convert a Zapier zap export to SynApps format.
+
+        Expected Zapier structure::
+
+            {
+              "title": "My Zap",
+              "steps": [
+                {"id": "1", "type": "trigger", "app": "Gmail", "action": "New Email", "params": {}},
+                {"id": "2", "type": "action", "app": "Slack", "action": "Send Message", "params": {}}
+              ]
+            }
+        """
+        flow_id = str(uuid.uuid4())
+        name: str = data.get("title", data.get("name", data.get("zap", {}).get("title", "Imported Zapier Workflow")))
+        # Support both flat steps and nested zap.steps
+        steps: list[dict[str, Any]] = data.get("steps", data.get("zap", {}).get("steps", []))
+
+        synapps_nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+
+        for i, step in enumerate(steps):
+            raw_type: str = step.get("type", "action").lower()
+            snap_type = cls._ZAPIER_TYPE_MAP.get(raw_type, "transform")
+            step_id = str(step.get("id", f"zapier-{i}"))
+            params: dict[str, Any] = step.get("params", step.get("config", {}))
+            node_data: dict[str, Any] = {
+                "label": f"{step.get('app', '')} — {step.get('action', step.get('event', ''))}".strip(" —"),
+            }
+            if snap_type == "http":
+                node_data["url"] = params.get("url", "")
+                node_data["method"] = params.get("method", "POST")
+            elif snap_type == "code":
+                node_data["code"] = params.get("code", "")
+            elif snap_type == "llm":
+                node_data["prompt"] = params.get("prompt", params.get("input", ""))
+                node_data["model"] = params.get("model", "gpt-4o-mini")
+            synapps_nodes.append({
+                "id": step_id,
+                "type": snap_type,
+                "position": {"x": i * 200, "y": 0},
+                "data": node_data,
+            })
+            if i > 0:
+                prev_id = str(steps[i - 1].get("id", f"zapier-{i-1}"))
+                edges.append({"id": f"e{i-1}", "source": prev_id, "target": step_id})
+
+        # Ensure start and end
+        if not synapps_nodes or synapps_nodes[0]["type"] != "start":
+            synapps_nodes.insert(0, {"id": "imported-start", "type": "start", "position": {"x": -200, "y": 0}, "data": {}})
+            if steps:
+                edges.insert(0, {"id": "e-start", "source": "imported-start", "target": str(steps[0].get("id", "zapier-0"))})
+        if not synapps_nodes or synapps_nodes[-1]["type"] != "end":
+            last_x = len(steps) * 200
+            synapps_nodes.append({"id": "imported-end", "type": "end", "position": {"x": last_x, "y": 0}, "data": {}})
+            if steps:
+                last_step_id = str(steps[-1].get("id", f"zapier-{len(steps)-1}"))
+                edges.append({"id": "e-end", "source": last_step_id, "target": "imported-end"})
+
+        return {"id": flow_id, "name": name, "nodes": synapps_nodes, "edges": edges}
+
+    # ---- Auto-dispatch ----
+
+    @classmethod
+    def convert(cls, data: dict[str, Any], fmt: str | None = None) -> tuple[dict[str, Any], str]:
+        """Convert *data* to SynApps format; return (workflow, detected_format)."""
+        if fmt is None:
+            fmt = cls.detect_format(data)
+        if fmt == "n8n":
+            return cls.from_n8n(data), "n8n"
+        if fmt == "zapier":
+            return cls.from_zapier(data), "zapier"
+        raise HTTPException(status_code=422, detail=f"Unrecognised import format: {fmt!r}. Supported: 'n8n', 'zapier'.")
+
+
 def _check_flow_permission(flow_id: str, user_id: str, required: str) -> None:
     """Raise HTTP 403 if user lacks the required role.
 
@@ -13705,6 +13931,56 @@ async def get_audit_trail(
         limit=limit,
     )
     return {"count": len(entries), "entries": entries}
+
+
+# ---------------------------------------------------------------------------
+# POST /workflows/import — N-31 External Workflow Import
+# ---------------------------------------------------------------------------
+
+
+class ImportWorkflowRequest(BaseModel):
+    """Body for POST /workflows/import."""
+
+    format: str | None = Field(
+        None,
+        description="Source format: 'n8n' or 'zapier'. Auto-detected if omitted.",
+    )
+    data: dict[str, Any] = Field(..., description="Raw workflow JSON from the source tool.")
+    save: bool = Field(False, description="If true, persist the converted workflow to the flow store.")
+
+
+@v1.post("/workflows/import", status_code=200, tags=["Workflows"])
+async def import_workflow(
+    body: ImportWorkflowRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Import a workflow from an external tool (n8n or Zapier) and convert to SynApps format.
+
+    Returns the converted SynApps workflow JSON.  Pass ``save=true`` to also
+    persist the result as a new flow (caller becomes the owner).
+    """
+    workflow, detected_format = WorkflowImportService.convert(body.data, fmt=body.format)
+    result: dict[str, Any] = {
+        "format": detected_format,
+        "workflow": workflow,
+        "node_count": len(workflow.get("nodes", [])),
+        "edge_count": len(workflow.get("edges", [])),
+    }
+    if body.save:
+        await FlowRepository.save(workflow)
+        user_email = current_user.get("email", "")
+        if user_email and user_email != "anonymous@local":
+            workflow_permission_store.set_owner(workflow["id"], user_email)
+        audit_log_store.record(
+            user_email or "anonymous",
+            "workflow_created",
+            "flow",
+            workflow["id"],
+            detail=f"Imported from {detected_format}: '{workflow.get('name', workflow['id'])}'.",
+        )
+        result["saved"] = True
+        result["flow_id"] = workflow["id"]
+    return result
 
 
 # Include versioned router
