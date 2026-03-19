@@ -279,6 +279,32 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-24 — P1: N-34 Workflow Testing Framework — Automated Validation
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 02:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Test runner for workflows** — `POST /workflows/:id/test` with mock inputs → validate expected outputs.
+2. [ ] **Assertion DSL** — `output.field == "expected"`, `output.count > 5`, type checks.
+3. [ ] **Test history** — store pass/fail results per workflow version.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-25.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-25 — P2: Final Session Summary
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 02:15 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Final test count. 2. [ ] All initiatives. 3. [ ] README.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260319-12 — P1: N-33 Workflow Analytics Dashboard — Execution Insights
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-19 01:40 | **Estimate**: M | **Status**: DONE
