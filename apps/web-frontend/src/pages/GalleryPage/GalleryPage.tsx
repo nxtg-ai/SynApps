@@ -31,6 +31,8 @@ interface MarketplaceListing {
   install_count: number;
   featured: boolean;
   published_at: number;
+  avg_rating?: number;
+  rating_count?: number;
 }
 
 interface SearchResponse {
@@ -672,7 +674,11 @@ const GalleryPage: React.FC = () => {
                 {visibleItems.map((listing) => {
                   const isInstalled = installedIds.has(listing.id);
                   const isInstalling = installingIds.has(listing.id);
-                  const rating = deriveStarRating(listing.install_count);
+                  const hasRealRating = (listing.avg_rating ?? 0) > 0;
+                  const rating = hasRealRating
+                    ? listing.avg_rating!.toFixed(1)
+                    : deriveStarRating(listing.install_count);
+                  const ratingCount = listing.rating_count ?? 0;
                   const visibleTags = listing.tags.slice(0, 3);
                   const extraTags = listing.tags.length - visibleTags.length;
 
@@ -713,6 +719,9 @@ const GalleryPage: React.FC = () => {
                             <span className="gallery-rating" title={`Rating: ${rating}`}>
                               <span className="gallery-stars">{renderStars(rating)}</span>
                               <span className="gallery-rating-value">{rating}</span>
+                              {hasRealRating && ratingCount > 0 && (
+                                <span className="gallery-rating-count">({ratingCount})</span>
+                              )}
                             </span>
                             <span className="gallery-installs">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

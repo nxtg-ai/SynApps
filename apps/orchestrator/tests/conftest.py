@@ -6,7 +6,9 @@ import apps.orchestrator.db as db_module
 from apps.orchestrator.main import (
     audit_log_store,
     execution_quota_store,
+    issue_store,
     rating_store,
+    reply_store,
     review_store,
 )
 from apps.orchestrator.middleware.rate_limiter import (
@@ -56,9 +58,13 @@ def _reset_shared_stores():
     audit_log_store.reset()
     rating_store.reset()
     review_store.reset()
+    reply_store.reset()
+    issue_store.reset()
     yield
     # Post-test cleanup (belt-and-suspenders for any state written during test)
     execution_quota_store.reset()
     audit_log_store.reset()
     rating_store.reset()
     review_store.reset()
+    reply_store.reset()
+    issue_store.reset()

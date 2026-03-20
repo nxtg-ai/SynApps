@@ -29,7 +29,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 # Load environment variables: .env takes priority, falls back to .env.development
 from dotenv import load_dotenv
@@ -13792,7 +13792,13 @@ async def marketplace_search(
         page=page,
         per_page=per_page,
     )
-    return {"items": items, "total": total, "page": page, "per_page": per_page}
+    # Enrich each listing with avg_rating and rating_count from the rating store
+    enriched = []
+    for item in items:
+        lid = item.get("listing_id", item.get("id", ""))
+        stats = rating_store.get_stats(lid)
+        enriched.append({**item, "avg_rating": stats["avg_rating"], "rating_count": stats["rating_count"]})
+    return {"items": enriched, "total": total, "page": page, "per_page": per_page}
 
 
 @v1.get("/marketplace/featured", tags=["Marketplace"])
@@ -19299,6 +19305,79 @@ review_store = ReviewStore()
 trending_service = TrendingService()
 
 
+class ReplyStore:
+    """Publisher replies to reviews. One reply per review (upsert on re-reply)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # review_id -> reply dict
+        self._replies: dict[str, dict[str, Any]] = {}
+
+    def add_reply(self, review_id: str, publisher_id: str, text: str) -> dict[str, Any]:
+        """Add or update a publisher reply for a review."""
+        with self._lock:
+            reply: dict[str, Any] = {
+                "reply_id": str(uuid.uuid4()),
+                "review_id": review_id,
+                "publisher_id": publisher_id,
+                "text": text,
+                "created_at": time.time(),
+            }
+            self._replies[review_id] = reply
+            return reply
+
+    def get_reply(self, review_id: str) -> dict[str, Any] | None:
+        """Return the reply for a review, or None if no reply exists."""
+        with self._lock:
+            return self._replies.get(review_id)
+
+    def reset(self) -> None:
+        """Clear all stored replies."""
+        with self._lock:
+            self._replies.clear()
+
+
+class IssueStore:
+    """Issue reports for marketplace listings."""
+
+    VALID_TYPES = {"broken", "malware", "spam", "outdated", "other"}
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # listing_id -> list[issue_dict]
+        self._issues: dict[str, list[dict[str, Any]]] = {}
+
+    def report(
+        self, listing_id: str, user_id: str, issue_type: str, description: str
+    ) -> dict[str, Any]:
+        """File an issue report for a listing. Returns the new issue dict."""
+        with self._lock:
+            issue: dict[str, Any] = {
+                "issue_id": str(uuid.uuid4()),
+                "listing_id": listing_id,
+                "user_id": user_id,
+                "type": issue_type,
+                "description": description,
+                "created_at": time.time(),
+            }
+            self._issues.setdefault(listing_id, []).append(issue)
+            return issue
+
+    def list(self, listing_id: str) -> list[dict[str, Any]]:
+        """Return all issue reports for a listing, newest first."""
+        with self._lock:
+            return list(reversed(self._issues.get(listing_id, [])))
+
+    def reset(self) -> None:
+        """Clear all stored issues."""
+        with self._lock:
+            self._issues.clear()
+
+
+reply_store = ReplyStore()
+issue_store = IssueStore()
+
+
 class RateListingRequest(BaseModel):
     """Request body for rating a marketplace listing."""
 
@@ -19312,6 +19391,21 @@ class ReviewListingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(..., min_length=1, max_length=2000)
     stars: int | None = Field(None, ge=1, le=5)
+
+
+class ReplyToReviewRequest(BaseModel):
+    """Request body for a publisher reply to a review."""
+
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+class ReportIssueRequest(BaseModel):
+    """Request body for reporting an issue with a marketplace listing."""
+
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["broken", "malware", "spam", "outdated", "other"]
+    description: str = Field(..., min_length=1, max_length=1000)
 
 
 # ---------------------------------------------------------------------------
@@ -19394,9 +19488,38 @@ async def list_reviews(
     listing_id: str,
     limit: int = Query(20, ge=1, le=100),
 ) -> dict[str, Any]:
-    """List reviews for a marketplace listing (no auth required)."""
+    """List reviews for a marketplace listing (no auth required).
+
+    Each review includes a ``reply`` field containing the publisher's reply
+    (or ``None`` if no reply exists).
+    """
     items = review_store.list(listing_id, limit=limit)
-    return {"listing_id": listing_id, "items": items, "total": len(items)}
+    enriched = []
+    for review in items:
+        enriched.append({**review, "reply": reply_store.get_reply(review["review_id"])})
+    return {"listing_id": listing_id, "items": enriched, "total": len(enriched)}
+
+
+@v1.post("/marketplace/reviews/{review_id}/reply", tags=["Marketplace"])
+async def reply_to_review(
+    review_id: str,
+    body: ReplyToReviewRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Submit a publisher reply to a review (auth required)."""
+    reply = reply_store.add_reply(review_id, current_user["id"], body.text)
+    return reply
+
+
+@v1.post("/marketplace/{listing_id}/report", status_code=201, tags=["Marketplace"])
+async def report_issue(
+    listing_id: str,
+    body: ReportIssueRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Report an issue with a marketplace listing (auth required)."""
+    issue = issue_store.report(listing_id, current_user["id"], body.type, body.description)
+    return issue
 
 
 # Include versioned router
