@@ -352,7 +352,12 @@ class TestEstimateCostEndpoint:
     def test_response_has_breakdown_list_at_least_node_count(self):
         uid = uuid.uuid4().hex[:8]
         nodes = [
-            {"id": f"llm-{uid}", "type": "llm", "position": {"x": 0, "y": 0}, "data": {"model": "gpt-4o", "prompt": "hi"}},
+            {
+                "id": f"llm-{uid}",
+                "type": "llm",
+                "position": {"x": 0, "y": 0},
+                "data": {"model": "gpt-4o", "prompt": "hi"},
+            },
             {"id": f"http-{uid}", "type": "http", "position": {"x": 100, "y": 0}, "data": {}},
         ]
         with TestClient(app) as client:
@@ -372,7 +377,12 @@ class TestEstimateCostEndpoint:
     def test_llm_node_increases_estimated_usd(self):
         uid = uuid.uuid4().hex[:8]
         llm_nodes = [
-            {"id": f"llm-{uid}", "type": "llm", "position": {"x": 0, "y": 0}, "data": {"model": "gpt-4o", "prompt": "hello"}}
+            {
+                "id": f"llm-{uid}",
+                "type": "llm",
+                "position": {"x": 0, "y": 0},
+                "data": {"model": "gpt-4o", "prompt": "hello"},
+            }
         ]
         no_llm_nodes = [
             {"id": f"xfm-{uid}", "type": "transform", "position": {"x": 0, "y": 0}, "data": {}}

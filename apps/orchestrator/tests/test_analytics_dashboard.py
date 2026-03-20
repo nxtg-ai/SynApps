@@ -250,17 +250,21 @@ class TestAnalyticsDashboardCostSummary:
         assert "cost_summary" in body  # Gate 2
 
     def test_cost_summary_total_usd_is_float(self):
-        cost_tracker_store.record("exec-dash-1", "flow-dash-A", [
-            {
-                "node_id": "n1",
-                "node_type": "llm",
-                "token_input": 100,
-                "token_output": 50,
-                "model": "gpt-4o",
-                "estimated_usd": 0.001250,
-                "api_calls": 0,
-            }
-        ])
+        cost_tracker_store.record(
+            "exec-dash-1",
+            "flow-dash-A",
+            [
+                {
+                    "node_id": "n1",
+                    "node_type": "llm",
+                    "token_input": 100,
+                    "token_output": 50,
+                    "model": "gpt-4o",
+                    "estimated_usd": 0.001250,
+                    "api_calls": 0,
+                }
+            ],
+        )
         with TestClient(app) as client:
             token = _register(client)
             with _mock_runs([]):

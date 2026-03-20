@@ -71,9 +71,7 @@ def _publish_direct(
 def _register(client: TestClient) -> str:
     """Register a fresh user and return the access_token."""
     email = f"u-{uuid.uuid4().hex[:8]}@example.com"
-    resp = client.post(
-        "/api/v1/auth/register", json={"email": email, "password": "Pass1234!"}
-    )
+    resp = client.post("/api/v1/auth/register", json={"email": email, "password": "Pass1234!"})
     assert resp.status_code == 201, resp.text
     return resp.json()["access_token"]
 

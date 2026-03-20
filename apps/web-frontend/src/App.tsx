@@ -2,7 +2,14 @@
  * Main App component
  */
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  Link,
+  useLocation,
+} from 'react-router-dom';
 import webSocketService from './services/WebSocketService';
 import { Button } from './components/ui/button';
 import { useSettingsStore } from './stores/settingsStore';
@@ -15,7 +22,9 @@ const EditorPage = React.lazy(() => import('./pages/EditorPage/EditorPage'));
 const HistoryPage = React.lazy(() => import('./pages/HistoryPage/HistoryPage'));
 const AppletLibraryPage = React.lazy(() => import('./pages/AppletLibraryPage/AppletLibraryPage'));
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage/SettingsPage'));
-const AnalyticsDashboard = React.lazy(() => import('./pages/AnalyticsDashboard/AnalyticsDashboard'));
+const AnalyticsDashboard = React.lazy(
+  () => import('./pages/AnalyticsDashboard/AnalyticsDashboard'),
+);
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage/NotFoundPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
 const RegisterPage = React.lazy(() => import('./pages/RegisterPage/RegisterPage'));
@@ -23,14 +32,23 @@ const PricingPage = React.lazy(() => import('./pages/PricingPage/PricingPage'));
 const PlaygroundPage = React.lazy(() => import('./pages/PlaygroundPage/PlaygroundPage'));
 const GalleryPage = React.lazy(() => import('./pages/GalleryPage/GalleryPage'));
 const WorkflowDiffPage = React.lazy(() => import('./pages/WorkflowDiffPage/WorkflowDiffPage'));
-const PublisherDashboardPage = React.lazy(() => import('./pages/PublisherDashboardPage/PublisherDashboardPage'));
+const PublisherDashboardPage = React.lazy(
+  () => import('./pages/PublisherDashboardPage/PublisherDashboardPage'),
+);
 const CreditsPage = React.lazy(() => import('./pages/CreditsPage/CreditsPage'));
-const TemplateWizardPage = React.lazy(() => import('./pages/TemplateWizardPage/TemplateWizardPage'));
+const TemplateWizardPage = React.lazy(
+  () => import('./pages/TemplateWizardPage/TemplateWizardPage'),
+);
 const SLADashboardPage = React.lazy(() => import('./pages/SLADashboardPage/SLADashboardPage'));
-const WebhookDebuggerPage = React.lazy(() => import('./pages/WebhookDebuggerPage/WebhookDebuggerPage'));
+const WebhookDebuggerPage = React.lazy(
+  () => import('./pages/WebhookDebuggerPage/WebhookDebuggerPage'),
+);
 const AdminFeaturedPage = React.lazy(() => import('./pages/AdminFeaturedPage/AdminFeaturedPage'));
 const RollbackPage = React.lazy(() => import('./pages/RollbackPage/RollbackPage'));
 const SearchPage = React.lazy(() => import('./pages/SearchPage/SearchPage'));
+const PublisherAnalyticsDashboard = React.lazy(
+  () => import('./pages/PublisherAnalyticsDashboard/PublisherAnalyticsDashboard'),
+);
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -61,28 +79,169 @@ const AppRoutes: React.FC = () => {
           <Route path="/pricing" element={<PricingPage />} />
 
           {/* Guest-only routes */}
-          <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-          <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+          <Route
+            path="/login"
+            element={
+              <GuestRoute>
+                <LoginPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <GuestRoute>
+                <RegisterPage />
+              </GuestRoute>
+            }
+          />
 
           {/* Protected routes */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/editor/:flowId?" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
-          <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
-          <Route path="/applets" element={<ProtectedRoute><AppletLibraryPage /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
-          <Route path="/playground" element={<ProtectedRoute><PlaygroundPage /></ProtectedRoute>} />
-          <Route path="/gallery" element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
-          <Route path="/publisher/dashboard" element={<ProtectedRoute><PublisherDashboardPage /></ProtectedRoute>} />
-          <Route path="/publisher/credits" element={<ProtectedRoute><CreditsPage /></ProtectedRoute>} />
-          <Route path="/wizard" element={<ProtectedRoute><TemplateWizardPage /></ProtectedRoute>} />
-          <Route path="/workflows/:id/diff" element={<ProtectedRoute><WorkflowDiffPage /></ProtectedRoute>} />
-          <Route path="/sla" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
-          <Route path="/webhooks/debug" element={<ProtectedRoute><WebhookDebuggerPage /></ProtectedRoute>} />
-          <Route path="/admin/featured" element={<ProtectedRoute><AdminFeaturedPage /></ProtectedRoute>} />
-          <Route path="/workflows/:id/rollback" element={<ProtectedRoute><RollbackPage /></ProtectedRoute>} />
-          <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/editor/:flowId?"
+            element={
+              <ProtectedRoute>
+                <EditorPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <HistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/applets"
+            element={
+              <ProtectedRoute>
+                <AppletLibraryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <AnalyticsDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/playground"
+            element={
+              <ProtectedRoute>
+                <PlaygroundPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/gallery"
+            element={
+              <ProtectedRoute>
+                <GalleryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/publisher/dashboard"
+            element={
+              <ProtectedRoute>
+                <PublisherDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/publisher/credits"
+            element={
+              <ProtectedRoute>
+                <CreditsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wizard"
+            element={
+              <ProtectedRoute>
+                <TemplateWizardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflows/:id/diff"
+            element={
+              <ProtectedRoute>
+                <WorkflowDiffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sla"
+            element={
+              <ProtectedRoute>
+                <SLADashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/webhooks/debug"
+            element={
+              <ProtectedRoute>
+                <WebhookDebuggerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/featured"
+            element={
+              <ProtectedRoute>
+                <AdminFeaturedPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflows/:id/rollback"
+            element={
+              <ProtectedRoute>
+                <RollbackPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/publisher/analytics/:listingId?"
+            element={
+              <ProtectedRoute>
+                <PublisherAnalyticsDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <SearchPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </React.Suspense>

@@ -88,10 +88,20 @@ class TestMarketplaceSearchEngine:
         """Search by name is partial and case-insensitive."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Slack Notifier", "description": "", "tags": [], "author": "a",
-             "install_count": 0},
-            {"name": "GitHub Monitor", "description": "", "tags": [], "author": "b",
-             "install_count": 0},
+            {
+                "name": "Slack Notifier",
+                "description": "",
+                "tags": [],
+                "author": "a",
+                "install_count": 0,
+            },
+            {
+                "name": "GitHub Monitor",
+                "description": "",
+                "tags": [],
+                "author": "b",
+                "install_count": 0,
+            },
         ]
         result = engine.search(listings, q="slack")
         assert result["total"] == 1
@@ -102,10 +112,20 @@ class TestMarketplaceSearchEngine:
         """Search matches listings that have the query as a tag."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Flow A", "description": "", "tags": ["llm", "ai"], "author": "a",
-             "install_count": 0},
-            {"name": "Flow B", "description": "", "tags": ["http"], "author": "b",
-             "install_count": 0},
+            {
+                "name": "Flow A",
+                "description": "",
+                "tags": ["llm", "ai"],
+                "author": "a",
+                "install_count": 0,
+            },
+            {
+                "name": "Flow B",
+                "description": "",
+                "tags": ["http"],
+                "author": "b",
+                "install_count": 0,
+            },
         ]
         result = engine.search(listings, q="llm")
         assert result["total"] == 1
@@ -116,10 +136,20 @@ class TestMarketplaceSearchEngine:
         """Search matches listings by description keyword."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Flow", "description": "Automates email sending", "tags": [],
-             "author": "a", "install_count": 0},
-            {"name": "Other", "description": "Does nothing useful", "tags": [],
-             "author": "b", "install_count": 0},
+            {
+                "name": "Flow",
+                "description": "Automates email sending",
+                "tags": [],
+                "author": "a",
+                "install_count": 0,
+            },
+            {
+                "name": "Other",
+                "description": "Does nothing useful",
+                "tags": [],
+                "author": "b",
+                "install_count": 0,
+            },
         ]
         result = engine.search(listings, q="email")
         assert result["total"] == 1
@@ -130,10 +160,14 @@ class TestMarketplaceSearchEngine:
         """Search matches listings by author name."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Flow", "description": "", "tags": [], "author": "john_doe",
-             "install_count": 0},
-            {"name": "Other", "description": "", "tags": [], "author": "jane",
-             "install_count": 0},
+            {
+                "name": "Flow",
+                "description": "",
+                "tags": [],
+                "author": "john_doe",
+                "install_count": 0,
+            },
+            {"name": "Other", "description": "", "tags": [], "author": "jane", "install_count": 0},
         ]
         result = engine.search(listings, q="john")
         assert result["total"] == 1
@@ -144,10 +178,22 @@ class TestMarketplaceSearchEngine:
         """Category filter excludes non-matching listings."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "A", "description": "", "tags": [], "author": "x",
-             "category": "automation", "install_count": 0},
-            {"name": "B", "description": "", "tags": [], "author": "y",
-             "category": "devops", "install_count": 0},
+            {
+                "name": "A",
+                "description": "",
+                "tags": [],
+                "author": "x",
+                "category": "automation",
+                "install_count": 0,
+            },
+            {
+                "name": "B",
+                "description": "",
+                "tags": [],
+                "author": "y",
+                "category": "devops",
+                "install_count": 0,
+            },
         ]
         result = engine.search(listings, q="", category="automation")
         assert result["total"] == 1
@@ -157,10 +203,8 @@ class TestMarketplaceSearchEngine:
         """min_installs filter excludes low-install listings."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Popular", "description": "", "tags": [], "author": "x",
-             "install_count": 100},
-            {"name": "Unpopular", "description": "", "tags": [], "author": "y",
-             "install_count": 5},
+            {"name": "Popular", "description": "", "tags": [], "author": "x", "install_count": 100},
+            {"name": "Unpopular", "description": "", "tags": [], "author": "y", "install_count": 5},
         ]
         result = engine.search(listings, q="", min_installs=50)
         assert result["total"] == 1
@@ -170,17 +214,32 @@ class TestMarketplaceSearchEngine:
         """min_rating filter excludes listings below the threshold."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Great", "description": "", "tags": [], "author": "x",
-             "id": "great-1", "install_count": 0},
-            {"name": "Bad", "description": "", "tags": [], "author": "y",
-             "id": "bad-1", "install_count": 0},
+            {
+                "name": "Great",
+                "description": "",
+                "tags": [],
+                "author": "x",
+                "id": "great-1",
+                "install_count": 0,
+            },
+            {
+                "name": "Bad",
+                "description": "",
+                "tags": [],
+                "author": "y",
+                "id": "bad-1",
+                "install_count": 0,
+            },
         ]
         # Simulate a rating store
         rating_store.rate("great-1", "user1", 5)
         rating_store.rate("bad-1", "user1", 2)
 
         result = engine.search(
-            listings, q="", min_rating=4.0, rating_lookup=rating_store,
+            listings,
+            q="",
+            min_rating=4.0,
+            rating_lookup=rating_store,
         )
         assert result["total"] == 1
         assert result["items"][0]["name"] == "Great"
@@ -189,12 +248,9 @@ class TestMarketplaceSearchEngine:
         """sort_by='installs' orders by install_count descending."""
         engine = MarketplaceSearchEngine()
         listings = [
-            {"name": "Low", "description": "", "tags": [], "author": "x",
-             "install_count": 10},
-            {"name": "High", "description": "", "tags": [], "author": "y",
-             "install_count": 500},
-            {"name": "Mid", "description": "", "tags": [], "author": "z",
-             "install_count": 100},
+            {"name": "Low", "description": "", "tags": [], "author": "x", "install_count": 10},
+            {"name": "High", "description": "", "tags": [], "author": "y", "install_count": 500},
+            {"name": "Mid", "description": "", "tags": [], "author": "z", "install_count": 100},
         ]
         result = engine.search(listings, q="", sort_by="installs")
         names = [item["name"] for item in result["items"]]
@@ -311,8 +367,12 @@ class TestSearchEndpoint:
 
     def test_search_total_reflects_filtered_count(self, client):
         """Total reflects filtered count, not page size."""
-        _publish_listing(marketplace_registry, name="Match A", category="ai",
-                         description="Uses LLM for processing")
+        _publish_listing(
+            marketplace_registry,
+            name="Match A",
+            category="ai",
+            description="Uses LLM for processing",
+        )
         _publish_listing(marketplace_registry, name="LLM Flow B", category="devops")
         _publish_listing(marketplace_registry, name="Unrelated", category="devops")
 
@@ -383,11 +443,15 @@ class TestSearchScoring:
     def test_name_match_scores_higher_than_description(self, client):
         """A listing with query in name scores higher than one with query in description."""
         _publish_listing(
-            marketplace_registry, name="LLM Pipeline", category="ai",
+            marketplace_registry,
+            name="LLM Pipeline",
+            category="ai",
             description="Basic pipeline",
         )
         _publish_listing(
-            marketplace_registry, name="Basic Service", category="ai",
+            marketplace_registry,
+            name="Basic Service",
+            category="ai",
             description="Uses LLM technology internally",
         )
 
@@ -402,10 +466,14 @@ class TestSearchScoring:
     def test_exact_match_ranks_above_partial(self, client):
         """Exact name match ranks above partial match."""
         _publish_listing(
-            marketplace_registry, name="Slack", category="notification",
+            marketplace_registry,
+            name="Slack",
+            category="notification",
         )
         _publish_listing(
-            marketplace_registry, name="Slack Notifier Pro", category="notification",
+            marketplace_registry,
+            name="Slack Notifier Pro",
+            category="notification",
         )
 
         resp = client.get("/api/v1/marketplace/search?q=Slack")

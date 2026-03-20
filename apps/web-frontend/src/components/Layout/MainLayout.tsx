@@ -39,7 +39,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
       }
     }
   };
-  
+
   // Navigation items
   const navItems = [
     { path: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -52,12 +52,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/wizard', icon: '🧙', label: 'Wizard' },
     { path: '/publisher/dashboard', icon: '📊', label: 'Publisher' },
     { path: '/publisher/credits', icon: '💰', label: 'Credits' },
+    { path: '/publisher/analytics', icon: '📈', label: 'Analytics' },
     { path: '/sla', icon: '⏱', label: 'SLA' },
     { path: '/webhooks/debug', icon: '🔗', label: 'Webhooks' },
     { path: '/admin/featured', icon: '⭐', label: 'Featured' },
-    { path: '/settings', icon: '⚙️', label: 'Settings' }
+    { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
-  
+
   return (
     <div className="main-layout">
       <aside className="sidebar">
@@ -65,7 +66,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
           <img src="logo50.png" alt="Logo" className="logo-icon" />
           <span className="logo-text">SynApps</span>
         </div>
-        
+
         <nav className="nav-menu">
           {navItems.map((item) => (
             <Link
@@ -78,10 +79,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
             </Link>
           ))}
         </nav>
-        
+
         {user && (
           <div className="sidebar-user">
-            <span className="sidebar-user-email" title={user.email}>{user.email}</span>
+            <span className="sidebar-user-email" title={user.email}>
+              {user.email}
+            </span>
             <button className="sidebar-logout-btn" onClick={handleLogout}>
               Sign out
             </button>
@@ -89,23 +92,29 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
         )}
 
         <div className="version-info">
-          <span><a href="https://github.com/nxtg-ai/SynApps-v0.4.0" target="_blank" rel="noopener noreferrer">SynApps v1.0</a></span>
+          <span>
+            <a
+              href="https://github.com/nxtg-ai/SynApps-v0.4.0"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              SynApps v1.0
+            </a>
+          </span>
         </div>
       </aside>
-      
+
       <main className="main-content">
         <header className="header">
           <h1 className="page-title">{title}</h1>
-          
+
           <div className="header-actions">
             {actions}
             <NotificationCenter />
           </div>
         </header>
-        
-        <div className="content">
-          {children}
-        </div>
+
+        <div className="content">{children}</div>
       </main>
     </div>
   );

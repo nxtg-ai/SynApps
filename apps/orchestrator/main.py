@@ -12371,9 +12371,7 @@ async def retry_webhook_debug_entry(
     retry_response = ""
     try:
         result = await _run_flow_impl(flow_id, run_body)
-        retry_response = json.dumps(
-            {"accepted": True, "run_id": result["run_id"]}
-        )
+        retry_response = json.dumps({"accepted": True, "run_id": result["run_id"]})
     except HTTPException as exc:
         retry_status = exc.status_code
         retry_response = json.dumps({"detail": exc.detail})[:2000]
@@ -12603,21 +12601,23 @@ async def receive_webhook_trigger(
     if not webhook_trigger_registry.verify_signature(trigger_id, body_bytes, x_webhook_signature):
         # Record failed delivery before raising
         _wh_dur = (time.time() - _wh_start) * 1000
-        webhook_debug_store.record({
-            "entry_id": str(uuid.uuid4()),
-            "flow_id": debug_flow_id,
-            "received_at": _wh_start,
-            "method": request.method,
-            "path": str(request.url.path),
-            "headers": raw_headers,
-            "body": body_text[:10_000],
-            "body_size": len(body_bytes),
-            "status_code": 401,
-            "response_body": '{"detail":"Invalid or missing webhook signature"}',
-            "duration_ms": _wh_dur,
-            "retry_count": 0,
-            "last_retry_at": None,
-        })
+        webhook_debug_store.record(
+            {
+                "entry_id": str(uuid.uuid4()),
+                "flow_id": debug_flow_id,
+                "received_at": _wh_start,
+                "method": request.method,
+                "path": str(request.url.path),
+                "headers": raw_headers,
+                "body": body_text[:10_000],
+                "body_size": len(body_bytes),
+                "status_code": 401,
+                "response_body": '{"detail":"Invalid or missing webhook signature"}',
+                "duration_ms": _wh_dur,
+                "retry_count": 0,
+                "last_retry_at": None,
+            }
+        )
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing webhook signature",
@@ -12626,21 +12626,23 @@ async def receive_webhook_trigger(
     trigger = webhook_trigger_registry.get(trigger_id)
     if not trigger:
         _wh_dur = (time.time() - _wh_start) * 1000
-        webhook_debug_store.record({
-            "entry_id": str(uuid.uuid4()),
-            "flow_id": None,
-            "received_at": _wh_start,
-            "method": request.method,
-            "path": str(request.url.path),
-            "headers": raw_headers,
-            "body": body_text[:10_000],
-            "body_size": len(body_bytes),
-            "status_code": 404,
-            "response_body": f'{{"detail":"Trigger \'{trigger_id}\' not found"}}',
-            "duration_ms": _wh_dur,
-            "retry_count": 0,
-            "last_retry_at": None,
-        })
+        webhook_debug_store.record(
+            {
+                "entry_id": str(uuid.uuid4()),
+                "flow_id": None,
+                "received_at": _wh_start,
+                "method": request.method,
+                "path": str(request.url.path),
+                "headers": raw_headers,
+                "body": body_text[:10_000],
+                "body_size": len(body_bytes),
+                "status_code": 404,
+                "response_body": f'{{"detail":"Trigger \'{trigger_id}\' not found"}}',
+                "duration_ms": _wh_dur,
+                "retry_count": 0,
+                "last_retry_at": None,
+            }
+        )
         raise HTTPException(status_code=404, detail=f"Trigger '{trigger_id}' not found")
 
     # Parse body → flow input
@@ -12671,21 +12673,23 @@ async def receive_webhook_trigger(
         raise
     finally:
         _wh_dur = (time.time() - _wh_start) * 1000
-        webhook_debug_store.record({
-            "entry_id": str(uuid.uuid4()),
-            "flow_id": trigger["flow_id"],
-            "received_at": _wh_start,
-            "method": request.method,
-            "path": str(request.url.path),
-            "headers": raw_headers,
-            "body": body_text[:10_000],
-            "body_size": len(body_bytes),
-            "status_code": status_code,
-            "response_body": response_body[:2000],
-            "duration_ms": _wh_dur,
-            "retry_count": 0,
-            "last_retry_at": None,
-        })
+        webhook_debug_store.record(
+            {
+                "entry_id": str(uuid.uuid4()),
+                "flow_id": trigger["flow_id"],
+                "received_at": _wh_start,
+                "method": request.method,
+                "path": str(request.url.path),
+                "headers": raw_headers,
+                "body": body_text[:10_000],
+                "body_size": len(body_bytes),
+                "status_code": status_code,
+                "response_body": response_body[:2000],
+                "duration_ms": _wh_dur,
+                "retry_count": 0,
+                "last_retry_at": None,
+            }
+        )
 
     return {"accepted": True, "run_id": result["run_id"], "trigger_id": trigger_id}
 
@@ -13733,7 +13737,7 @@ _BUILTIN_LISTINGS: list[dict[str, Any]] = [
                     "temperature": 0.1,
                     "max_tokens": 256,
                     "system_prompt": (
-                        'You are a sentiment analysis engine. Analyze the social media mention '
+                        "You are a sentiment analysis engine. Analyze the social media mention "
                         'and respond with JSON: {"sentiment": "positive"|"neutral"|"negative", '
                         '"score": 0.0-1.0, "reason": "<brief reason>"}. Respond ONLY with valid JSON.'
                     ),
@@ -13966,9 +13970,7 @@ def _seed_marketplace_listings() -> None:
     Idempotent: skips any listing whose name already exists in the registry.
     Called once during app startup via the lifespan handler.
     """
-    existing_names = {
-        entry["name"] for entry in marketplace_registry._listings.values()
-    }
+    existing_names = {entry["name"] for entry in marketplace_registry._listings.values()}
     seeded = 0
     for listing_data in _BUILTIN_LISTINGS:
         if listing_data["name"] in existing_names:
@@ -14085,12 +14087,14 @@ async def marketplace_search(
     for item in result["items"]:
         lid = item.get("listing_id", item.get("id", ""))
         stats = rating_store.get_stats(lid)
-        enriched.append({
-            **item,
-            "avg_rating": stats["avg_rating"],
-            "rating_count": stats["rating_count"],
-            "is_featured": featured_store.is_featured(lid),
-        })
+        enriched.append(
+            {
+                **item,
+                "avg_rating": stats["avg_rating"],
+                "rating_count": stats["rating_count"],
+                "is_featured": featured_store.is_featured(lid),
+            }
+        )
     return {
         "items": enriched,
         "total": result["total"],
@@ -14117,13 +14121,15 @@ async def marketplace_featured(
         listing = marketplace_registry.get(entry["listing_id"])
         if listing is None:
             continue
-        enriched.append({
-            **listing,
-            "blurb": entry["blurb"],
-            "featured_at": entry["featured_at"],
-            "featured_by": entry["featured_by"],
-            "is_featured": True,
-        })
+        enriched.append(
+            {
+                **listing,
+                "blurb": entry["blurb"],
+                "featured_at": entry["featured_at"],
+                "featured_by": entry["featured_by"],
+                "is_featured": True,
+            }
+        )
     if limit > 0:
         enriched = enriched[:limit]
     return {"items": enriched, "total": len(enriched)}
@@ -19610,9 +19616,7 @@ class CreditLedger:
             self._entries.setdefault(publisher_id, []).append(entry)
         return entry
 
-    def debit(
-        self, publisher_id: str, amount: int, note: str = ""
-    ) -> dict[str, Any]:
+    def debit(self, publisher_id: str, amount: int, note: str = "") -> dict[str, Any]:
         """Record a payout/debit. Returns the entry.
 
         Raises:
@@ -19621,9 +19625,7 @@ class CreditLedger:
         with self._lock:
             bal = self._balance_unlocked(publisher_id)
             if bal < amount:
-                raise ValueError(
-                    f"Insufficient balance: {bal} < {amount}"
-                )
+                raise ValueError(f"Insufficient balance: {bal} < {amount}")
             entry: dict[str, Any] = {
                 "entry_id": str(uuid.uuid4()),
                 "publisher_id": publisher_id,
@@ -19653,9 +19655,7 @@ class CreditLedger:
                 total -= e["amount"]
         return total
 
-    def ledger(
-        self, publisher_id: str, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def ledger(self, publisher_id: str, limit: int = 100) -> list[dict[str, Any]]:
         """Return all ledger entries for publisher, newest first."""
         with self._lock:
             entries = list(self._entries.get(publisher_id, []))
@@ -19672,12 +19672,8 @@ class CreditLedger:
         """Return summary: balance, total_earned, total_paid_out, entry_count, per_listing breakdown."""
         with self._lock:
             entries = self._entries.get(publisher_id, [])
-            total_earned = sum(
-                e["amount"] for e in entries if e["type"] == "credit"
-            )
-            total_paid_out = sum(
-                e["amount"] for e in entries if e["type"] == "debit"
-            )
+            total_earned = sum(e["amount"] for e in entries if e["type"] == "credit")
+            total_paid_out = sum(e["amount"] for e in entries if e["type"] == "debit")
             per_listing: dict[str, dict[str, Any]] = {}
             for e in entries:
                 if e["type"] != "credit":
@@ -19734,9 +19730,7 @@ class SLAStore:
         """Create or update an SLA policy for a flow."""
         with self._lock:
             policy = {
-                "policy_id": self._policies.get(flow_id, {}).get(
-                    "policy_id", str(uuid.uuid4())
-                ),
+                "policy_id": self._policies.get(flow_id, {}).get("policy_id", str(uuid.uuid4())),
                 "flow_id": flow_id,
                 "owner_id": owner_id,
                 "max_duration_seconds": max_duration_seconds,
@@ -19760,11 +19754,7 @@ class SLAStore:
     def list_policies(self, owner_id: str) -> list[dict[str, Any]]:
         """Return all SLA policies owned by *owner_id*."""
         with self._lock:
-            return [
-                dict(p)
-                for p in self._policies.values()
-                if p["owner_id"] == owner_id
-            ]
+            return [dict(p) for p in self._policies.values() if p["owner_id"] == owner_id]
 
     def record_violation(
         self,
@@ -19793,9 +19783,7 @@ class SLAStore:
     def increment_run_count(self, owner_id: str) -> None:
         """Track total run count per owner for compliance calculations."""
         with self._lock:
-            self._run_count_by_owner[owner_id] = (
-                self._run_count_by_owner.get(owner_id, 0) + 1
-            )
+            self._run_count_by_owner[owner_id] = self._run_count_by_owner.get(owner_id, 0) + 1
 
     def list_violations(
         self,
@@ -19828,19 +19816,13 @@ class SLAStore:
         """
         with self._lock:
             total_runs = self._run_count_by_owner.get(owner_id, 0)
-            owned_flows = {
-                fid for fid, p in self._policies.items() if p["owner_id"] == owner_id
-            }
-            owner_violations = [
-                v for v in self._violations if v["flow_id"] in owned_flows
-            ]
+            owned_flows = {fid for fid, p in self._policies.items() if p["owner_id"] == owner_id}
+            owner_violations = [v for v in self._violations if v["flow_id"] in owned_flows]
         violation_count = len(owner_violations)
         if total_runs == 0:
             compliance_rate = 100.0
         else:
-            compliance_rate = round(
-                ((total_runs - violation_count) / total_runs) * 100.0, 2
-            )
+            compliance_rate = round(((total_runs - violation_count) / total_runs) * 100.0, 2)
         # Per-flow breakdown
         by_flow: dict[str, dict[str, Any]] = {}
         for v in owner_violations:
@@ -20203,6 +20185,197 @@ search_engine = MarketplaceSearchEngine()
 
 
 # ---------------------------------------------------------------------------
+# Publisher Analytics Service (N-50) — aggregated analytics for publishers
+# ---------------------------------------------------------------------------
+
+
+class PublisherAnalyticsService:
+    """Aggregates all analytics data for a publisher across their listings."""
+
+    @staticmethod
+    def _publisher_listings(publisher_id: str) -> list[dict[str, Any]]:
+        """Return all listings owned by a publisher."""
+        return [
+            lst
+            for lst in marketplace_registry.list_all()
+            if lst.get("publisher_id") == publisher_id
+        ]
+
+    @staticmethod
+    def summary(publisher_id: str) -> dict[str, Any]:
+        """Return top-level KPIs for a publisher.
+
+        Keys: total_installs, total_listings, avg_rating, total_credits_earned,
+        credit_balance, total_reviews, featured_count.
+        """
+        listings = PublisherAnalyticsService._publisher_listings(publisher_id)
+        total_installs = sum(lst.get("install_count", 0) for lst in listings)
+        total_listings = len(listings)
+
+        # Aggregate ratings across all listings
+        all_ratings: list[float] = []
+        total_reviews = 0
+        featured_count = 0
+        for lst in listings:
+            lid = lst.get("id", "")
+            stats = rating_store.get_stats(lid)
+            if stats["rating_count"] > 0:
+                all_ratings.extend([stats["avg_rating"]] * stats["rating_count"])
+            total_reviews += len(review_store.list(lid, limit=1000))
+            if featured_store.is_featured(lid):
+                featured_count += 1
+
+        avg_rating = round(sum(all_ratings) / len(all_ratings), 2) if all_ratings else 0.0
+
+        payout = credit_ledger.payout_report(publisher_id)
+        return {
+            "total_installs": total_installs,
+            "total_listings": total_listings,
+            "avg_rating": avg_rating,
+            "total_credits_earned": payout["total_earned"],
+            "credit_balance": payout["balance"],
+            "total_reviews": total_reviews,
+            "featured_count": featured_count,
+        }
+
+    @staticmethod
+    def per_listing(publisher_id: str) -> list[dict[str, Any]]:
+        """Return per-listing breakdown sorted by install_count desc.
+
+        Each entry: listing_id, name, install_count, avg_rating, rating_count,
+        review_count, credits_earned, trending_score, is_featured, published_at.
+        """
+        listings = PublisherAnalyticsService._publisher_listings(publisher_id)
+        payout = credit_ledger.payout_report(publisher_id)
+        credits_by_listing: dict[str, int] = {}
+        for pl in payout.get("per_listing", []):
+            credits_by_listing[pl["listing_id"]] = pl["credits_earned"]
+
+        result: list[dict[str, Any]] = []
+        for lst in listings:
+            lid = lst.get("id", "")
+            stats = rating_store.get_stats(lid)
+            reviews = review_store.list(lid, limit=1000)
+            result.append(
+                {
+                    "listing_id": lid,
+                    "name": lst.get("name", ""),
+                    "install_count": lst.get("install_count", 0),
+                    "avg_rating": stats["avg_rating"],
+                    "rating_count": stats["rating_count"],
+                    "review_count": len(reviews),
+                    "credits_earned": credits_by_listing.get(lid, 0),
+                    "trending_score": TrendingService.score(lst),
+                    "is_featured": featured_store.is_featured(lid),
+                    "published_at": lst.get("published_at", 0),
+                }
+            )
+        result.sort(key=lambda x: x["install_count"], reverse=True)
+        return result
+
+    @staticmethod
+    def growth_trend(publisher_id: str, days: int = 30) -> list[dict[str, Any]]:
+        """Return daily install counts for the past N days.
+
+        Each entry: {date: "YYYY-MM-DD", installs: int}.
+        Uses install_timestamps from listings.
+        """
+        from datetime import datetime, timedelta
+
+        now = datetime.now(tz=UTC)
+        start_date = (now - timedelta(days=days - 1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+        # Build date buckets
+        date_counts: dict[str, int] = {}
+        for i in range(days):
+            d = start_date + timedelta(days=i)
+            date_counts[d.strftime("%Y-%m-%d")] = 0
+
+        # Count installs per day across all publisher listings
+        listings = PublisherAnalyticsService._publisher_listings(publisher_id)
+        for lst in listings:
+            for ts in lst.get("install_timestamps", []):
+                install_date = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
+                if install_date in date_counts:
+                    date_counts[install_date] += 1
+
+        return [{"date": date, "installs": count} for date, count in sorted(date_counts.items())]
+
+    @staticmethod
+    def top_templates(publisher_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Return top N templates by install_count."""
+        per = PublisherAnalyticsService.per_listing(publisher_id)
+        return per[:limit]
+
+    @staticmethod
+    def listing_detail(publisher_id: str, listing_id: str) -> dict[str, Any] | None:
+        """Return detailed analytics for a single listing owned by the publisher.
+
+        Returns None if the listing is not found. Raises ValueError if the
+        listing is not owned by the publisher.
+        """
+        listing = marketplace_registry.get(listing_id)
+        if listing is None:
+            return None
+        if listing.get("publisher_id") != publisher_id:
+            raise ValueError("Listing not owned by publisher")
+
+        lid = listing.get("id", listing_id)
+        stats = rating_store.get_stats(lid)
+        reviews = review_store.list(lid, limit=10)
+
+        # Enrich reviews with replies
+        enriched_reviews = []
+        for review in reviews:
+            reply = reply_store.get_reply(review["review_id"])
+            enriched_reviews.append({**review, "reply": reply})
+
+        payout = credit_ledger.payout_report(publisher_id)
+        credits_earned = 0
+        for pl in payout.get("per_listing", []):
+            if pl["listing_id"] == lid:
+                credits_earned = pl["credits_earned"]
+                break
+
+        # Build 30-day install trend for this specific listing
+        from datetime import datetime, timedelta
+
+        now = datetime.now(tz=UTC)
+        start_date = (now - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_counts: dict[str, int] = {}
+        for i in range(30):
+            d = start_date + timedelta(days=i)
+            date_counts[d.strftime("%Y-%m-%d")] = 0
+        for ts in listing.get("install_timestamps", []):
+            install_date = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
+            if install_date in date_counts:
+                date_counts[install_date] += 1
+
+        install_trend = [
+            {"date": date, "installs": count} for date, count in sorted(date_counts.items())
+        ]
+
+        return {
+            "listing": listing,
+            "stats": {
+                "avg_rating": stats["avg_rating"],
+                "rating_count": stats["rating_count"],
+                "review_count": len(reviews),
+                "credits_earned": credits_earned,
+                "trending_score": TrendingService.score(listing),
+                "is_featured": featured_store.is_featured(lid),
+            },
+            "recent_reviews": enriched_reviews,
+            "install_trend": install_trend,
+        }
+
+
+publisher_analytics_service = PublisherAnalyticsService()
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -20434,9 +20607,7 @@ async def publisher_dashboard(
 ) -> dict[str, Any]:
     """Return the publisher's own listings with rating and review stats."""
     all_listings = marketplace_registry.list_all()
-    my_listings = [
-        lst for lst in all_listings if lst.get("publisher_id") == current_user["id"]
-    ]
+    my_listings = [lst for lst in all_listings if lst.get("publisher_id") == current_user["id"]]
     result = []
     for listing in my_listings:
         lid = listing.get("listing_id", listing.get("id", ""))
@@ -20650,9 +20821,7 @@ async def list_sla_violations(
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ) -> list[dict[str, Any]]:
     """List SLA violations for the authenticated user, newest first."""
-    return sla_store.list_violations(
-        flow_id=flow_id, owner_id=current_user["id"], limit=limit
-    )
+    return sla_store.list_violations(flow_id=flow_id, owner_id=current_user["id"], limit=limit)
 
 
 @v1.get("/sla/dashboard", tags=["SLA"])
@@ -20661,6 +20830,45 @@ async def sla_dashboard(
 ) -> dict[str, Any]:
     """Return SLA compliance statistics for the authenticated user."""
     return sla_store.compliance_stats(current_user["id"])
+
+
+# ---------------------------------------------------------------------------
+# Publisher Analytics endpoints (N-50)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# Static segments (/publisher/analytics) come before parametric routes.
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/marketplace/publisher/analytics", tags=["Marketplace"])
+async def publisher_analytics(
+    days: int = Query(30, ge=1, le=365, description="Growth trend window in days"),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return aggregated analytics for the authenticated publisher."""
+    pub_id = current_user["id"]
+    return {
+        "summary": publisher_analytics_service.summary(pub_id),
+        "per_listing": publisher_analytics_service.per_listing(pub_id),
+        "growth_trend": publisher_analytics_service.growth_trend(pub_id, days=days),
+        "top_templates": publisher_analytics_service.top_templates(pub_id),
+    }
+
+
+@v1.get("/marketplace/publisher/analytics/{listing_id}", tags=["Marketplace"])
+async def publisher_listing_analytics(
+    listing_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return detailed analytics for a single listing owned by the caller."""
+    try:
+        result = publisher_analytics_service.listing_detail(current_user["id"], listing_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=403, detail="Listing not owned by current user"
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return result
 
 
 # ---------------------------------------------------------------------------

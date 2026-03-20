@@ -518,9 +518,7 @@ class TestRollbackIntegration:
             _update_flow(client, token, flow_id, name="V2 Flow", extra_node_id="llm-1")
 
             # Flow now has 3 nodes
-            flow_before = client.get(
-                f"/api/v1/flows/{flow_id}", headers=_auth(token)
-            ).json()
+            flow_before = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token)).json()
             assert len(flow_before["nodes"]) == 3
 
             # Rollback to v1
@@ -532,9 +530,7 @@ class TestRollbackIntegration:
             assert resp.status_code == 200
 
             # Flow should be back to 2 nodes
-            flow_after = client.get(
-                f"/api/v1/flows/{flow_id}", headers=_auth(token)
-            ).json()
+            flow_after = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token)).json()
             assert len(flow_after["nodes"]) == 2
 
     def test_multiple_rollbacks_recorded_in_order(self) -> None:
@@ -593,9 +589,7 @@ class TestRollbackIntegration:
             _update_flow(client, token, flow_id, name="V3 State", extra_node_id="node-v3")
 
             # Flow now at v3 with 4 nodes (start, end, node-v2, node-v3)
-            flow_v3 = client.get(
-                f"/api/v1/flows/{flow_id}", headers=_auth(token)
-            ).json()
+            flow_v3 = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token)).json()
             assert len(flow_v3["nodes"]) == 4
 
             # Rollback straight to v1
@@ -607,7 +601,5 @@ class TestRollbackIntegration:
             assert resp.status_code == 200
 
             # Flow should be at v1 state (2 nodes)
-            flow_v1 = client.get(
-                f"/api/v1/flows/{flow_id}", headers=_auth(token)
-            ).json()
+            flow_v1 = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token)).json()
             assert len(flow_v1["nodes"]) == 2

@@ -236,9 +236,7 @@ class TestFeaturedEndpoints:
             items = resp.json()["items"]
             assert isinstance(items, list)
             assert len(items) >= 1
-            featured_item = next(
-                (i for i in items if i.get("id") == listing["id"]), None
-            )
+            featured_item = next((i for i in items if i.get("id") == listing["id"]), None)
             assert featured_item is not None
             assert featured_item["is_featured"] is True
 
@@ -272,9 +270,7 @@ class TestFeaturedHero:
         """Featured items include name and description from listing."""
         with TestClient(app) as client:
             token = _register_admin(client)
-            listing = _publish_direct(
-                name="Metadata Test", description="Test description"
-            )
+            listing = _publish_direct(name="Metadata Test", description="Test description")
             client.post(
                 f"/api/v1/marketplace/{listing['id']}/feature",
                 json={},

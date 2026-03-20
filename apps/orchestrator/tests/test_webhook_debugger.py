@@ -62,9 +62,7 @@ def _create_flow(client: TestClient, token: str, name: str = "WH Debug") -> str:
     return resp.json()["id"]
 
 
-def _register_webhook_trigger(
-    client: TestClient, token: str, flow_id: str
-) -> dict:
+def _register_webhook_trigger(client: TestClient, token: str, flow_id: str) -> dict:
     """Register an inbound webhook trigger for *flow_id* and return trigger info."""
     resp = client.post(
         "/api/v1/webhook-triggers",
