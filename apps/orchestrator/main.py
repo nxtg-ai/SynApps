@@ -18736,6 +18736,21 @@ async def _run_flow_debug(
         session_id: The DebugSession to drive.
         input_data: Initial input passed to each node.
     """
+    try:
+        await _run_flow_debug_inner(flow_id, run_id, session_id, input_data)
+    except Exception as exc:
+        # Background task: DB may be closed (e.g. during test teardown). Log at
+        # WARNING so asyncio does not escalate to an unhandled-task-exception ERROR.
+        logger.warning("Debug background task %s: unexpected error: %s", run_id, exc)
+
+
+async def _run_flow_debug_inner(
+    flow_id: str,
+    run_id: str,
+    session_id: str,
+    input_data: dict[str, Any],
+) -> None:
+    """Inner body of _run_flow_debug — separated so the outer function can wrap it."""
     session = debug_session_store.get(session_id)
     if session is None:
         logger.warning("Debug background task: session %s not found, aborting", session_id)
