@@ -3,7 +3,12 @@ import importlib
 import pytest
 
 import apps.orchestrator.db as db_module
-from apps.orchestrator.main import audit_log_store, execution_quota_store, rating_store, review_store
+from apps.orchestrator.main import (
+    audit_log_store,
+    execution_quota_store,
+    rating_store,
+    review_store,
+)
 from apps.orchestrator.middleware.rate_limiter import (
     TokenBucketRegistry,
     _SlidingWindowCounter,
