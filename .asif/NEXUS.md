@@ -2230,3 +2230,76 @@ PI-002 states "You are the only project still on Pydantic v1." This is factually
 >
 > **Status: ANSWERED.**
 
+---
+
+## Team Feedback — Cycle 75 (2026-03-19)
+
+### 1. What did I ship since last check-in?
+
+**N-39 through N-44 (6 new initiatives) + 3 frontend pages + 3 marketplace templates + cost estimation UI — all in one session.**
+
+| Deliverable | Key Components | Tests Added |
+| --- | --- | --- |
+| N-39 Workflow AI Assist | `_score_node_suggestions()`, `_match_description_to_node()`, `_WORKFLOW_PATTERNS`, 3 endpoints (`suggest-next`, `autocomplete`, `patterns`) | 47 |
+| N-40 Workflow Debug | `DebugSessionStore`, `DebugSession` dataclass, `_run_flow_debug()`, 6 endpoints (step, inspect, breakpoints, resume) | 28 |
+| N-41 Cost Tracker | `ExecutionCostRecord`, `_estimate_node_cost()`, `CostTrackerStore`, 3 endpoints + analytics `cost_summary` field | 25 |
+| N-42 Execution Replay | `ReplayStore`, `record_input`/`get_input` on `ExecutionLogStore`, `POST .../replay`, `GET .../replay-history` | 14 |
+| N-43 Workflow Diff | `_diff_workflows()` (pure), `WorkflowVersionStore`, 4 endpoints | 8 |
+| N-44 Node Profiler | `WorkflowProfilerService` (p50/p95/p99), 2 endpoints | 33 |
+| API Playground Page | 3-tab dark UI: Workflow Runner, SSE Live Stream (fetch+ReadableStream), Marketplace Browser | — |
+| Workflow Gallery UI | Hero, search, category multi-filter, star ratings, sort, responsive grid, install flow | 16 frontend |
+| 3 Marketplace Templates | Social Media Monitor, Document Processor, Data Pipeline — YAML + TS + seeded via lifespan | 23 |
+| Cost Estimation Frontend | `CostEstimatePanel`, `estimateWorkflowCost()` in ApiService, `WorkflowCostEstimate` types | — |
+
+Backend total: **~2,360 passed** (+~170 vs previous session). Frontend: **125 unit tests** (+16 from Gallery tests).
+
+Also: fixed the pre-push hook Python path (`/usr/bin/python3` was Python 3.10, broke `StrEnum` imports from Python 3.11 `enum` module; changed to `/home/axw/miniconda3/bin/python`).
+
+---
+
+### 2. What surprised me?
+
+**`get_current_user` vs `get_authenticated_user` naming inconsistency.** AI Assist endpoints initially imported `get_current_user` (a name that exists nowhere in this codebase). The actual auth dependency is `get_authenticated_user`. This caused a `NameError` at startup with zero hints in the test output about the cause — tests just reported HTTP 500s. Lesson: always grep the auth dependency name before importing; this codebase convention diverges from the common FastAPI tutorial name.
+
+**Parallel agents pushing to the same branch cause `cannot lock ref` rejections.** Two forge:builder agents finished independently and both attempted `git push` within seconds of each other. The second push failed with a ref-lock error. The fix was `git fetch && git merge origin/master` before re-pushing. This is now a known coordination hazard for parallel agents sharing a branch — they need serialized push steps, not parallel ones.
+
+**Module-scope pytest fixtures break with in-memory SQLite.** Using `scope="module"` TestClient fixtures for the AI Assist integration tests caused `no such table: users` on the first auth call. The in-memory DB is torn down between the fixture setup and the actual test execution at module scope. Per-test `with TestClient(app) as client:` is the only safe pattern for this codebase's `conftest.py` architecture. This pattern is now consistently applied across all new test files.
+
+**SSE from a browser requires `fetch()` + `ReadableStream`, not native `EventSource`.** `EventSource` cannot send `Authorization` headers — it's a browser API limitation, not a FastAPI limitation. The Playground's SSE tab had to be built using `fetch()` with manual chunked reading and SSE frame parsing (`data: ...` line splitting). This is non-obvious and should be documented as a codebase pattern for anyone building new SSE-consuming frontend components.
+
+---
+
+### 3. Cross-project signals
+
+**`_diff_workflows()` pure function is broadly reusable.** The diff function — node diff by id (added/removed/modified field-level), edge diff by (source, target) — makes no FastAPI assumptions. Any project that needs structural diff of two graph-like JSON documents could lift it directly.
+
+**`WorkflowProfilerService` p-percentile pattern.** Pure stats: `sorted(values)[int(len * pct) - 1]`. No external dependency. Reusable for any service that accumulates duration measurements and needs p50/p95/p99 reporting without pulling in `numpy` or `scipy`.
+
+**Cost estimation approximation (`_estimate_node_cost`) is worth standardizing.** The current approach — token count from input string length, per-provider cost tables (gpt-4o, claude-3-5-sonnet, etc.) — is a good-enough heuristic for pre-run UX feedback. Other ASIF projects that expose LLM node execution (e.g. Faultline's scan pipeline) could adopt the same model to show users anticipated API spend before they hit run.
+
+**Star rating formula from install count:** `3.5 + min(install_count/40, 1.5)` capped at 5.0 gives a smooth 3.5→5.0 range driven purely by install popularity, requiring zero user review infrastructure. Simple, honest, no fake data. Portable to any marketplace UI.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **Frontend test coverage for new pages** — PlaygroundPage and CostEstimatePanel have no unit tests. GalleryPage has 16 but the SSE streaming and install flow branches are untested. Target: +30 frontend tests.
+2. **Flaky test stabilization (quota + webhook state pollution)** — mentioned in Cycle 74, still open. The `execution_quota_store.reset()` + `audit_log_store.clear()` fix is low-effort and should land before the next major feature push.
+3. **Replay UI** — `POST /executions/{id}/replay` endpoint exists but there is no frontend replay button in the execution history page. High user value, low backend effort (endpoint already done).
+4. **Diff viewer UI** — `GET /workflows/{id}/diff` is live, but there's no frontend component to visualize added/removed/modified nodes. Could integrate into the version history sidebar.
+5. **N-45+: plugin system** — the natural next pillar after all execution/platform features are shipped. Allow third-party node types to be registered at runtime via a plugin manifest. High leverage for the open-source community flywheel.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**Test baseline needs updating in CLAUDE.md** — CRUCIBLE Gate 4 references baseline of **1,465 total** (from 2026-03-06). Current count is ~2,485. Should the baseline be updated to the current count, or left as a historical floor? If left stale it creates a false impression of Gate 4's sensitivity.
+
+**Pre-push hook Python path is machine-specific** — `.git/hooks/pre-push` now hardcodes `/home/axw/miniconda3/bin/python`. This will break for any other contributor or CI environment. Should we switch to `python3` with a `PATH`-based resolution, or add a `.python-version` / `pyenv` setup? Requesting a decision before we onboard other contributors.
+
+**N-45 scope?** Open question: should the next phase (post-N-44) be (a) a plugin/extension system for third-party nodes, (b) a persistent workflow scheduler (replace in-memory cron with DB-backed), or (c) a collaborative real-time editing mode (multi-user canvas)? Requesting a directive or priority signal from CoS before injecting N-45+.
+
+---
+
+> Last updated: 2026-03-19 (Wolf) — cycle 75 (N-39 through N-44, Playground, Gallery, Templates, Cost Estimation UI, pre-push hook fix)
+
