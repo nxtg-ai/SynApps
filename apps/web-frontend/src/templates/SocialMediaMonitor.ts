@@ -1,0 +1,89 @@
+/**
+ * Social Media Monitor template
+ * Monitor mentions, analyze sentiment, alert on negative sentiment via Slack
+ */
+import { FlowTemplate } from '../types';
+import { generateId } from '../utils/flowUtils';
+
+export const socialMediaMonitorTemplate: FlowTemplate = {
+  id: 'social-media-monitor',
+  name: 'Social Media Monitor',
+  description:
+    'Monitor social media mentions, analyze sentiment with an LLM, and automatically alert your Slack channel when negative sentiment is detected.',
+  tags: ['social-media', 'monitoring', 'sentiment', 'slack'],
+  flow: {
+    id: generateId(),
+    name: 'Social Media Monitor',
+    nodes: [
+      {
+        id: 'trigger',
+        type: 'webhook_trigger',
+        position: { x: 300, y: 25 },
+        data: {
+          label: 'Mention Webhook',
+          description: 'Receives social media mention payloads',
+        },
+      },
+      {
+        id: 'sentiment',
+        type: 'llm',
+        position: { x: 300, y: 150 },
+        data: {
+          label: 'Sentiment Analysis',
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          temperature: 0.1,
+          max_tokens: 256,
+          system_prompt:
+            'You are a sentiment analysis engine. Analyze the social media mention in the user message and respond with a JSON object: {"sentiment": "positive"|"neutral"|"negative", "score": 0.0-1.0, "reason": "<brief reason>"}. Respond ONLY with valid JSON.',
+        },
+      },
+      {
+        id: 'check_sentiment',
+        type: 'ifelse',
+        position: { x: 300, y: 300 },
+        data: {
+          label: 'Negative?',
+          condition: 'data.sentiment == "negative"',
+          description: 'Route negative sentiment to Slack alert',
+        },
+      },
+      {
+        id: 'slack_alert',
+        type: 'http_request',
+        position: { x: 150, y: 450 },
+        data: {
+          label: 'Slack Alert',
+          method: 'POST',
+          url: '{{SLACK_WEBHOOK_URL}}',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{"text": ":rotating_light: Negative mention detected (score: {{data.score}})\\n> {{input.text}}\\nReason: {{data.reason}}"}',
+          timeout_seconds: 15,
+          auth_type: 'none',
+          max_retries: 2,
+          allow_redirects: true,
+          verify_ssl: true,
+        },
+      },
+      {
+        id: 'end',
+        type: 'end',
+        position: { x: 300, y: 600 },
+        data: { label: 'End' },
+      },
+    ],
+    edges: [
+      { id: 'trigger-sentiment', source: 'trigger', target: 'sentiment', animated: false },
+      { id: 'sentiment-check', source: 'sentiment', target: 'check_sentiment', animated: false },
+      {
+        id: 'check-slack',
+        source: 'check_sentiment',
+        target: 'slack_alert',
+        animated: false,
+        sourceHandle: 'true',
+      },
+      { id: 'check-end', source: 'check_sentiment', target: 'end', animated: false, sourceHandle: 'false' },
+      { id: 'slack-end', source: 'slack_alert', target: 'end', animated: false },
+    ],
+  },
+};

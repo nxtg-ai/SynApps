@@ -7,7 +7,8 @@ import {
   AppletMetadata,
   WorkflowRunStatus,
   CodeSuggestionRequest,
-  CodeSuggestionResponse
+  CodeSuggestionResponse,
+  WorkflowCostEstimate,
 } from '../types';
 
 // ── Token refresh queue ────────────────────────────────────────────────
@@ -215,6 +216,20 @@ class ApiService {
    */
   public async importFlow(flowData: any): Promise<{ id: string }> {
     const response = await this.api.post('/flows/import', flowData);
+    return response.data;
+  }
+
+  /**
+   * Estimate execution cost for a workflow before running it.
+   */
+  public async estimateWorkflowCost(
+    flowId: string,
+    inputText: string = ''
+  ): Promise<WorkflowCostEstimate> {
+    const response = await this.api.post(`/workflows/${flowId}/estimate-cost`, {
+      input_data: {},
+      input_text: inputText,
+    });
     return response.data;
   }
 }

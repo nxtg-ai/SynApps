@@ -8,6 +8,7 @@ import MainLayout from '../../components/Layout/MainLayout';
 import WorkflowCanvas from '../../components/WorkflowCanvas/WorkflowCanvas';
 import CodeEditor from '../../components/CodeEditor/CodeEditor';
 import TemplateLoader from '../../components/TemplateLoader/TemplateLoader';
+import CostEstimatePanel from '../../components/CostEstimatePanel/CostEstimatePanel';
 import { Flow } from '../../types';
 import { generateId } from '../../utils/flowUtils';
 import apiService from '../../services/ApiService';
@@ -402,7 +403,12 @@ class ${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}Applet(BaseApplet):
                 </div>
                 )}
               </div>
-              
+
+              {/* Cost Estimate Panel — shown only when the flow is saved and has nodes */}
+              {flow.id && flow.nodes.length > 0 && (
+                <CostEstimatePanel flowId={flow.id} inputText={inputData} />
+              )}
+
               {/* Output Data Panel */}
               {/* Node Panel - Moved above results panel for better visibility */}
               <div className="node-panel">

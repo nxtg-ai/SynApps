@@ -9,6 +9,9 @@ import { twoBrainInboxTemplate } from './TwoBrainInbox';
 import { contentEngineTemplate } from './ContentEngine';
 import { apiFetchTemplate } from './ApiFetch';
 import { faultlineComplianceTemplate } from './FaultlineCompliance';
+import { socialMediaMonitorTemplate } from './SocialMediaMonitor';
+import { documentProcessorTemplate } from './DocumentProcessor';
+import { dataPipelineTemplate } from './DataPipeline';
 
 // Export all templates
 export const templates: FlowTemplate[] = [
@@ -19,6 +22,9 @@ export const templates: FlowTemplate[] = [
   contentEngineTemplate,
   apiFetchTemplate,
   faultlineComplianceTemplate,
+  socialMediaMonitorTemplate,
+  documentProcessorTemplate,
+  dataPipelineTemplate,
 ];
 
 // Helper function to get a template by ID

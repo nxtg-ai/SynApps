@@ -2088,6 +2088,7 @@ async def lifespan(app: FastAPI):
     # Start background key-expiry watcher
     expiry_task = asyncio.create_task(_key_expiry_watcher())
     await SchedulerService.start()
+    _seed_marketplace_listings()
     yield
     await SchedulerService.stop()
     expiry_task.cancel()
@@ -13408,6 +13409,286 @@ class MarketplaceRegistry:
 
 marketplace_registry = MarketplaceRegistry()
 
+# ---------------------------------------------------------------------------
+# Built-in marketplace listings — seeded on every startup
+# ---------------------------------------------------------------------------
+
+_BUILTIN_LISTINGS: list[dict[str, Any]] = [
+    {
+        "name": "Social Media Monitor",
+        "description": (
+            "Monitor social media mentions, analyze sentiment with an LLM, and automatically "
+            "alert your Slack channel when negative sentiment is detected."
+        ),
+        "category": "monitoring",
+        "tags": ["social-media", "monitoring", "sentiment", "slack"],
+        "author": "SynApps Team",
+        "nodes": [
+            {
+                "id": "trigger",
+                "type": "webhook_trigger",
+                "position": {"x": 300, "y": 25},
+                "data": {"label": "Mention Webhook"},
+            },
+            {
+                "id": "sentiment",
+                "type": "llm",
+                "position": {"x": 300, "y": 150},
+                "data": {
+                    "label": "Sentiment Analysis",
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.1,
+                    "max_tokens": 256,
+                    "system_prompt": (
+                        'You are a sentiment analysis engine. Analyze the social media mention '
+                        'and respond with JSON: {"sentiment": "positive"|"neutral"|"negative", '
+                        '"score": 0.0-1.0, "reason": "<brief reason>"}. Respond ONLY with valid JSON.'
+                    ),
+                },
+            },
+            {
+                "id": "check_sentiment",
+                "type": "ifelse",
+                "position": {"x": 300, "y": 300},
+                "data": {
+                    "label": "Negative?",
+                    "condition": 'data.sentiment == "negative"',
+                },
+            },
+            {
+                "id": "slack_alert",
+                "type": "http_request",
+                "position": {"x": 150, "y": 450},
+                "data": {
+                    "label": "Slack Alert",
+                    "method": "POST",
+                    "url": "{{SLACK_WEBHOOK_URL}}",
+                    "headers": {"Content-Type": "application/json"},
+                    "body": (
+                        '{"text": ":rotating_light: Negative mention detected '
+                        '(score: {{data.score}})\\n> {{input.text}}\\nReason: {{data.reason}}"}'
+                    ),
+                    "timeout_seconds": 15,
+                    "max_retries": 2,
+                },
+            },
+            {
+                "id": "end",
+                "type": "end",
+                "position": {"x": 300, "y": 600},
+                "data": {"label": "End"},
+            },
+        ],
+        "edges": [
+            {"id": "trigger-sentiment", "source": "trigger", "target": "sentiment"},
+            {"id": "sentiment-check", "source": "sentiment", "target": "check_sentiment"},
+            {
+                "id": "check-slack",
+                "source": "check_sentiment",
+                "target": "slack_alert",
+                "sourceHandle": "true",
+            },
+            {
+                "id": "check-end",
+                "source": "check_sentiment",
+                "target": "end",
+                "sourceHandle": "false",
+            },
+            {"id": "slack-end", "source": "slack_alert", "target": "end"},
+        ],
+    },
+    {
+        "name": "Document Processor",
+        "description": (
+            "Process incoming documents: extract and parse text from the webhook payload, "
+            "summarize with an LLM, then email the summary using SendGrid."
+        ),
+        "category": "content",
+        "tags": ["document", "ocr", "summarization", "email"],
+        "author": "SynApps Team",
+        "nodes": [
+            {
+                "id": "trigger",
+                "type": "webhook_trigger",
+                "position": {"x": 300, "y": 25},
+                "data": {"label": "Document Webhook"},
+            },
+            {
+                "id": "extract",
+                "type": "code",
+                "position": {"x": 300, "y": 150},
+                "data": {
+                    "label": "Extract Text",
+                    "language": "python",
+                    "timeout_seconds": 10,
+                    "memory_limit_mb": 256,
+                    "code": (
+                        "import json, base64\n"
+                        "payload = context.get('input', {})\n"
+                        "if isinstance(payload, str):\n"
+                        "    try:\n"
+                        "        payload = json.loads(payload)\n"
+                        "    except Exception:\n"
+                        "        payload = {'text': payload}\n"
+                        "raw = payload.get('text') or payload.get('content') or ''\n"
+                        "if payload.get('encoding') == 'base64' and raw:\n"
+                        "    try:\n"
+                        "        raw = base64.b64decode(raw).decode('utf-8', errors='replace')\n"
+                        "    except Exception:\n"
+                        "        pass\n"
+                        "filename = payload.get('filename', 'document')\n"
+                        "result = {'filename': filename, 'text': raw.strip(), 'char_count': len(raw)}\n"
+                    ),
+                },
+            },
+            {
+                "id": "summarize",
+                "type": "llm",
+                "position": {"x": 300, "y": 325},
+                "data": {
+                    "label": "Summarize",
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.3,
+                    "max_tokens": 1024,
+                    "system_prompt": (
+                        "You are a professional document analyst. Summarize the provided document "
+                        "text clearly and concisely. Include: key points (bullet list), main "
+                        "conclusions, and any action items. Keep the summary under 300 words."
+                    ),
+                },
+            },
+            {
+                "id": "email",
+                "type": "http_request",
+                "position": {"x": 300, "y": 475},
+                "data": {
+                    "label": "Send Email (SendGrid)",
+                    "method": "POST",
+                    "url": "https://api.sendgrid.com/v3/mail/send",
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer {{SENDGRID_API_KEY}}",
+                    },
+                    "body": (
+                        '{"personalizations":[{"to":[{"email":"{{TO_EMAIL}}"}]}],'
+                        '"from":{"email":"{{FROM_EMAIL}}"},'
+                        '"subject":"Document Summary: {{extract.filename}}",'
+                        '"content":[{"type":"text/plain","value":"{{data}}"}]}'
+                    ),
+                    "timeout_seconds": 20,
+                    "max_retries": 2,
+                },
+            },
+            {
+                "id": "end",
+                "type": "end",
+                "position": {"x": 300, "y": 600},
+                "data": {"label": "End"},
+            },
+        ],
+        "edges": [
+            {"id": "trigger-extract", "source": "trigger", "target": "extract"},
+            {"id": "extract-summarize", "source": "extract", "target": "summarize"},
+            {"id": "summarize-email", "source": "summarize", "target": "email"},
+            {"id": "email-end", "source": "email", "target": "end"},
+        ],
+    },
+    {
+        "name": "Data Pipeline",
+        "description": (
+            "Scheduled ETL pipeline: fetch data from an external API on a cron schedule, "
+            "reshape with Transform, and persist the result in memory store for downstream consumers."
+        ),
+        "category": "data-sync",
+        "tags": ["data", "pipeline", "etl", "scheduled"],
+        "author": "SynApps Team",
+        "nodes": [
+            {
+                "id": "scheduler",
+                "type": "scheduler",
+                "position": {"x": 300, "y": 25},
+                "data": {
+                    "label": "Hourly Trigger",
+                    "cron": "{{CRON_SCHEDULE}}",
+                },
+            },
+            {
+                "id": "fetch",
+                "type": "http_request",
+                "position": {"x": 300, "y": 150},
+                "data": {
+                    "label": "Fetch Data",
+                    "method": "GET",
+                    "url": "{{DATA_API_URL}}",
+                    "headers": {
+                        "Accept": "application/json",
+                        "X-Api-Key": "{{DATA_API_KEY}}",
+                    },
+                    "timeout_seconds": 30,
+                    "max_retries": 3,
+                },
+            },
+            {
+                "id": "reshape",
+                "type": "transform",
+                "position": {"x": 300, "y": 300},
+                "data": {
+                    "label": "Reshape Data",
+                    "operation": "json_path",
+                    "json_path": "$.data",
+                },
+            },
+            {
+                "id": "store",
+                "type": "memory",
+                "position": {"x": 300, "y": 450},
+                "data": {
+                    "label": "Store Result",
+                    "operation": "store",
+                    "key": "pipeline-latest",
+                    "namespace": "data-pipeline",
+                },
+            },
+            {
+                "id": "end",
+                "type": "end",
+                "position": {"x": 300, "y": 575},
+                "data": {"label": "End"},
+            },
+        ],
+        "edges": [
+            {"id": "scheduler-fetch", "source": "scheduler", "target": "fetch"},
+            {"id": "fetch-reshape", "source": "fetch", "target": "reshape"},
+            {"id": "reshape-store", "source": "reshape", "target": "store"},
+            {"id": "store-end", "source": "store", "target": "end"},
+        ],
+    },
+]
+
+
+def _seed_marketplace_listings() -> None:
+    """Pre-populate the marketplace registry with built-in SynApps Team templates.
+
+    Idempotent: skips any listing whose name already exists in the registry.
+    Called once during app startup via the lifespan handler.
+    """
+    existing_names = {
+        entry["name"] for entry in marketplace_registry._listings.values()
+    }
+    seeded = 0
+    for listing_data in _BUILTIN_LISTINGS:
+        if listing_data["name"] in existing_names:
+            continue  # idempotent — already present (e.g. hot-reload)
+        try:
+            marketplace_registry.publish(listing_data)
+            seeded += 1
+        except Exception as exc:
+            logger.warning("Failed to seed marketplace listing '%s': %s", listing_data["name"], exc)
+    if seeded:
+        logger.info("Marketplace: seeded %d built-in listing(s)", seeded)
+
 
 class PublishMarketplaceRequest(StrictRequestModel):
     """Request body for publishing a flow as a marketplace listing."""
@@ -15102,11 +15383,33 @@ async def get_analytics_dashboard(
         WorkflowAnalyticsDashboard.error_rate_trends(),
         WorkflowAnalyticsDashboard.peak_usage_hours(),
     )
+
+    # N-41 cost summary: aggregate across all tracked executions.
+    all_records = cost_tracker_store.all_records()
+    cost_total_usd = sum(r.total_usd for r in all_records)
+    run_count = len(all_records)
+    avg_usd_per_run = (cost_total_usd / run_count) if run_count > 0 else 0.0
+
+    # Top costly flows: aggregate by flow_id, return sorted descending.
+    flow_totals: dict[str, float] = {}
+    for rec in all_records:
+        flow_totals[rec.flow_id] = flow_totals.get(rec.flow_id, 0.0) + rec.total_usd
+    top_costly_flows = sorted(
+        [{"flow_id": fid, "total_usd": total} for fid, total in flow_totals.items()],
+        key=lambda x: x["total_usd"],
+        reverse=True,
+    )[:10]
+
     return {
         "top_workflows": top_workflows,
         "avg_duration_by_node_type": avg_durations,
         "error_rate_trends": trends,
         "peak_usage_hours": peak_hours,
+        "cost_summary": {
+            "total_usd": cost_total_usd,
+            "avg_usd_per_run": avg_usd_per_run,
+            "top_costly_flows": top_costly_flows,
+        },
     }
 
 
@@ -17219,6 +17522,11 @@ class CostTrackerStore:
         with self._lock:
             return [r for r in self._records.values() if r.flow_id == flow_id]
 
+    def all_records(self) -> list[ExecutionCostRecord]:
+        """Return all cost records across all flows and executions."""
+        with self._lock:
+            return list(self._records.values())
+
     def reset(self) -> None:
         """Clear all records (test teardown)."""
         with self._lock:
@@ -17226,6 +17534,120 @@ class CostTrackerStore:
 
 
 cost_tracker_store = CostTrackerStore()
+
+
+# ---------------------------------------------------------------------------
+# N-41: Pre-execution cost estimation
+# ---------------------------------------------------------------------------
+
+
+class CostEstimateRequest(BaseModel):
+    """Request body for the estimate-cost endpoint."""
+
+    input_data: dict = {}
+    input_text: str = ""
+
+
+@v1.post("/workflows/{flow_id}/estimate-cost", tags=["Cost"])
+async def estimate_workflow_cost(
+    flow_id: str,
+    body: CostEstimateRequest,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Estimate the execution cost of a workflow before running it.
+
+    Args:
+        flow_id: The workflow/flow ID to estimate costs for.
+        body: Optional input_text used to derive rough token counts for LLM nodes.
+        current_user: Authenticated user (injected by FastAPI).
+
+    Returns:
+        A dict with per-node breakdown and aggregate estimated_usd.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    nodes: list[dict] = flow.get("nodes", [])
+    input_text_len = len(body.input_text)
+
+    breakdown: list[dict] = []
+    llm_node_count = 0
+    http_node_count = 0
+    total_token_input = 0
+    total_token_output = 0
+    total_usd = 0.0
+
+    for node in nodes:
+        node_id = str(node.get("id", ""))
+        node_type = str(node.get("type", "")).lower().strip()
+        node_data = node.get("data", {})
+
+        # Build a synthetic node_data for LLM nodes that incorporates input_text length.
+        if node_type == "llm":
+            llm_node_count += 1
+            token_input = max(input_text_len // 4, 100)
+            token_output = 200
+            model = str(node_data.get("model", "gpt-4o"))
+            est_usd = float(token_input * 0.000005 + token_output * 0.000015)
+            total_token_input += token_input
+            total_token_output += token_output
+            total_usd += est_usd
+            breakdown.append(
+                {
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "model": model,
+                    "estimated_usd": est_usd,
+                    "tokens": token_input + token_output,
+                }
+            )
+        elif node_type in ("http", "http_request"):
+            http_node_count += 1
+            breakdown.append(
+                {
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "model": "",
+                    "estimated_usd": 0.0,
+                    "tokens": 0,
+                }
+            )
+        else:
+            cost = _estimate_node_cost(node_type, node_data, {})
+            breakdown.append(
+                {
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "model": cost.get("model", ""),
+                    "estimated_usd": cost["estimated_usd"],
+                    "tokens": cost["token_input"] + cost["token_output"],
+                }
+            )
+            total_usd += cost["estimated_usd"]
+            total_token_input += cost["token_input"]
+            total_token_output += cost["token_output"]
+
+    # Confidence: low if >3 LLM nodes, high if 0 LLM nodes, medium otherwise.
+    if llm_node_count == 0:
+        confidence = "high"
+    elif llm_node_count > 3:
+        confidence = "low"
+    else:
+        confidence = "medium"
+
+    return {
+        "flow_id": flow_id,
+        "node_count": len(nodes),
+        "llm_node_count": llm_node_count,
+        "http_node_count": http_node_count,
+        "estimated_token_input": total_token_input,
+        "estimated_token_output": total_token_output,
+        "estimated_usd": total_usd,
+        "estimated_usd_formatted": f"${total_usd:.5f}",
+        "confidence": confidence,
+        "breakdown": breakdown,
+    }
 
 
 @v1.get("/executions/{execution_id}/cost", tags=["Cost"])

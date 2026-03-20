@@ -28,6 +28,9 @@ from apps.orchestrator.main import (
 @pytest.fixture
 def client():
     with TestClient(app) as c:
+        # Startup lifespan seeds 3 built-in listings; reset so unit tests
+        # start from a known-empty state (matching the original contract).
+        marketplace_registry.reset()
         yield c
 
 

@@ -289,3 +289,121 @@ class TestCostEndpoints:
         data = resp.json()
         expected_total = 0.001750 + 0.002200
         assert abs(data["total_usd"] - expected_total) < 1e-9
+
+
+# ===========================================================================
+# TestEstimateCostEndpoint — POST /workflows/{id}/estimate-cost
+# ===========================================================================
+
+
+def _create_flow(client: TestClient, token: str, nodes: list | None = None) -> str:
+    """Helper: create a flow via the API and return its ID."""
+    if nodes is None:
+        nodes = []
+    resp = client.post(
+        "/api/v1/flows",
+        json={
+            "name": f"est-flow-{uuid.uuid4().hex[:6]}",
+            "nodes": nodes,
+            "edges": [],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code in (200, 201), resp.text
+    return resp.json()["id"]
+
+
+class TestEstimateCostEndpoint:
+    def test_estimate_200_for_existing_flow(self):
+        with TestClient(app) as client:
+            token = _register(client)
+            flow_id = _create_flow(client, token)
+            resp = client.post(
+                f"/api/v1/workflows/{flow_id}/estimate-cost",
+                json={"input_text": "Hello world"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200  # Gate 2
+
+    def test_estimate_404_for_unknown_flow(self):
+        with TestClient(app) as client:
+            token = _register(client)
+            resp = client.post(
+                "/api/v1/workflows/totally-nonexistent-flow-xyz/estimate-cost",
+                json={"input_text": ""},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 404  # Gate 2
+
+    def test_response_has_estimated_usd_field(self):
+        with TestClient(app) as client:
+            token = _register(client)
+            flow_id = _create_flow(client, token)
+            resp = client.post(
+                f"/api/v1/workflows/{flow_id}/estimate-cost",
+                json={"input_text": "some text"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "estimated_usd" in data  # Gate 2
+        assert isinstance(data["estimated_usd"], (int, float))  # Gate 2
+
+    def test_response_has_breakdown_list_at_least_node_count(self):
+        uid = uuid.uuid4().hex[:8]
+        nodes = [
+            {"id": f"llm-{uid}", "type": "llm", "position": {"x": 0, "y": 0}, "data": {"model": "gpt-4o", "prompt": "hi"}},
+            {"id": f"http-{uid}", "type": "http", "position": {"x": 100, "y": 0}, "data": {}},
+        ]
+        with TestClient(app) as client:
+            token = _register(client)
+            flow_id = _create_flow(client, token, nodes=nodes)
+            resp = client.post(
+                f"/api/v1/workflows/{flow_id}/estimate-cost",
+                json={"input_text": "test"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "breakdown" in data  # Gate 2
+        assert isinstance(data["breakdown"], list)  # Gate 2
+        assert len(data["breakdown"]) >= 2  # Gate 2: at least as many as nodes
+
+    def test_llm_node_increases_estimated_usd(self):
+        uid = uuid.uuid4().hex[:8]
+        llm_nodes = [
+            {"id": f"llm-{uid}", "type": "llm", "position": {"x": 0, "y": 0}, "data": {"model": "gpt-4o", "prompt": "hello"}}
+        ]
+        no_llm_nodes = [
+            {"id": f"xfm-{uid}", "type": "transform", "position": {"x": 0, "y": 0}, "data": {}}
+        ]
+        with TestClient(app) as client:
+            token = _register(client)
+            flow_with_llm = _create_flow(client, token, nodes=llm_nodes)
+            flow_no_llm = _create_flow(client, token, nodes=no_llm_nodes)
+
+            resp_llm = client.post(
+                f"/api/v1/workflows/{flow_with_llm}/estimate-cost",
+                json={"input_text": "Hello there, this is a test input"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            resp_no_llm = client.post(
+                f"/api/v1/workflows/{flow_no_llm}/estimate-cost",
+                json={"input_text": "Hello there, this is a test input"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp_llm.status_code == 200
+        assert resp_no_llm.status_code == 200
+        assert resp_llm.json()["estimated_usd"] > 0.0  # Gate 2: LLM adds cost
+        assert resp_llm.json()["estimated_usd"] > resp_no_llm.json()["estimated_usd"]
+
+    def test_estimate_requires_auth(self):
+        with TestClient(app) as client:
+            token = _register(client)
+            flow_id = _create_flow(client, token)
+            resp = client.post(
+                f"/api/v1/workflows/{flow_id}/estimate-cost",
+                json={"input_text": ""},
+                headers={"Authorization": "Bearer invalid.token.here"},
+            )
+        assert resp.status_code == 401  # Gate 2

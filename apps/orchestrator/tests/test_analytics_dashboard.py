@@ -13,6 +13,7 @@ from apps.orchestrator.main import (
     WorkflowAnalyticsDashboard,
     app,
     audit_log_store,
+    cost_tracker_store,
     execution_log_store,
     sse_event_bus,
     workflow_permission_store,
@@ -25,11 +26,13 @@ def _clean():
     workflow_permission_store.reset()
     execution_log_store.reset()
     sse_event_bus.reset()
+    cost_tracker_store.reset()
     yield
     audit_log_store.reset()
     workflow_permission_store.reset()
     execution_log_store.reset()
     sse_event_bus.reset()
+    cost_tracker_store.reset()
 
 
 def _register(client: TestClient, email: str | None = None) -> str:
@@ -226,6 +229,49 @@ class TestAnalyticsDashboardEndpoint:
                 )
             peak = resp.json()["peak_usage_hours"]
             assert len(peak) == 24  # Gate 2
+
+
+# ===========================================================================
+# Dashboard cost_summary field (N-41 integration)
+# ===========================================================================
+
+
+class TestAnalyticsDashboardCostSummary:
+    def test_cost_summary_present_in_dashboard(self):
+        with TestClient(app) as client:
+            token = _register(client)
+            with _mock_runs([]):
+                resp = client.get(
+                    "/api/v1/analytics/dashboard",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "cost_summary" in body  # Gate 2
+
+    def test_cost_summary_total_usd_is_float(self):
+        cost_tracker_store.record("exec-dash-1", "flow-dash-A", [
+            {
+                "node_id": "n1",
+                "node_type": "llm",
+                "token_input": 100,
+                "token_output": 50,
+                "model": "gpt-4o",
+                "estimated_usd": 0.001250,
+                "api_calls": 0,
+            }
+        ])
+        with TestClient(app) as client:
+            token = _register(client)
+            with _mock_runs([]):
+                resp = client.get(
+                    "/api/v1/analytics/dashboard",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+        assert resp.status_code == 200
+        cost_summary = resp.json()["cost_summary"]
+        assert isinstance(cost_summary["total_usd"], float)  # Gate 2
+        assert cost_summary["total_usd"] >= 0.0  # Gate 2
 
 
 # ===========================================================================

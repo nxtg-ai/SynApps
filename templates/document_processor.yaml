@@ -1,0 +1,108 @@
+id: document-processor
+name: Document Processor
+description: >
+  Process incoming documents: extract and parse text from the webhook payload,
+  summarize with an LLM, then email the summary using SendGrid.
+  Configure SENDGRID_API_KEY, TO_EMAIL, and FROM_EMAIL as workflow variables.
+tags:
+  - document
+  - ocr
+  - summarization
+  - email
+
+variables:
+  SENDGRID_API_KEY: ""
+  TO_EMAIL: ""
+  FROM_EMAIL: ""
+
+nodes:
+  - id: trigger
+    type: webhook_trigger
+    position: { x: 300, y: 25 }
+    data:
+      label: Document Webhook
+      description: Receives document payloads (text, base64, or URL)
+
+  - id: extract
+    type: code
+    position: { x: 300, y: 150 }
+    data:
+      label: Extract Text
+      language: python
+      timeout_seconds: 10
+      memory_limit_mb: 256
+      code: |
+        import json, base64
+
+        payload = context.get("input", {})
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {"text": payload}
+
+        # Support plain text, base64-encoded content, or a "text" field
+        raw = payload.get("text") or payload.get("content") or ""
+        if payload.get("encoding") == "base64" and raw:
+            try:
+                raw = base64.b64decode(raw).decode("utf-8", errors="replace")
+            except Exception:
+                pass
+
+        filename = payload.get("filename", "document")
+        result = {"filename": filename, "text": raw.strip(), "char_count": len(raw)}
+
+  - id: summarize
+    type: llm
+    position: { x: 300, y: 325 }
+    data:
+      label: Summarize
+      provider: openai
+      model: gpt-4o-mini
+      temperature: 0.3
+      max_tokens: 1024
+      system_prompt: >
+        You are a professional document analyst. Summarize the provided document text
+        clearly and concisely. Include: key points (bullet list), main conclusions,
+        and any action items. Keep the summary under 300 words.
+
+  - id: email
+    type: http_request
+    position: { x: 300, y: 475 }
+    data:
+      label: Send Email (SendGrid)
+      method: POST
+      url: https://api.sendgrid.com/v3/mail/send
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer {{SENDGRID_API_KEY}}"
+      body: >
+        {"personalizations":[{"to":[{"email":"{{TO_EMAIL}}"}]}],"from":{"email":"{{FROM_EMAIL}}"},"subject":"Document Summary: {{extract.filename}}","content":[{"type":"text/plain","value":"{{data}}"}]}
+      timeout_seconds: 20
+      auth_type: none
+      max_retries: 2
+      allow_redirects: true
+      verify_ssl: true
+
+  - id: end
+    type: end
+    position: { x: 300, y: 600 }
+    data:
+      label: End
+
+edges:
+  - id: trigger-extract
+    source: trigger
+    target: extract
+
+  - id: extract-summarize
+    source: extract
+    target: summarize
+
+  - id: summarize-email
+    source: summarize
+    target: email
+
+  - id: email-end
+    source: email
+    target: end

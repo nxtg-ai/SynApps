@@ -1,0 +1,127 @@
+.cost-estimate-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 12px;
+  background: #f8fafc;
+}
+
+.cost-estimate-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f1f5f9;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.cost-estimate-header:hover {
+  background: #e2e8f0;
+}
+
+.cost-estimate-chevron {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.cost-estimate-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cost-estimate-btn {
+  padding: 6px 14px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+}
+
+.cost-estimate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cost-estimate-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.cost-estimate-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: cost-spin 0.7s linear infinite;
+}
+
+@keyframes cost-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cost-estimate-error {
+  font-size: 12px;
+  color: #ef4444;
+  margin: 0;
+}
+
+.cost-estimate-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.cost-estimate-usd {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.cost-green {
+  color: #16a34a;
+}
+
+.cost-yellow {
+  color: #ca8a04;
+}
+
+.cost-red {
+  color: #dc2626;
+}
+
+.cost-estimate-tokens {
+  color: #64748b;
+}
+
+.cost-estimate-confidence {
+  color: #64748b;
+}
+
+.confidence-high {
+  color: #16a34a;
+}
+
+.confidence-medium {
+  color: #ca8a04;
+}
+
+.confidence-low {
+  color: #dc2626;
+}

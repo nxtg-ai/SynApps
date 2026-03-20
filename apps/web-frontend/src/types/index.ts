@@ -105,3 +105,26 @@ export interface UserProfile {
   is_active: boolean;
   created_at: number;
 }
+
+// ── Cost Estimation ─────────────────────────────────────────────────────
+
+export interface CostBreakdownItem {
+  node_id: string;
+  node_type: string;
+  model: string;
+  estimated_usd: number;
+  tokens: number;
+}
+
+export interface WorkflowCostEstimate {
+  flow_id: string;
+  node_count: number;
+  llm_node_count: number;
+  http_node_count: number;
+  estimated_token_input: number;
+  estimated_token_output: number;
+  estimated_usd: number;
+  estimated_usd_formatted: string;
+  confidence: 'low' | 'medium' | 'high';
+  breakdown: CostBreakdownItem[];
+}
