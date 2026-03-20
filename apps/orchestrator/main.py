@@ -196,6 +196,8 @@ TRANSFORM_NODE_TYPE = "transform"
 IF_ELSE_NODE_TYPE = "if_else"
 MERGE_NODE_TYPE = "merge"
 FOR_EACH_NODE_TYPE = "for_each"
+BRANCH_NODE_TYPE = "branch"
+COMPOUND_MERGE_NODE_TYPE = "compound_merge"
 WEBHOOK_TRIGGER_NODE_TYPE = "webhook_trigger"
 SCHEDULER_NODE_TYPE = "scheduler_node"
 ERROR_HANDLER_NODE_TYPE = "error_handler"
@@ -7313,6 +7315,394 @@ class IfElseNodeApplet(BaseApplet):
         return flags
 
 
+# ============================================================
+# Compound Condition Evaluator + Branch/Merge Applets (N-37)
+# ============================================================
+
+
+class CompoundConditionEvaluator:
+    """Evaluates compound boolean condition trees.
+
+    Condition node types:
+      - "leaf": {"type": "leaf", "source": str, "operation": str, "value": str}
+        Operations: equals, not_equals, contains, not_contains, starts_with,
+                    ends_with, regex, gt, gte, lt, lte, is_empty, is_not_empty,
+                    is_null, is_not_null, type_is (value = "str"/"int"/"list"/"dict"/"bool")
+      - "and":  {"type": "and",  "conditions": [<condition_node>, ...]}
+      - "or":   {"type": "or",   "conditions": [<condition_node>, ...]}
+      - "not":  {"type": "not",  "condition":  <condition_node>}
+
+    The `source` in a leaf can be:
+      - a literal value
+      - a template like "{{output.field}}" or "{{data.key}}" (resolve from context)
+    """
+
+    SUPPORTED_OPERATIONS: dict[str, str] = {
+        "equals": "Strict equality comparison",
+        "not_equals": "Strict inequality comparison",
+        "contains": "Substring or collection membership check",
+        "not_contains": "Negated contains check",
+        "starts_with": "String prefix check",
+        "ends_with": "String suffix check",
+        "regex": "Regular expression match",
+        "gt": "Numeric greater-than comparison",
+        "gte": "Numeric greater-than-or-equal comparison",
+        "lt": "Numeric less-than comparison",
+        "lte": "Numeric less-than-or-equal comparison",
+        "is_empty": "True when value is empty string, list, dict, or None",
+        "is_not_empty": "True when value is non-empty",
+        "is_null": "True when value is None or the string 'null'",
+        "is_not_null": "True when value is not None and not the string 'null'",
+        "type_is": "Check runtime type (str, int, float, list, dict, bool)",
+    }
+
+    def evaluate(self, condition: dict, context: dict) -> bool:
+        """Evaluate a condition node against context.
+
+        Args:
+            condition: A condition node dict with a "type" key.
+            context: Execution context used to resolve template sources.
+
+        Returns:
+            Boolean result of the condition.
+
+        Raises:
+            ValueError: If the condition node type or operation is unsupported.
+        """
+        node_type = condition.get("type")
+
+        if node_type == "leaf":
+            source_raw = condition.get("source", "")
+            operation = condition.get("operation", "equals")
+            expected_str = condition.get("value", "")
+            actual = self._resolve_source(source_raw, context)
+            return self._eval_leaf(operation, actual, expected_str)
+
+        if node_type == "and":
+            sub_conditions = condition.get("conditions", [])
+            if not sub_conditions:
+                return True
+            return all(self.evaluate(c, context) for c in sub_conditions)
+
+        if node_type == "or":
+            sub_conditions = condition.get("conditions", [])
+            if not sub_conditions:
+                return False
+            return any(self.evaluate(c, context) for c in sub_conditions)
+
+        if node_type == "not":
+            inner = condition.get("condition")
+            if inner is None:
+                raise ValueError("'not' condition node requires a 'condition' key")
+            return not self.evaluate(inner, context)
+
+        raise ValueError(f"Unsupported condition node type: {node_type!r}")
+
+    def _resolve_source(self, source: str, context: dict) -> Any:
+        """Resolve {{output.x}}, {{data.x}}, {{input.x}} from context.
+
+        Args:
+            source: A literal string or a {{path}} template token.
+            context: Execution context dict.
+
+        Returns:
+            The resolved value, or the original source string if no template token found.
+        """
+        if not isinstance(source, str):
+            return source
+        template_data = {
+            "output": context.get("output", context.get("results", {})),
+            "data": context.get("data", context),
+            "input": context.get("input", context.get("content")),
+            "context": context,
+            "results": context.get("results", {}),
+        }
+        return _render_template_payload(source, template_data)
+
+    def _eval_leaf(self, op: str, actual: Any, expected_str: str) -> bool:
+        """Evaluate a single leaf comparison.
+
+        Args:
+            op: Operation name (one of SUPPORTED_OPERATIONS keys).
+            actual: The resolved actual value.
+            expected_str: The expected value as a string (coerced as needed).
+
+        Returns:
+            Boolean result.
+
+        Raises:
+            ValueError: If the operation is unsupported or regex pattern is invalid.
+        """
+        # Unary operations (do not use expected_str)
+        if op == "is_null":
+            return actual is None or actual == "null"
+        if op == "is_not_null":
+            return actual is not None and actual != "null"
+        if op == "is_empty":
+            if actual is None:
+                return True
+            if isinstance(actual, (str, list, dict)):
+                return len(actual) == 0
+            return False
+        if op == "is_not_empty":
+            if actual is None:
+                return False
+            if isinstance(actual, (str, list, dict)):
+                return len(actual) > 0
+            return True
+
+        # Type check
+        if op == "type_is":
+            type_map: dict[str, type] = {
+                "str": str,
+                "int": int,
+                "float": float,
+                "list": list,
+                "dict": dict,
+                "bool": bool,
+            }
+            expected_type = type_map.get(expected_str.strip().lower())
+            if expected_type is None:
+                raise ValueError(
+                    f"type_is: unsupported type name {expected_str!r}. "
+                    f"Must be one of: {', '.join(type_map)}"
+                )
+            return isinstance(actual, expected_type)
+
+        # String operations
+        actual_str = _as_text(actual)
+        if op == "starts_with":
+            return actual_str.startswith(expected_str)
+        if op == "ends_with":
+            return actual_str.endswith(expected_str)
+
+        if op == "contains":
+            if isinstance(actual, (list, dict)):
+                return expected_str in actual
+            return expected_str in actual_str
+        if op == "not_contains":
+            if isinstance(actual, (list, dict)):
+                return expected_str not in actual
+            return expected_str not in actual_str
+
+        if op == "regex":
+            try:
+                return re.search(expected_str, actual_str) is not None
+            except re.error as exc:
+                raise ValueError(f"regex: invalid pattern {expected_str!r}: {exc}") from exc
+
+        # Equality
+        if op == "equals":
+            # Try coercing to numeric for comparison when both sides look numeric
+            try:
+                actual_num = float(actual) if not isinstance(actual, bool) else actual
+                expected_num = float(expected_str)
+                return actual_num == expected_num
+            except (ValueError, TypeError):
+                pass
+            return str(actual) == expected_str
+
+        if op == "not_equals":
+            try:
+                actual_num = float(actual) if not isinstance(actual, bool) else actual
+                expected_num = float(expected_str)
+                return actual_num != expected_num
+            except (ValueError, TypeError):
+                pass
+            return str(actual) != expected_str
+
+        # Numeric comparisons
+        if op in ("gt", "gte", "lt", "lte"):
+            try:
+                actual_num = float(actual)
+                expected_num = float(expected_str)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"{op}: both operands must be numeric. "
+                    f"Got actual={actual!r}, expected={expected_str!r}"
+                ) from exc
+            if op == "gt":
+                return actual_num > expected_num
+            if op == "gte":
+                return actual_num >= expected_num
+            if op == "lt":
+                return actual_num < expected_num
+            return actual_num <= expected_num  # lte
+
+        raise ValueError(f"Unsupported leaf operation: {op!r}")
+
+
+class BranchApplet(BaseApplet):
+    """Multi-output conditional routing based on compound condition trees.
+
+    Node data schema::
+
+        {
+          "branches": [
+            {
+              "id": "branch_1",
+              "label": "High Value",
+              "condition": {
+                "type": "and",
+                "conditions": [
+                  {"type": "leaf", "source": "{{output.score}}", "operation": "gte", "value": "80"},
+                  {"type": "leaf", "source": "{{output.status}}", "operation": "equals", "value": "active"}
+                ]
+              }
+            }
+          ],
+          "default_branch": "default"
+        }
+
+    Returns ``{"_branch": "<matched_branch_id>", "data": <input_data>}``.
+    The execution engine uses ``_branch`` + ``sourceHandle`` to route to the
+    correct downstream node.
+    """
+
+    VERSION = "1.0.0"
+    CAPABILITIES = [
+        "compound-condition",
+        "multi-branch-routing",
+        "and-or-not-logic",
+        "template-source-resolution",
+    ]
+
+    _evaluator = CompoundConditionEvaluator()
+
+    async def on_message(self, message: AppletMessage) -> AppletMessage:
+        """Evaluate branch conditions and return the first matching branch ID."""
+        base_context = message.context if isinstance(message.context, dict) else {}
+        node_data = message.metadata.get("node_data", {})
+        if not isinstance(node_data, dict):
+            node_data = {}
+
+        branches: list[dict] = node_data.get("branches", [])
+        default_branch: str = node_data.get("default_branch", "default")
+
+        # Build evaluation context from input
+        eval_context: dict[str, Any] = {
+            **base_context,
+            "output": message.content if isinstance(message.content, dict) else {},
+            "input": message.content,
+            "content": message.content,
+        }
+
+        matched_branch = default_branch
+        for branch_def in branches:
+            branch_id = branch_def.get("id", "")
+            condition = branch_def.get("condition")
+            if not condition or not isinstance(condition, dict):
+                logger.warning(
+                    "BranchApplet: branch %r has no valid condition — skipping",
+                    branch_id,
+                )
+                continue
+            try:
+                result = self._evaluator.evaluate(condition, eval_context)
+            except Exception as exc:
+                logger.warning(
+                    "BranchApplet: error evaluating branch %r condition: %s",
+                    branch_id,
+                    exc,
+                )
+                continue
+            if result:
+                matched_branch = branch_id
+                break
+
+        output_content = {"_branch": matched_branch, "data": message.content}
+        output_metadata: dict[str, Any] = {
+            **message.metadata,
+            "applet": BRANCH_NODE_TYPE,
+            "status": "success",
+            "matched_branch": matched_branch,
+        }
+        output_context = {**base_context, "last_branch_response": output_content}
+        return AppletMessage(
+            content=output_content,
+            context=output_context,
+            metadata=output_metadata,
+        )
+
+
+class CompoundMergeApplet(BaseApplet):
+    """Collects output from multiple upstream branches and merges them.
+
+    Node data schema::
+
+        {"merge_strategy": "first"}  // "first", "all", "array"
+
+    Strategies:
+      - ``"first"``  — pass input_data through as-is (first-wins semantics)
+      - ``"all"``    — wrap input_data in a dict keyed ``"merged"``
+      - ``"array"``  — wrap input_data in a list
+    """
+
+    VERSION = "1.0.0"
+    CAPABILITIES = [
+        "fan-in",
+        "branch-merge",
+        "merge-first",
+        "merge-all",
+        "merge-array",
+    ]
+
+    async def on_message(self, message: AppletMessage) -> AppletMessage:
+        """Merge incoming branch data according to the configured strategy."""
+        base_context = message.context if isinstance(message.context, dict) else {}
+        node_data = message.metadata.get("node_data", {})
+        if not isinstance(node_data, dict):
+            node_data = {}
+
+        strategy = node_data.get("merge_strategy", "first")
+        input_data = message.content
+
+        try:
+            merged = self._apply_strategy(strategy, input_data)
+        except Exception as exc:
+            logger.warning("CompoundMergeApplet: error applying strategy %r: %s", strategy, exc)
+            merged = input_data
+
+        output_content = {
+            "ok": True,
+            "strategy": strategy,
+            "output": merged,
+        }
+        output_context = {**base_context, "last_compound_merge_response": output_content}
+        output_metadata: dict[str, Any] = {
+            **message.metadata,
+            "applet": COMPOUND_MERGE_NODE_TYPE,
+            "status": "success",
+            "strategy": strategy,
+        }
+        return AppletMessage(
+            content=output_content,
+            context=output_context,
+            metadata=output_metadata,
+        )
+
+    def _apply_strategy(self, strategy: str, input_data: Any) -> Any:
+        """Apply the selected merge strategy to input_data.
+
+        Args:
+            strategy: One of "first", "all", "array".
+            input_data: Incoming branch data.
+
+        Returns:
+            Merged output.
+
+        Raises:
+            ValueError: If strategy is unrecognised.
+        """
+        if strategy == "first":
+            return input_data
+        if strategy == "all":
+            return {"merged": input_data}
+        if strategy == "array":
+            return [input_data]
+        raise ValueError(f"Unsupported merge_strategy: {strategy!r}")
+
+
 class MergeNodeApplet(BaseApplet):
     """Fan-in node that merges multiple upstream branch outputs."""
 
@@ -7953,6 +8343,8 @@ applet_registry[HTTP_REQUEST_NODE_TYPE] = HTTPRequestNodeApplet
 applet_registry[CODE_NODE_TYPE] = CodeNodeApplet
 applet_registry[TRANSFORM_NODE_TYPE] = TransformNodeApplet
 applet_registry[IF_ELSE_NODE_TYPE] = IfElseNodeApplet
+applet_registry[BRANCH_NODE_TYPE] = BranchApplet
+applet_registry[COMPOUND_MERGE_NODE_TYPE] = CompoundMergeApplet
 applet_registry[MERGE_NODE_TYPE] = MergeNodeApplet
 applet_registry[FOR_EACH_NODE_TYPE] = ForEachNodeApplet
 applet_registry[WEBHOOK_TRIGGER_NODE_TYPE] = WebhookTriggerNodeApplet
@@ -9399,6 +9791,263 @@ class ErrorHandlerNodeApplet(BaseApplet):
 
 applet_registry[ERROR_HANDLER_NODE_TYPE] = ErrorHandlerNodeApplet
 
+# ============================================================
+# Subflow — Reusable Workflow Components (N-38)
+# ============================================================
+
+SUBFLOW_NODE_TYPE = "subflow"
+
+
+class SubflowRegistry:
+    """Tracks active subflow executions to detect circular references.
+
+    A parent run executing a child flow is recorded here. If the same
+    (parent_run_id, child_flow_id) pair appears again while still active,
+    that signals a circular invocation and an error is raised.
+    """
+
+    def __init__(self) -> None:
+        # Maps parent_run_id -> set of child_flow_ids currently executing
+        self._active: dict[str, set[str]] = {}
+
+    def enter(self, parent_run_id: str, child_flow_id: str) -> None:
+        """Record that parent_run_id is executing child_flow_id.
+
+        Raises RuntimeError if child_flow_id is already being executed
+        by parent_run_id (circular reference).
+        """
+        running = self._active.setdefault(parent_run_id, set())
+        if child_flow_id in running:
+            raise RuntimeError(
+                f"Circular subflow reference detected: run '{parent_run_id}' "
+                f"is already executing workflow '{child_flow_id}'"
+            )
+        running.add(child_flow_id)
+
+    def exit(self, parent_run_id: str, child_flow_id: str) -> None:
+        """Remove the tracking entry when subflow completes."""
+        running = self._active.get(parent_run_id)
+        if running is not None:
+            running.discard(child_flow_id)
+            if not running:
+                del self._active[parent_run_id]
+
+    def reset(self) -> None:
+        """Clear all tracking state — for test isolation."""
+        self._active.clear()
+
+
+subflow_registry = SubflowRegistry()
+
+
+class SubflowApplet(BaseApplet):
+    """Execute one workflow inline as a node within another workflow.
+
+    Node data schema:
+        workflow_id      : str  — ID of the target workflow to execute
+        input_mapping    : dict — maps param names to template expressions
+        output_key       : str  — key under which subflow output is returned
+        timeout_seconds  : int  — execution timeout (default 30)
+        max_depth        : int  — max recursion depth (default 3)
+    """
+
+    VERSION = "1.0.0"
+    CAPABILITIES = ["subflow", "reusable-component", "nested-execution"]
+
+    async def on_message(self, message: AppletMessage) -> AppletMessage:
+        """Execute the target workflow inline and return its output."""
+        node_data = message.metadata.get("node_data", {})
+        if not isinstance(node_data, dict):
+            node_data = {}
+
+        workflow_id: str | None = node_data.get("workflow_id")
+        if not workflow_id:
+            raise ValueError("SubflowApplet requires 'workflow_id' in node data")
+
+        input_mapping: dict[str, Any] = node_data.get("input_mapping") or {}
+        if not isinstance(input_mapping, dict):
+            input_mapping = {}
+
+        output_key: str = node_data.get("output_key") or "subflow_result"
+        timeout_seconds: float = float(node_data.get("timeout_seconds", 30))
+        max_depth: int = int(node_data.get("max_depth", 3))
+
+        context = message.context if isinstance(message.context, dict) else {}
+        current_depth: int = int(context.get("_subflow_depth", 0))
+        if current_depth >= max_depth:
+            raise ValueError(
+                f"Maximum subflow depth {max_depth} exceeded "
+                f"(current depth: {current_depth})"
+            )
+
+        parent_run_id: str = context.get("run_id", "unknown")
+
+        # Resolve input_mapping values using template substitution
+        template_data: dict[str, Any] = {
+            "input": message.content,
+            "context": context,
+            "results": context.get("results", {}),
+        }
+        # Also expose top-level input fields for {{field}} convenience
+        if isinstance(message.content, dict):
+            template_data.update(message.content)
+
+        resolved_inputs: dict[str, Any] = {}
+        for param, template_expr in input_mapping.items():
+            resolved_inputs[param] = _render_template_payload(template_expr, template_data)
+
+        # Fetch the target workflow
+        flow = await FlowRepository.get_by_id(workflow_id)
+        if flow is None:
+            raise ValueError(f"Subflow workflow '{workflow_id}' not found")
+
+        # Register execution to catch circular references
+        subflow_registry.enter(parent_run_id, workflow_id)
+        try:
+            sub_context: dict[str, Any] = {
+                "_subflow_depth": current_depth + 1,
+                "_parent_run_id": parent_run_id,
+            }
+            sub_output = await asyncio.wait_for(
+                SubflowApplet._execute_inline(flow, resolved_inputs, sub_context),
+                timeout=timeout_seconds,
+            )
+        finally:
+            subflow_registry.exit(parent_run_id, workflow_id)
+
+        result_content: dict[str, Any] = {
+            output_key: sub_output,
+            "_subflow_id": workflow_id,
+        }
+        output_context = {
+            **context,
+            "last_subflow_result": sub_output,
+            "_subflow_id": workflow_id,
+        }
+        return AppletMessage(
+            content=result_content,
+            context=output_context,
+            metadata={
+                "applet": SUBFLOW_NODE_TYPE,
+                "status": "success",
+                "subflow_id": workflow_id,
+                "output_key": output_key,
+            },
+        )
+
+    @staticmethod
+    async def _execute_inline(
+        flow: dict[str, Any],
+        input_data: dict[str, Any],
+        sub_context: dict[str, Any],
+    ) -> Any:
+        """Execute a flow's nodes in dependency order and return the final output.
+
+        This is a simplified BFS execution that runs the nodes inline (no
+        background task, no status broadcasting) so the parent workflow can
+        await the result directly.
+        """
+        flow_nodes: list[dict[str, Any]] = flow.get("nodes", [])
+        flow_edges: list[dict[str, Any]] = flow.get("edges", [])
+
+        nodes_by_id: dict[str, dict[str, Any]] = {
+            node["id"]: node
+            for node in flow_nodes
+            if isinstance(node, dict) and isinstance(node.get("id"), str)
+        }
+        edges_by_source: dict[str, list[dict[str, Any]]] = {}
+        for edge in flow_edges:
+            if not isinstance(edge, dict):
+                continue
+            source = edge.get("source")
+            if isinstance(source, str) and source:
+                edges_by_source.setdefault(source, []).append(edge)
+
+        target_nodes = {
+            edge.get("target")
+            for edge in flow_edges
+            if isinstance(edge, dict) and isinstance(edge.get("target"), str)
+        }
+        start_nodes = [
+            node["id"]
+            for node in flow_nodes
+            if isinstance(node, dict)
+            and isinstance(node.get("id"), str)
+            and node["id"] not in target_nodes
+        ]
+        if not start_nodes:
+            raise ValueError("Subflow has no start node")
+
+        # BFS traversal; carry context and last_output between nodes
+        context: dict[str, Any] = {
+            "input": input_data,
+            "results": {},
+            **sub_context,
+        }
+        current_nodes = list(start_nodes)
+        visited: set[str] = set()
+        last_output: Any = input_data
+
+        while current_nodes:
+            next_nodes: list[str] = []
+            for node_id in current_nodes:
+                if node_id in visited:
+                    continue
+                visited.add(node_id)
+
+                node = nodes_by_id.get(node_id)
+                if not isinstance(node, dict):
+                    continue
+
+                node_type = str(node.get("type", "")).strip().lower()
+                outgoing_edges = edges_by_source.get(node_id, [])
+
+                if node_type in ("start", "end"):
+                    last_output = context.get("input", input_data)
+                    context["results"][node_id] = {
+                        "type": node_type,
+                        "output": last_output,
+                        "status": "success",
+                    }
+                    for edge in outgoing_edges:
+                        target = edge.get("target")
+                        if isinstance(target, str) and target and target not in next_nodes:
+                            next_nodes.append(target)
+                    continue
+
+                node_data = node.get("data", {})
+                if not isinstance(node_data, dict):
+                    node_data = {}
+
+                applet = await Orchestrator.load_applet(node_type)
+                msg = AppletMessage(
+                    content=last_output,
+                    context=context,
+                    metadata={"node_id": node_id, "node_data": node_data},
+                )
+                response = await applet.on_message(msg)
+                last_output = response.content
+                context.update(response.context)
+                if not isinstance(context.get("results"), dict):
+                    context["results"] = {}
+                context["results"][node_id] = {
+                    "type": node_type,
+                    "output": last_output,
+                    "status": "success",
+                }
+
+                targets = Orchestrator._collect_outgoing_targets(outgoing_edges)
+                for target in targets:
+                    if target not in next_nodes:
+                        next_nodes.append(target)
+
+            current_nodes = next_nodes
+
+        return last_output
+
+
+applet_registry[SUBFLOW_NODE_TYPE] = SubflowApplet
+
 
 # ============================================================
 # Orchestrator Core
@@ -9469,6 +10118,26 @@ class Orchestrator:
         }:
             applet_registry[IF_ELSE_NODE_TYPE] = IfElseNodeApplet
             return IfElseNodeApplet()
+
+        if normalized_type in {
+            BRANCH_NODE_TYPE,
+            "branch_node",
+            "branch-node",
+            "multi_branch",
+            "multi-branch",
+        }:
+            applet_registry[BRANCH_NODE_TYPE] = BranchApplet
+            return BranchApplet()
+
+        if normalized_type in {
+            COMPOUND_MERGE_NODE_TYPE,
+            "compound_merge",
+            "compound-merge",
+            "branch_merge",
+            "branch-merge",
+        }:
+            applet_registry[COMPOUND_MERGE_NODE_TYPE] = CompoundMergeApplet
+            return CompoundMergeApplet()
 
         if normalized_type in {
             MERGE_NODE_TYPE,
@@ -11346,6 +12015,7 @@ KNOWN_NODE_TYPES = frozenset(
         "scheduler_node",
         "error_handler",
         "custom",
+        "subflow",
     }
 )
 
@@ -16212,6 +16882,203 @@ async def oauth_introspect(
         "exp": payload.get("exp"),
     }
     return result
+
+
+# ============================================================
+# Branching — Compound Condition Validation + Operations (N-37)
+# ============================================================
+
+
+_branch_evaluator = CompoundConditionEvaluator()
+
+
+class _BranchValidateRequest(BaseModel):
+    """Request body for branch condition validation."""
+
+    condition: dict[str, Any]
+
+
+@v1.post(
+    "/workflows/{flow_id}/branch-validate",
+    status_code=200,
+    tags=["Branching"],
+)
+async def branch_validate(flow_id: str, body: _BranchValidateRequest):
+    """Validate a branch condition tree without executing it.
+
+    Performs a structural walk of the condition dict to detect:
+    - Unsupported node types
+    - Missing required keys (``type`` on every node; ``source`` / ``operation``
+      on leaf nodes; ``conditions`` on and/or nodes; ``condition`` on not nodes)
+    - Unsupported leaf operation names
+
+    Returns ``{"valid": true}`` on success or ``{"valid": false, "error": "<message>"}``
+    on failure.
+    """
+
+    def _validate_node(node: Any, path: str) -> str | None:
+        """Return an error message string, or None if the node is valid."""
+        if not isinstance(node, dict):
+            return f"{path}: expected a dict, got {type(node).__name__}"
+
+        node_type = node.get("type")
+        if node_type is None:
+            return f"{path}: missing required key 'type'"
+
+        if node_type == "leaf":
+            if "source" not in node:
+                return f"{path}: leaf node missing 'source'"
+            if "operation" not in node:
+                return f"{path}: leaf node missing 'operation'"
+            op = node["operation"]
+            if op not in CompoundConditionEvaluator.SUPPORTED_OPERATIONS:
+                return (
+                    f"{path}: unsupported operation {op!r}. "
+                    f"Supported: {', '.join(sorted(CompoundConditionEvaluator.SUPPORTED_OPERATIONS))}"
+                )
+            return None
+
+        if node_type in ("and", "or"):
+            sub = node.get("conditions")
+            if sub is None:
+                return f"{path}: '{node_type}' node missing 'conditions'"
+            if not isinstance(sub, list):
+                return f"{path}: 'conditions' must be a list"
+            for idx, child in enumerate(sub):
+                err = _validate_node(child, f"{path}.conditions[{idx}]")
+                if err:
+                    return err
+            return None
+
+        if node_type == "not":
+            inner = node.get("condition")
+            if inner is None:
+                return f"{path}: 'not' node missing 'condition'"
+            return _validate_node(inner, f"{path}.condition")
+
+        return f"{path}: unsupported condition node type {node_type!r}"
+
+    error_msg = _validate_node(body.condition, "condition")
+    if error_msg:
+        return {"valid": False, "error": error_msg}
+    return {"valid": True, "error": None}
+
+
+@v1.get(
+    "/branch/operations",
+    status_code=200,
+    tags=["Branching"],
+)
+async def branch_operations():
+    """List all supported leaf operations for compound condition builders.
+
+    Returns a list of operation objects, each with:
+    - ``name``: The operation identifier used in condition trees
+    - ``description``: Human-readable explanation of what the operation checks
+    """
+    operations = [
+        {"name": name, "description": desc}
+        for name, desc in sorted(CompoundConditionEvaluator.SUPPORTED_OPERATIONS.items())
+    ]
+    return {"operations": operations, "total": len(operations)}
+
+
+
+# ============================================================
+# Subflow Endpoints (N-38)
+# ============================================================
+
+
+@v1.get("/subflows", tags=["Subflows"])
+async def list_subflows(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List all workflows available to use as subflows.
+
+    Returns the same format as GET /flows but with an additional
+    ``is_subflow_compatible: true`` flag on each entry.
+    """
+    flows = await FlowRepository.get_all()
+    result: list[dict[str, Any]] = []
+    for flow in flows:
+        if not isinstance(flow, dict):
+            continue
+        entry = dict(flow)
+        entry["is_subflow_compatible"] = True
+        result.append(entry)
+    return {"flows": result, "total": len(result)}
+
+
+class SubflowValidateRequest(BaseModel):
+    """Request body for POST /subflows/validate."""
+
+    parent_flow_id: str
+    subflow_id: str
+
+
+@v1.post("/subflows/validate", tags=["Subflows"])
+async def validate_subflow(
+    body: SubflowValidateRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Validate that using subflow_id inside parent_flow_id would not create a cycle.
+
+    Returns ``{"valid": true, "error": null}`` when safe, or
+    ``{"valid": false, "error": "<reason>"}`` when a circular dependency is detected.
+    """
+    parent_flow = await FlowRepository.get_by_id(body.parent_flow_id)
+    if parent_flow is None:
+        return {"valid": False, "error": f"Parent workflow '{body.parent_flow_id}' not found"}
+
+    subflow = await FlowRepository.get_by_id(body.subflow_id)
+    if subflow is None:
+        return {"valid": False, "error": f"Subflow workflow '{body.subflow_id}' not found"}
+
+    # Detect direct self-reference
+    if body.parent_flow_id == body.subflow_id:
+        return {
+            "valid": False,
+            "error": f"Workflow '{body.parent_flow_id}' cannot reference itself as a subflow",
+        }
+
+    # Walk the subflow's node graph: if any subflow node inside it references
+    # the parent, that is a circular dependency.
+    def _collect_subflow_ids(flow_dict: dict[str, Any]) -> set[str]:
+        ids: set[str] = set()
+        for node in flow_dict.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("type", "")).lower() == SUBFLOW_NODE_TYPE:
+                node_data = node.get("data", {})
+                if isinstance(node_data, dict):
+                    wid = node_data.get("workflow_id")
+                    if wid:
+                        ids.add(str(wid))
+        return ids
+
+    # BFS over the subflow graph to check for the parent appearing anywhere
+    visited_flows: set[str] = {body.subflow_id}
+    queue: list[str] = [body.subflow_id]
+    while queue:
+        current_id = queue.pop(0)
+        current_flow = await FlowRepository.get_by_id(current_id)
+        if current_flow is None:
+            continue
+        child_ids = _collect_subflow_ids(current_flow)
+        for cid in child_ids:
+            if cid == body.parent_flow_id:
+                return {
+                    "valid": False,
+                    "error": (
+                        f"Circular dependency detected: '{body.subflow_id}' "
+                        f"transitively references '{body.parent_flow_id}'"
+                    ),
+                }
+            if cid not in visited_flows:
+                visited_flows.add(cid)
+                queue.append(cid)
+
+    return {"valid": True, "error": None}
 
 
 # Include versioned router

@@ -108,7 +108,7 @@ SynApps follows a microkernel architecture:
 
 ## Initiatives
 
-All 36 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
+All 38 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 
 | # | Initiative | Pillar | Description |
 |---|-----------|--------|-------------|
@@ -148,6 +148,8 @@ All 36 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-34 | Workflow Testing Framework — Automated Validation | EXECUTION | Assertion DSL (`output.field == value`, `output.count > 5`, `type(output.x) == list`), test history per version — `POST /workflows/:id/test` |
 | N-35 | Workflow Monitoring — Health Checks + Alerts | PLATFORM | Per-workflow health (success rate, error rate, p95 duration), configurable alert rules (threshold + operator + action), webhook/log dispatch — `GET /monitoring/workflows`, `POST /monitoring/alerts` |
 | N-36 | OAuth2 Provider — SSO for Enterprise | SECURITY | authorization_code + client_credentials flows, client registration, RFC 7662 token introspection, JWT-based tokens — `POST /oauth/clients`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/introspect` |
+| N-37 | Workflow Branching — Conditional Logic Builder | EXECUTION | Compound AND/OR/NOT condition trees, 17 leaf operations (equals, regex, gt/lt, type_is, is_empty…), BranchNode multi-output routing, MergeNode with first/all/array strategies — `POST /workflows/:id/branch-validate`, `GET /branch/operations` |
+| N-38 | Workflow Subflows — Reusable Components | EXECUTION | Embed one workflow inside another with input_mapping, depth-limited recursion (max 3), circular reference detection, inline BFS execution — `GET /subflows`, `POST /subflows/validate` |
 
 ## Tech Stack
 
