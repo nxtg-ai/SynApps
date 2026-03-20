@@ -293,6 +293,43 @@ class ApiService {
     });
     return response.data;
   }
+
+  /**
+   * Create a new flow from a node/edge definition.
+   */
+  public async createFlow(data: {
+    name: string;
+    nodes: Array<{ id: string; type: string; position: { x: number; y: number }; data: Record<string, any> }>;
+    edges: Array<{ id: string; source: string; target: string }>;
+  }): Promise<{ id: string }> {
+    const response = await this.api.post('/flows', data);
+    return response.data;
+  }
+
+  /**
+   * Execute a flow with the given input payload.
+   */
+  public async executeFlow(
+    flowId: string,
+    input: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const response = await this.api.post(`/flows/${flowId}/execute`, input);
+    return response.data;
+  }
+
+  /**
+   * Publish a flow to the marketplace.
+   */
+  public async publishToMarketplace(data: {
+    flow_id: string;
+    name: string;
+    description: string;
+    category: string;
+    tags: string[];
+  }): Promise<{ listing_id: string }> {
+    const response = await this.api.post('/marketplace/publish', data);
+    return response.data;
+  }
 }
 
 // Create a singleton instance
