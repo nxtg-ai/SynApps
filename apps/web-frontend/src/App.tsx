@@ -26,6 +26,7 @@ const WorkflowDiffPage = React.lazy(() => import('./pages/WorkflowDiffPage/Workf
 const PublisherDashboardPage = React.lazy(() => import('./pages/PublisherDashboardPage/PublisherDashboardPage'));
 const CreditsPage = React.lazy(() => import('./pages/CreditsPage/CreditsPage'));
 const TemplateWizardPage = React.lazy(() => import('./pages/TemplateWizardPage/TemplateWizardPage'));
+const SLADashboardPage = React.lazy(() => import('./pages/SLADashboardPage/SLADashboardPage'));
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -73,6 +74,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/publisher/credits" element={<ProtectedRoute><CreditsPage /></ProtectedRoute>} />
           <Route path="/wizard" element={<ProtectedRoute><TemplateWizardPage /></ProtectedRoute>} />
           <Route path="/workflows/:id/diff" element={<ProtectedRoute><WorkflowDiffPage /></ProtectedRoute>} />
+          <Route path="/sla" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </React.Suspense>

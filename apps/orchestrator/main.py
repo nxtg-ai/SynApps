@@ -10849,6 +10849,27 @@ class Orchestrator:
                 )
             except Exception as dlq_exc:  # noqa: BLE001
                 logger.warning("Failed to push run %s to DLQ: %s", run_id, dlq_exc)
+            # N-33: SLA violation detection on error path (best-effort)
+            try:
+                _sla_fid = flow.get("id", "") if isinstance(flow, dict) else ""
+                _sla_pol = sla_store.get_policy(_sla_fid)
+                _sla_dur = end_time - (
+                    status.get("start_time", end_time)
+                    if status and isinstance(status, dict)
+                    else end_time
+                )
+                if _sla_pol:
+                    sla_store.increment_run_count(_sla_pol["owner_id"])
+                    if _sla_dur > _sla_pol["max_duration_seconds"]:
+                        sla_store.record_violation(
+                            policy_id=_sla_pol["policy_id"],
+                            flow_id=_sla_fid,
+                            run_id=run_id,
+                            actual_duration=_sla_dur,
+                            max_duration=_sla_pol["max_duration_seconds"],
+                        )
+            except Exception as _sla_err_exc:
+                logger.warning("SLA tracking (error path) failed: %s", _sla_err_exc)
 
         try:
             status = await workflow_run_repo.get_by_run_id(run_id)
@@ -11561,6 +11582,23 @@ class Orchestrator:
                     cost_tracker_store.record(run_id, _flow_id_for_cost, _node_costs)
                 except Exception as _cost_exc:
                     logger.warning("Cost tracking failed: %s", _cost_exc)
+                # N-33: SLA violation detection (best-effort)
+                try:
+                    _sla_flow_id = flow.get("id", "")
+                    _sla_policy = sla_store.get_policy(_sla_flow_id)
+                    _sla_duration = end_time - status.get("start_time", end_time)
+                    if _sla_policy:
+                        sla_store.increment_run_count(_sla_policy["owner_id"])
+                        if _sla_duration > _sla_policy["max_duration_seconds"]:
+                            sla_store.record_violation(
+                                policy_id=_sla_policy["policy_id"],
+                                flow_id=_sla_flow_id,
+                                run_id=run_id,
+                                actual_duration=_sla_duration,
+                                max_duration=_sla_policy["max_duration_seconds"],
+                            )
+                except Exception as _sla_exc:
+                    logger.warning("SLA tracking failed: %s", _sla_exc)
                 broadcast_data = status.copy()
                 broadcast_data["completed_applets"] = memory_completed_applets
                 await broadcast_status_fn(broadcast_data)
@@ -19353,6 +19391,162 @@ credit_ledger = CreditLedger()
 
 
 # ---------------------------------------------------------------------------
+# SLA Tracking (N-33) — stores and models
+# Defined here (before routes) so route functions can reference them.
+# ---------------------------------------------------------------------------
+
+
+class SLAStore:
+    """Thread-safe in-memory store for SLA policies and violation tracking."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._policies: dict[str, dict[str, Any]] = {}  # flow_id -> policy
+        self._violations: list[dict[str, Any]] = []
+        self._run_count_by_owner: dict[str, int] = {}
+
+    def set_policy(
+        self,
+        flow_id: str,
+        owner_id: str,
+        max_duration_seconds: float,
+        alert_threshold_pct: float = 0.8,
+    ) -> dict[str, Any]:
+        """Create or update an SLA policy for a flow."""
+        with self._lock:
+            policy = {
+                "policy_id": self._policies.get(flow_id, {}).get(
+                    "policy_id", str(uuid.uuid4())
+                ),
+                "flow_id": flow_id,
+                "owner_id": owner_id,
+                "max_duration_seconds": max_duration_seconds,
+                "alert_threshold_pct": alert_threshold_pct,
+                "created_at": time.time(),
+            }
+            self._policies[flow_id] = policy
+            return dict(policy)
+
+    def get_policy(self, flow_id: str) -> dict[str, Any] | None:
+        """Return the SLA policy for a flow, or None if not set."""
+        with self._lock:
+            p = self._policies.get(flow_id)
+            return dict(p) if p else None
+
+    def delete_policy(self, flow_id: str) -> bool:
+        """Delete an SLA policy. Returns True if it existed."""
+        with self._lock:
+            return self._policies.pop(flow_id, None) is not None
+
+    def list_policies(self, owner_id: str) -> list[dict[str, Any]]:
+        """Return all SLA policies owned by *owner_id*."""
+        with self._lock:
+            return [
+                dict(p)
+                for p in self._policies.values()
+                if p["owner_id"] == owner_id
+            ]
+
+    def record_violation(
+        self,
+        policy_id: str,
+        flow_id: str,
+        run_id: str,
+        actual_duration: float,
+        max_duration: float,
+    ) -> dict[str, Any]:
+        """Record an SLA violation and return the violation dict."""
+        pct_over = ((actual_duration - max_duration) / max_duration) * 100.0
+        violation: dict[str, Any] = {
+            "violation_id": str(uuid.uuid4()),
+            "policy_id": policy_id,
+            "flow_id": flow_id,
+            "run_id": run_id,
+            "actual_duration_seconds": actual_duration,
+            "max_duration_seconds": max_duration,
+            "pct_over": round(pct_over, 2),
+            "created_at": time.time(),
+        }
+        with self._lock:
+            self._violations.append(violation)
+        return violation
+
+    def increment_run_count(self, owner_id: str) -> None:
+        """Track total run count per owner for compliance calculations."""
+        with self._lock:
+            self._run_count_by_owner[owner_id] = (
+                self._run_count_by_owner.get(owner_id, 0) + 1
+            )
+
+    def list_violations(
+        self,
+        flow_id: str | None = None,
+        owner_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return violations newest-first, optionally filtered."""
+        with self._lock:
+            items = list(self._violations)
+        # Filter by flow_id
+        if flow_id is not None:
+            items = [v for v in items if v["flow_id"] == flow_id]
+        # Filter by owner_id (look up policies)
+        if owner_id is not None:
+            with self._lock:
+                owned_flows = {
+                    fid for fid, p in self._policies.items() if p["owner_id"] == owner_id
+                }
+            items = [v for v in items if v["flow_id"] in owned_flows]
+        # Sort newest first and apply limit
+        items.sort(key=lambda v: v["created_at"], reverse=True)
+        return items[:limit]
+
+    def compliance_stats(self, owner_id: str) -> dict[str, Any]:
+        """Return compliance statistics for an owner.
+
+        Returns dict with total_runs, violations, compliance_rate_pct, and
+        by_flow breakdown.
+        """
+        with self._lock:
+            total_runs = self._run_count_by_owner.get(owner_id, 0)
+            owned_flows = {
+                fid for fid, p in self._policies.items() if p["owner_id"] == owner_id
+            }
+            owner_violations = [
+                v for v in self._violations if v["flow_id"] in owned_flows
+            ]
+        violation_count = len(owner_violations)
+        if total_runs == 0:
+            compliance_rate = 100.0
+        else:
+            compliance_rate = round(
+                ((total_runs - violation_count) / total_runs) * 100.0, 2
+            )
+        # Per-flow breakdown
+        by_flow: dict[str, dict[str, Any]] = {}
+        for v in owner_violations:
+            fid = v["flow_id"]
+            entry = by_flow.setdefault(fid, {"flow_id": fid, "violations": 0})
+            entry["violations"] += 1
+        return {
+            "total_runs": total_runs,
+            "violations": violation_count,
+            "compliance_rate_pct": compliance_rate,
+            "by_flow": list(by_flow.values()),
+        }
+
+    def reset(self) -> None:
+        """Clear all data (for testing)."""
+        with self._lock:
+            self._policies.clear()
+            self._violations.clear()
+            self._run_count_by_owner.clear()
+
+
+sla_store = SLAStore()
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -19731,6 +19925,86 @@ async def publisher_payout(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"balance": credit_ledger.balance(current_user["id"])}
+
+
+# ---------------------------------------------------------------------------
+# SLA Tracking endpoints (N-33)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+class SetSLAPolicyRequest(BaseModel):
+    """Request body for creating/updating an SLA policy."""
+
+    model_config = ConfigDict(extra="forbid")
+    max_duration_seconds: float = Field(..., gt=0)
+    alert_threshold_pct: float = Field(0.8, ge=0.1, le=1.0)
+
+
+@v1.put("/sla/policies/{flow_id}", tags=["SLA"])
+async def set_sla_policy(
+    flow_id: str,
+    body: SetSLAPolicyRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Create or update an SLA policy for a workflow."""
+    policy = sla_store.set_policy(
+        flow_id=flow_id,
+        owner_id=current_user["id"],
+        max_duration_seconds=body.max_duration_seconds,
+        alert_threshold_pct=body.alert_threshold_pct,
+    )
+    return policy
+
+
+@v1.get("/sla/policies/{flow_id}", tags=["SLA"])
+async def get_sla_policy(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Get the SLA policy for a workflow."""
+    policy = sla_store.get_policy(flow_id)
+    if policy is None:
+        raise HTTPException(status_code=404, detail="No SLA policy for this flow")
+    return policy
+
+
+@v1.delete("/sla/policies/{flow_id}", status_code=204, tags=["SLA"])
+async def delete_sla_policy(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Delete the SLA policy for a workflow."""
+    sla_store.delete_policy(flow_id)
+    return None
+
+
+@v1.get("/sla/policies", tags=["SLA"])
+async def list_sla_policies(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> list[dict[str, Any]]:
+    """List all SLA policies owned by the authenticated user."""
+    return sla_store.list_policies(current_user["id"])
+
+
+@v1.get("/sla/violations", tags=["SLA"])
+async def list_sla_violations(
+    flow_id: str | None = None,
+    limit: int = 50,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> list[dict[str, Any]]:
+    """List SLA violations for the authenticated user, newest first."""
+    return sla_store.list_violations(
+        flow_id=flow_id, owner_id=current_user["id"], limit=limit
+    )
+
+
+@v1.get("/sla/dashboard", tags=["SLA"])
+async def sla_dashboard(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return SLA compliance statistics for the authenticated user."""
+    return sla_store.compliance_stats(current_user["id"])
 
 
 # Include versioned router

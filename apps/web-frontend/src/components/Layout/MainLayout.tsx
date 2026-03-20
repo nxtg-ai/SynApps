@@ -51,6 +51,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/wizard', icon: '🧙', label: 'Wizard' },
     { path: '/publisher/dashboard', icon: '📊', label: 'Publisher' },
     { path: '/publisher/credits', icon: '💰', label: 'Credits' },
+    { path: '/sla', icon: '⏱', label: 'SLA' },
     { path: '/settings', icon: '⚙️', label: 'Settings' }
   ];
   
