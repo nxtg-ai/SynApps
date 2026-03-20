@@ -138,6 +138,18 @@ export interface FlowDiffResult {
   };
 }
 
+// ── Rollback Audit ──────────────────────────────────────────────────────
+
+export interface RollbackAuditEntry {
+  audit_id: string;
+  flow_id: string;
+  from_version_id: string;
+  to_version_id: string;
+  performed_by: string;
+  reason: string;
+  rolled_back_at: number;
+}
+
 // ── Cost Estimation ─────────────────────────────────────────────────────
 
 export interface CostBreakdownItem {

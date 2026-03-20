@@ -30,9 +30,21 @@ interface MarketplaceListing {
   edges: unknown[];
   install_count: number;
   featured: boolean;
+  is_featured?: boolean;
   published_at: number;
   avg_rating?: number;
   rating_count?: number;
+}
+
+interface FeaturedListing extends MarketplaceListing {
+  blurb: string;
+  featured_at: number;
+  featured_by: string;
+}
+
+interface FeaturedResponse {
+  items: FeaturedListing[];
+  total: number;
 }
 
 interface SearchResponse {
@@ -301,6 +313,7 @@ const GalleryPage: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastCounter = useRef(0);
   const [trendingItems, setTrendingItems] = useState<MarketplaceListing[]>([]);
+  const [featuredItems, setFeaturedItems] = useState<FeaturedListing[]>([]);
 
   // Debounce search query
   useEffect(() => {
@@ -378,6 +391,21 @@ const GalleryPage: React.FC = () => {
       })
       .catch(() => {
         // Trending section is non-critical; silently skip on error
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch admin-curated featured listings once on mount
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<FeaturedResponse>('/api/v1/marketplace/featured?limit=3')
+      .then((data) => {
+        if (!cancelled) setFeaturedItems(data.items);
+      })
+      .catch(() => {
+        // Featured section is non-critical; silently skip on error
       });
     return () => {
       cancelled = true;
@@ -510,6 +538,62 @@ const GalleryPage: React.FC = () => {
           <span>{formatInstallCount(totalInstalls)} installs</span>
         </div>
       </section>
+
+      {/* Featured Hero */}
+      {featuredItems.length > 0 && (
+        <section className="gallery-featured-hero" data-testid="featured-hero-section" aria-label="Featured workflows">
+          <h2 className="gallery-trending-title">&#11088; Featured</h2>
+          <div className="gallery-trending-row">
+            {featuredItems.map((listing) => {
+              const isInstalled = installedIds.has(listing.id);
+              const isInstalling = installingIds.has(listing.id);
+
+              return (
+                <article key={listing.id} className="gallery-card gallery-card--featured" data-testid="featured-hero-card">
+                  <div className="gallery-featured-badge">&#11088; Featured</div>
+                  <div className="gallery-card-body">
+                    <div className="gallery-card-top">
+                      <h3 className="gallery-card-title" title={listing.name}>
+                        {listing.name}
+                      </h3>
+                      <p className="gallery-card-description">{listing.description}</p>
+                      {listing.blurb && (
+                        <p className="gallery-featured-blurb">&ldquo;{listing.blurb}&rdquo;</p>
+                      )}
+                    </div>
+
+                    <div className="gallery-card-footer">
+                      <span className="gallery-installs">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        {formatInstallCount(listing.install_count)}
+                      </span>
+
+                      <button
+                        className={`gallery-install-btn ${isInstalled ? 'gallery-install-btn--installed' : ''} ${isInstalling ? 'gallery-install-btn--installing' : ''}`}
+                        onClick={() => handleInstall(listing)}
+                        disabled={isInstalled || isInstalling}
+                        aria-label={isInstalled ? 'Installed' : `Install ${listing.name}`}
+                      >
+                        {isInstalling ? (
+                          <span className="gallery-btn-spinner" />
+                        ) : isInstalled ? (
+                          'Installed'
+                        ) : (
+                          'Install'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Trending This Week */}
       {trendingItems.length > 0 && (
@@ -685,6 +769,9 @@ const GalleryPage: React.FC = () => {
                   return (
                     <article key={listing.id} className="gallery-card">
                       <NodePreview nodes={listing.nodes} />
+                      {listing.is_featured && (
+                        <span className="gallery-featured-card-badge" data-testid="featured-badge">&#11088; Featured</span>
+                      )}
 
                       <div className="gallery-card-body">
                         <div className="gallery-card-top">

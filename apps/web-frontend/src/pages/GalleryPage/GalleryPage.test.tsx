@@ -3,7 +3,7 @@
  *
  * Covers: search debounce, category filter toggling, install flow (success +
  * error), empty state, load-more visibility, star rating derivation, node
- * preview rendering.
+ * preview rendering, featured hero section, featured badge on listing cards.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -31,6 +31,7 @@ function makeListing(overrides: Partial<{
   install_count: number;
   nodes: Array<{ id: string; type?: string }>;
   featured: boolean;
+  is_featured: boolean;
   published_at: number;
 }> = {}) {
   return {
@@ -44,6 +45,7 @@ function makeListing(overrides: Partial<{
     edges: [],
     install_count: overrides.install_count ?? 10,
     featured: overrides.featured ?? false,
+    is_featured: overrides.is_featured ?? false,
     published_at: overrides.published_at ?? 1_700_000_000,
   };
 }
@@ -56,6 +58,12 @@ function makeSearchResponse(items: ReturnType<typeof makeListing>[], total?: num
     per_page: 12,
   };
 }
+
+/** Empty featured response — used as the default featured mock. */
+const EMPTY_FEATURED = { items: [], total: 0 };
+
+/** Empty trending response — used as the default trending mock. */
+const EMPTY_TRENDING = { items: [], total: 0 };
 
 const mockFetch = vi.fn();
 
@@ -86,6 +94,32 @@ function renderPage(Page: React.ComponentType) {
   );
 }
 
+/**
+ * Set up the 3 standard on-mount fetch calls: (1) search, (2) trending, (3) featured.
+ * Optionally override any of the three response bodies.
+ */
+function setupMountMocks(opts?: {
+  search?: ReturnType<typeof makeSearchResponse>;
+  trending?: { items: ReturnType<typeof makeListing>[]; total: number };
+  featured?: { items: Record<string, unknown>[]; total: number };
+}) {
+  // Call 1: search listings
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => opts?.search ?? makeSearchResponse([]),
+  });
+  // Call 2: trending
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => opts?.trending ?? EMPTY_TRENDING,
+  });
+  // Call 3: featured
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => opts?.featured ?? EMPTY_FEATURED,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -93,10 +127,7 @@ function renderPage(Page: React.ComponentType) {
 describe('GalleryPage', () => {
   describe('initial load', () => {
     it('renders the hero title', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([]),
-      });
+      setupMountMocks();
 
       const Page = await importPage();
       renderPage(Page);
@@ -127,10 +158,7 @@ describe('GalleryPage', () => {
 
     it('renders listing cards when data arrives', async () => {
       const listing = makeListing({ name: 'My Automation' });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([listing]),
-      });
+      setupMountMocks({ search: makeSearchResponse([listing]) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -145,10 +173,7 @@ describe('GalleryPage', () => {
     });
 
     it('shows empty state when no listings', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([]),
-      });
+      setupMountMocks();
 
       const Page = await importPage();
       renderPage(Page);
@@ -170,12 +195,17 @@ describe('GalleryPage', () => {
         ok: true,
         json: async () => makeSearchResponse([]),
       });
-      // Call 2: trending (non-critical, mounted after listings)
+      // Call 2: trending
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ items: [], total: 0 }),
+        json: async () => EMPTY_TRENDING,
       });
-      // Call 3: after search
+      // Call 3: featured
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => EMPTY_FEATURED,
+      });
+      // Call 4: after search
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => makeSearchResponse([makeListing({ name: 'LLM Pipeline' })]),
@@ -184,28 +214,25 @@ describe('GalleryPage', () => {
       const Page = await importPage();
       renderPage(Page);
 
-      // Settle initial load (listings + trending)
+      // Settle initial load (listings + trending + featured)
       await act(async () => { vi.runAllTimers(); });
-      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
 
       const input = screen.getByRole('searchbox');
       fireEvent.change(input, { target: { value: 'llm' } });
 
       // Advance debounce (400 ms)
       await act(async () => { vi.advanceTimersByTime(500); });
-      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
 
-      const searchCall = mockFetch.mock.calls[2][0] as string;
+      const searchCall = mockFetch.mock.calls[3][0] as string;
       expect(searchCall).toContain('q=llm');
     });
   });
 
   describe('category filter', () => {
     it('toggles a category pill active/inactive', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([]),
-      });
+      setupMountMocks();
 
       const Page = await importPage();
       renderPage(Page);
@@ -257,7 +284,8 @@ describe('GalleryPage', () => {
       const listing = makeListing({ id: 'abc-123', name: 'Pipeline Alpha' });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => makeSearchResponse([listing]) })
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], total: 0 }) }) // trending
+        .mockResolvedValueOnce({ ok: true, json: async () => EMPTY_TRENDING }) // trending
+        .mockResolvedValueOnce({ ok: true, json: async () => EMPTY_FEATURED }) // featured
         .mockResolvedValueOnce({ ok: true, json: async () => ({ flow_id: 'new-flow' }) });
 
       const Page = await importPage();
@@ -280,7 +308,8 @@ describe('GalleryPage', () => {
       const listing = makeListing({ id: 'fail-id', name: 'Broken Pipeline' });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => makeSearchResponse([listing]) })
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], total: 0 }) }) // trending
+        .mockResolvedValueOnce({ ok: true, json: async () => EMPTY_TRENDING }) // trending
+        .mockResolvedValueOnce({ ok: true, json: async () => EMPTY_FEATURED }) // featured
         .mockResolvedValueOnce({ ok: false, text: async () => 'Not found' });
 
       const Page = await importPage();
@@ -309,10 +338,7 @@ describe('GalleryPage', () => {
           { id: 'n2', type: 'http' },
         ],
       });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([listing]),
-      });
+      setupMountMocks({ search: makeSearchResponse([listing]) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -326,10 +352,7 @@ describe('GalleryPage', () => {
 
     it('shows placeholder when no nodes', async () => {
       const listing = makeListing({ nodes: [] });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([listing]),
-      });
+      setupMountMocks({ search: makeSearchResponse([listing]) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -344,10 +367,7 @@ describe('GalleryPage', () => {
       const items = Array.from({ length: 12 }, (_, i) =>
         makeListing({ id: `id-${i}`, name: `Workflow ${i}` }),
       );
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse(items, 24), // 24 total, 12 loaded
-      });
+      setupMountMocks({ search: makeSearchResponse(items, 24) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -361,10 +381,7 @@ describe('GalleryPage', () => {
 
     it('hides Load More button when all items loaded', async () => {
       const items = [makeListing()];
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse(items, 1),
-      });
+      setupMountMocks({ search: makeSearchResponse(items, 1) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -380,10 +397,7 @@ describe('GalleryPage', () => {
   describe('star rating derivation', () => {
     it('gives min rating 3.5 for 0 installs', async () => {
       const listing = makeListing({ install_count: 0 });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([listing]),
-      });
+      setupMountMocks({ search: makeSearchResponse([listing]) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -397,10 +411,7 @@ describe('GalleryPage', () => {
 
     it('caps rating at 5.0 for high install counts', async () => {
       const listing = makeListing({ install_count: 9999 });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => makeSearchResponse([listing]),
-      });
+      setupMountMocks({ search: makeSearchResponse([listing]) });
 
       const Page = await importPage();
       renderPage(Page);
@@ -434,6 +445,53 @@ describe('GalleryPage', () => {
         },
         { timeout: 3000 },
       );
+    });
+  });
+
+  describe('featured section', () => {
+    it('shows featured hero section when featured listings returned', async () => {
+      const featuredListing = {
+        ...makeListing({ id: 'feat-1', name: 'Amazing Workflow' }),
+        blurb: 'Editor pick of the month',
+        featured_at: 1_700_100_000,
+        featured_by: 'admin-1',
+        is_featured: true,
+      };
+
+      setupMountMocks({
+        search: makeSearchResponse([]),
+        featured: { items: [featuredListing], total: 1 },
+      });
+
+      const Page = await importPage();
+      renderPage(Page);
+
+      await act(async () => { vi.runAllTimers(); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('featured-hero-section')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('featured-hero-card')).toBeInTheDocument();
+      expect(screen.getByText('Amazing Workflow')).toBeInTheDocument();
+    });
+
+    it('shows featured badge on featured listing card', async () => {
+      const listing = makeListing({ id: 'feat-card', name: 'Featured Card', is_featured: true });
+
+      setupMountMocks({
+        search: makeSearchResponse([listing]),
+      });
+
+      const Page = await importPage();
+      renderPage(Page);
+
+      await act(async () => { vi.runAllTimers(); });
+
+      await waitFor(() => {
+        expect(screen.getByText('Featured Card')).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId('featured-badge')).toBeInTheDocument();
     });
   });
 });

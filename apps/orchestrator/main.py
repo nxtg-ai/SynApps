@@ -9762,6 +9762,72 @@ flow_version_registry = FlowVersionRegistry()
 
 
 # ---------------------------------------------------------------------------
+# Rollback Audit Store — tracks all workflow version rollbacks
+# ---------------------------------------------------------------------------
+
+
+class RollbackAuditStore:
+    """Thread-safe audit log for workflow version rollbacks.
+
+    Records every rollback operation with from/to version IDs, the user who
+    performed it, an optional reason, and a timestamp.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: list[dict[str, Any]] = []
+
+    def record(
+        self,
+        flow_id: str,
+        from_version_id: str,
+        to_version_id: str,
+        performed_by: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Record a rollback event and return the audit entry."""
+        entry: dict[str, Any] = {
+            "audit_id": str(uuid.uuid4()),
+            "flow_id": flow_id,
+            "from_version_id": from_version_id,
+            "to_version_id": to_version_id,
+            "performed_by": performed_by,
+            "reason": reason,
+            "rolled_back_at": time.time(),
+        }
+        with self._lock:
+            self._entries.append(entry)
+        return dict(entry)
+
+    def list(
+        self,
+        flow_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return audit entries newest-first, optionally filtered by flow_id."""
+        with self._lock:
+            items = list(self._entries)
+        if flow_id is not None:
+            items = [e for e in items if e["flow_id"] == flow_id]
+        items.reverse()
+        return items[:limit]
+
+    def reset(self) -> None:
+        """Clear all audit entries. Used between tests."""
+        with self._lock:
+            self._entries.clear()
+
+
+rollback_audit_store = RollbackAuditStore()
+
+
+class RollbackRequest(BaseModel):
+    """Request body for the rollback endpoint -- optional reason text."""
+
+    reason: str = Field("", max_length=500)
+
+
+# ---------------------------------------------------------------------------
 # Error Handler Node — Graph-level error catcher
 # ---------------------------------------------------------------------------
 
@@ -14002,20 +14068,46 @@ async def marketplace_search(
         page=page,
         per_page=per_page,
     )
-    # Enrich each listing with avg_rating and rating_count from the rating store
+    # Enrich each listing with avg_rating, rating_count, and is_featured
     enriched = []
     for item in items:
         lid = item.get("listing_id", item.get("id", ""))
         stats = rating_store.get_stats(lid)
-        enriched.append({**item, "avg_rating": stats["avg_rating"], "rating_count": stats["rating_count"]})
+        enriched.append({
+            **item,
+            "avg_rating": stats["avg_rating"],
+            "rating_count": stats["rating_count"],
+            "is_featured": featured_store.is_featured(lid),
+        })
     return {"items": enriched, "total": total, "page": page, "per_page": per_page}
 
 
 @v1.get("/marketplace/featured", tags=["Marketplace"])
-async def marketplace_featured():
-    """Return the top 10 marketplace listings sorted by install count."""
-    items = marketplace_registry.featured()
-    return {"items": items, "total": len(items)}
+async def marketplace_featured(
+    limit: int = Query(0, ge=0, description="Max items to return (0 = all)"),
+):
+    """Return admin-curated featured listings, enriched with listing metadata.
+
+    Each returned item merges the full marketplace listing data with the
+    featured metadata (blurb, featured_at, featured_by) and adds
+    ``is_featured: true``.  Results are sorted by ``featured_at`` descending.
+    """
+    featured_entries = featured_store.list_featured()
+    enriched: list[dict[str, Any]] = []
+    for entry in featured_entries:
+        listing = marketplace_registry.get(entry["listing_id"])
+        if listing is None:
+            continue
+        enriched.append({
+            **listing,
+            "blurb": entry["blurb"],
+            "featured_at": entry["featured_at"],
+            "featured_by": entry["featured_by"],
+            "is_featured": True,
+        })
+    if limit > 0:
+        enriched = enriched[:limit]
+    return {"items": enriched, "total": len(enriched)}
 
 
 @v1.post("/marketplace/install/{listing_id}", status_code=201, tags=["Marketplace"])
@@ -14476,13 +14568,18 @@ async def get_flow_version(
 async def rollback_flow(
     flow_id: str,
     version_id: str = Query(..., description="Version ID to roll back to."),
+    body: RollbackRequest | None = None,
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Roll back a flow to a previous version.
 
     Snapshots the current state before applying the rollback, so the rollback
-    itself is also reversible.
+    itself is also reversible.  Records an audit entry in ``rollback_audit_store``.
     """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+
     entry = flow_version_registry.get_version(flow_id, version_id)
     if not entry:
         raise HTTPException(
@@ -14490,12 +14587,43 @@ async def rollback_flow(
             detail=f"Version '{version_id}' not found for flow '{flow_id}'",
         )
 
-    current = await FlowRepository.get_by_id(flow_id)
-    if current:
-        flow_version_registry.snapshot(flow_id, current)
+    # Snapshot the current state so the rollback is itself reversible
+    pre_rollback = flow_version_registry.snapshot(flow_id, flow)
+    from_version_id = pre_rollback["version_id"]
 
     restored = await FlowRepository.save({**entry["snapshot"], "id": flow_id})
-    return {"flow": restored, "rolled_back_to": version_id}
+
+    reason = body.reason if body else ""
+    user_id = current_user.get("id", current_user.get("email", "unknown"))
+    audit_entry = rollback_audit_store.record(
+        flow_id=flow_id,
+        from_version_id=from_version_id,
+        to_version_id=version_id,
+        performed_by=user_id,
+        reason=reason,
+    )
+
+    return {"flow": restored, "rolled_back_to": version_id, "audit_entry": audit_entry}
+
+
+@v1.get("/flows/{flow_id}/rollback/history", status_code=200, tags=["Flows"])
+async def get_flow_rollback_history(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List rollback audit entries for a specific flow, newest first."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+    return {"items": rollback_audit_store.list(flow_id=flow_id)}
+
+
+@v1.get("/rollback/history", status_code=200, tags=["Flows"])
+async def get_all_rollback_history(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all rollback audit entries (all flows), newest first."""
+    return {"items": rollback_audit_store.list()}
 
 
 @v1.get("/flows/{flow_id}/diff", tags=["Flows"])
@@ -19787,6 +19915,80 @@ class RetryWebhookRequest(StrictRequestModel):
 
 
 # ---------------------------------------------------------------------------
+# Marketplace Featured Section (N-48) — admin-curated featured listings
+# ---------------------------------------------------------------------------
+
+
+class FeaturedStore:
+    """Admin-curated list of featured marketplace listings.
+
+    Stores featured metadata: listing_id, featured_at, featured_by, blurb.
+    Thread-safe via a reentrant lock.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, dict[str, Any]] = {}
+
+    def feature(self, listing_id: str, admin_id: str, blurb: str = "") -> dict[str, Any]:
+        """Mark a listing as featured. Returns the featured entry dict."""
+        entry: dict[str, Any] = {
+            "listing_id": listing_id,
+            "featured_at": time.time(),
+            "featured_by": admin_id,
+            "blurb": blurb,
+        }
+        with self._lock:
+            self._entries[listing_id] = entry
+        return entry
+
+    def unfeature(self, listing_id: str) -> bool:
+        """Remove a listing from the featured list. Returns False if not found."""
+        with self._lock:
+            return self._entries.pop(listing_id, None) is not None
+
+    def is_featured(self, listing_id: str) -> bool:
+        """Check whether a listing is currently featured."""
+        with self._lock:
+            return listing_id in self._entries
+
+    def get(self, listing_id: str) -> dict[str, Any] | None:
+        """Return featured metadata for a listing, or None if not featured."""
+        with self._lock:
+            return self._entries.get(listing_id)
+
+    def list_featured(self) -> list[dict[str, Any]]:
+        """Return all featured entries, newest first (by featured_at)."""
+        with self._lock:
+            items = list(self._entries.values())
+        items.sort(key=lambda e: e["featured_at"], reverse=True)
+        return items
+
+    def reset(self) -> None:
+        """Clear all featured entries (for testing)."""
+        with self._lock:
+            self._entries.clear()
+
+
+featured_store = FeaturedStore()
+
+
+def _is_admin(user: dict[str, Any]) -> bool:
+    """Check if the authenticated user is an admin.
+
+    For now, any user whose email starts with 'admin' is treated as admin.
+    """
+    return user.get("email", "").startswith("admin")
+
+
+class FeatureListingRequest(BaseModel):
+    """Request body for featuring a marketplace listing."""
+
+    model_config = ConfigDict(extra="forbid")
+    blurb: str = Field("", max_length=200)
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -20245,6 +20447,40 @@ async def sla_dashboard(
 ) -> dict[str, Any]:
     """Return SLA compliance statistics for the authenticated user."""
     return sla_store.compliance_stats(current_user["id"])
+
+
+# ---------------------------------------------------------------------------
+# Marketplace Featured Admin endpoints (N-48)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/marketplace/{listing_id}/feature", tags=["Marketplace"])
+async def feature_listing(
+    listing_id: str,
+    body: FeatureListingRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Mark a marketplace listing as admin-curated featured (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    listing = marketplace_registry.get(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"Listing '{listing_id}' not found")
+    entry = featured_store.feature(listing_id, current_user["id"], body.blurb)
+    return entry
+
+
+@v1.delete("/marketplace/{listing_id}/feature", status_code=204, tags=["Marketplace"])
+async def unfeature_listing(
+    listing_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Remove a marketplace listing from the featured list (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    featured_store.unfeature(listing_id)
+    return None
 
 
 # Include versioned router

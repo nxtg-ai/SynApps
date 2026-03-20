@@ -7,10 +7,12 @@ from apps.orchestrator.main import (
     audit_log_store,
     credit_ledger,
     execution_quota_store,
+    featured_store,
     issue_store,
     rating_store,
     reply_store,
     review_store,
+    rollback_audit_store,
     sla_store,
     webhook_debug_store,
 )
@@ -66,10 +68,13 @@ def _reset_shared_stores():
     credit_ledger.reset()
     sla_store.reset()
     webhook_debug_store.reset()
+    featured_store.reset()
+    rollback_audit_store.reset()
     yield
     # Post-test cleanup (belt-and-suspenders for any state written during test)
     execution_quota_store.reset()
     audit_log_store.reset()
+    featured_store.reset()
     rating_store.reset()
     review_store.reset()
     reply_store.reset()
@@ -77,3 +82,4 @@ def _reset_shared_stores():
     credit_ledger.reset()
     sla_store.reset()
     webhook_debug_store.reset()
+    rollback_audit_store.reset()

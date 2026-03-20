@@ -28,6 +28,8 @@ const CreditsPage = React.lazy(() => import('./pages/CreditsPage/CreditsPage'));
 const TemplateWizardPage = React.lazy(() => import('./pages/TemplateWizardPage/TemplateWizardPage'));
 const SLADashboardPage = React.lazy(() => import('./pages/SLADashboardPage/SLADashboardPage'));
 const WebhookDebuggerPage = React.lazy(() => import('./pages/WebhookDebuggerPage/WebhookDebuggerPage'));
+const AdminFeaturedPage = React.lazy(() => import('./pages/AdminFeaturedPage/AdminFeaturedPage'));
+const RollbackPage = React.lazy(() => import('./pages/RollbackPage/RollbackPage'));
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -77,6 +79,8 @@ const AppRoutes: React.FC = () => {
           <Route path="/workflows/:id/diff" element={<ProtectedRoute><WorkflowDiffPage /></ProtectedRoute>} />
           <Route path="/sla" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
           <Route path="/webhooks/debug" element={<ProtectedRoute><WebhookDebuggerPage /></ProtectedRoute>} />
+          <Route path="/admin/featured" element={<ProtectedRoute><AdminFeaturedPage /></ProtectedRoute>} />
+          <Route path="/workflows/:id/rollback" element={<ProtectedRoute><RollbackPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </React.Suspense>

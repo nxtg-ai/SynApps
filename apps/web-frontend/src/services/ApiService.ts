@@ -12,6 +12,7 @@ import {
   FlowVersion,
   FlowVersionDetail,
   FlowDiffResult,
+  RollbackAuditEntry,
 } from '../types';
 
 // ── Token refresh queue ────────────────────────────────────────────────
@@ -328,6 +329,29 @@ class ApiService {
     tags: string[];
   }): Promise<{ listing_id: string }> {
     const response = await this.api.post('/marketplace/publish', data);
+    return response.data;
+  }
+  /**
+   * Roll back a flow to a specific version snapshot.
+   */
+  public async rollbackFlow(
+    flowId: string,
+    versionId: string,
+    reason: string = '',
+  ): Promise<{ flow: Flow; rolled_back_to: string; audit_entry: RollbackAuditEntry }> {
+    const response = await this.api.post(
+      `/flows/${flowId}/rollback`,
+      { reason },
+      { params: { version_id: versionId } },
+    );
+    return response.data;
+  }
+
+  /**
+   * Fetch rollback audit history for a specific flow.
+   */
+  public async getRollbackHistory(flowId: string): Promise<{ items: RollbackAuditEntry[] }> {
+    const response = await this.api.get(`/flows/${flowId}/rollback/history`);
     return response.data;
   }
 }
