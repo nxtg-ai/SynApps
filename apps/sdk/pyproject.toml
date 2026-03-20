@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "synapps-sdk"
+version = "1.0.0"
+description = "SynApps Python SDK — programmatic access to AI workflow management"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+keywords = ["synapps", "ai", "workflow", "automation"]
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["synapps*"]
