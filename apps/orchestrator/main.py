@@ -50,6 +50,7 @@ from fastapi import (
     APIRouter,
     Depends,
     FastAPI,
+    Form,
     Header,
     HTTPException,
     Query,
@@ -14470,6 +14471,458 @@ async def export_analytics_dashboard_csv(
 
 
 # ============================================================
+# Workflow Monitoring — Health Checks + Alerts — N-35
+# ============================================================
+
+
+class WorkflowHealthService:
+    """Compute per-workflow health metrics over a sliding time window."""
+
+    @staticmethod
+    async def get_health(
+        flow_id: str | None = None,
+        window_hours: int = 24,
+    ) -> list[dict[str, Any]]:
+        """Return health dicts for all workflows (or a single flow) within window.
+
+        Args:
+            flow_id: Optional — restrict results to a single flow.
+            window_hours: How many hours back to consider (default 24).
+
+        Returns:
+            List of WorkflowHealth dicts sorted by last_run_at descending.
+            Keys: flow_id, run_count, success_count, error_count,
+                  success_rate, error_rate, avg_duration_seconds,
+                  p95_duration_seconds, last_run_at, health_status.
+        """
+        all_runs = await WorkflowRunRepository.get_all()
+        cutoff = time.time() - window_hours * 3600.0
+
+        # Apply time-window filter
+        windowed = [r for r in all_runs if (r.get("start_time") or 0.0) >= cutoff]
+
+        # Optional single-flow filter
+        if flow_id is not None:
+            windowed = [r for r in windowed if r.get("flow_id") == flow_id]
+
+        # Group by flow_id
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for run in windowed:
+            fid = run.get("flow_id") or ""
+            groups.setdefault(fid, []).append(run)
+
+        result: list[dict[str, Any]] = []
+        for fid, runs in groups.items():
+            run_count = len(runs)
+            success_count = sum(1 for r in runs if r.get("status") == "success")
+            error_count = sum(1 for r in runs if r.get("status") == "error")
+            terminal_count = success_count + error_count
+            success_rate = success_count / terminal_count if terminal_count > 0 else 0.0
+            error_rate = error_count / terminal_count if terminal_count > 0 else 0.0
+
+            durations = [
+                float(r["end_time"]) - float(r["start_time"])
+                for r in runs
+                if r.get("end_time") is not None and r.get("start_time") is not None
+            ]
+            avg_duration_seconds: float | None = (
+                sum(durations) / len(durations) if durations else None
+            )
+            p95_duration_seconds: float | None = None
+            if durations:
+                sorted_durations = sorted(durations)
+                idx = max(0, int(math.ceil(0.95 * len(sorted_durations))) - 1)
+                p95_duration_seconds = sorted_durations[idx]
+
+            start_times = [
+                float(r["start_time"]) for r in runs if r.get("start_time") is not None
+            ]
+            last_run_at: float | None = max(start_times) if start_times else None
+
+            if error_rate > 0.3:
+                health_status = "critical"
+            elif error_rate >= 0.1:
+                health_status = "degraded"
+            else:
+                health_status = "healthy"
+
+            result.append(
+                {
+                    "flow_id": fid,
+                    "run_count": run_count,
+                    "success_count": success_count,
+                    "error_count": error_count,
+                    "success_rate": success_rate,
+                    "error_rate": error_rate,
+                    "avg_duration_seconds": avg_duration_seconds,
+                    "p95_duration_seconds": p95_duration_seconds,
+                    "last_run_at": last_run_at,
+                    "health_status": health_status,
+                }
+            )
+
+        result.sort(
+            key=lambda x: x["last_run_at"] if x["last_run_at"] is not None else float("-inf"),
+            reverse=True,
+        )
+        return result
+
+
+class AlertRuleStore:
+    """Thread-safe in-memory store for workflow alert rules.
+
+    Rule schema:
+        id (str), workflow_id (str or "*"), metric (str), operator (str),
+        threshold (float), window_minutes (int), action_type (str),
+        action_config (dict), enabled (bool), created_at (float),
+        last_triggered_at (float | None)
+
+    Supported metrics: error_rate, avg_duration_seconds, run_count
+    Supported operators: ">", "<", ">=", "<="
+    Action types: "webhook", "log"
+    """
+
+    VALID_METRICS = {"error_rate", "avg_duration_seconds", "run_count"}
+    VALID_OPERATORS = {">", "<", ">=", "<="}
+    VALID_ACTION_TYPES = {"webhook", "log"}
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._rules: dict[str, dict[str, Any]] = {}
+
+    def create(self, rule: dict[str, Any]) -> dict[str, Any]:
+        """Persist a new alert rule and return it with an assigned id."""
+        with self._lock:
+            rule_id = str(uuid.uuid4())
+            now = time.time()
+            stored: dict[str, Any] = {
+                "id": rule_id,
+                "workflow_id": rule.get("workflow_id", "*"),
+                "metric": rule["metric"],
+                "operator": rule["operator"],
+                "threshold": float(rule["threshold"]),
+                "window_minutes": int(rule.get("window_minutes", 60)),
+                "action_type": rule["action_type"],
+                "action_config": dict(rule.get("action_config") or {}),
+                "enabled": bool(rule.get("enabled", True)),
+                "created_at": now,
+                "last_triggered_at": None,
+            }
+            self._rules[rule_id] = stored
+            return dict(stored)
+
+    def list_all(self) -> list[dict[str, Any]]:
+        """Return all alert rules ordered by created_at ascending."""
+        with self._lock:
+            return sorted(self._rules.values(), key=lambda r: r["created_at"])
+
+    def get(self, rule_id: str) -> dict[str, Any] | None:
+        """Return a single rule by id, or None if not found."""
+        with self._lock:
+            rule = self._rules.get(rule_id)
+            return dict(rule) if rule else None
+
+    def update(self, rule_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
+        """Partially update a rule (threshold, operator, enabled, action_config).
+
+        Returns the updated rule or None if rule_id does not exist.
+        """
+        allowed_fields = {"threshold", "operator", "enabled", "action_config"}
+        with self._lock:
+            rule = self._rules.get(rule_id)
+            if rule is None:
+                return None
+            for field in allowed_fields:
+                if field in patch:
+                    if field == "threshold":
+                        rule[field] = float(patch[field])
+                    elif field == "enabled":
+                        rule[field] = bool(patch[field])
+                    elif field == "action_config":
+                        rule[field] = dict(patch[field])
+                    else:
+                        rule[field] = patch[field]
+            return dict(rule)
+
+    def delete(self, rule_id: str) -> bool:
+        """Remove a rule by id. Returns True if deleted, False if not found."""
+        with self._lock:
+            if rule_id in self._rules:
+                del self._rules[rule_id]
+                return True
+            return False
+
+    def mark_triggered(self, rule_id: str) -> None:
+        """Update last_triggered_at timestamp for a rule."""
+        with self._lock:
+            if rule_id in self._rules:
+                self._rules[rule_id]["last_triggered_at"] = time.time()
+
+    def reset(self) -> None:
+        """Clear all rules (used in tests)."""
+        with self._lock:
+            self._rules.clear()
+
+
+class AlertEngine:
+    """Evaluate enabled alert rules against health results and fire actions."""
+
+    def __init__(self, store: AlertRuleStore) -> None:
+        self._store = store
+
+    def evaluate(self, health_results: list[dict[str, Any]]) -> None:
+        """Check all enabled rules against health data and trigger matched actions.
+
+        Args:
+            health_results: List of WorkflowHealth dicts from WorkflowHealthService.
+        """
+        rules = self._store.list_all()
+        health_by_flow: dict[str, dict[str, Any]] = {
+            h["flow_id"]: h for h in health_results
+        }
+
+        for rule in rules:
+            if not rule.get("enabled", True):
+                continue
+
+            workflow_id = rule.get("workflow_id", "*")
+            metric = rule["metric"]
+            operator = rule["operator"]
+            threshold = float(rule["threshold"])
+            action_type = rule["action_type"]
+            action_config = rule.get("action_config") or {}
+            rule_id = rule["id"]
+
+            # Determine which flows to check
+            if workflow_id == "*":
+                candidates = list(health_results)
+            else:
+                candidate = health_by_flow.get(workflow_id)
+                candidates = [candidate] if candidate is not None else []
+
+            for health in candidates:
+                metric_value = health.get(metric)
+                if metric_value is None:
+                    continue
+
+                try:
+                    metric_float = float(metric_value)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "AlertEngine: non-numeric metric value for rule %s metric %s: %r",
+                        rule_id,
+                        metric,
+                        metric_value,
+                    )
+                    continue
+
+                triggered = self._compare(metric_float, operator, threshold)
+                if not triggered:
+                    continue
+
+                self._store.mark_triggered(rule_id)
+                self._fire_action(rule, health, metric_float, action_type, action_config)
+
+    @staticmethod
+    def _compare(value: float, operator: str, threshold: float) -> bool:
+        """Evaluate value operator threshold."""
+        if operator == ">":
+            return value > threshold
+        if operator == "<":
+            return value < threshold
+        if operator == ">=":
+            return value >= threshold
+        if operator == "<=":
+            return value <= threshold
+        return False
+
+    def _fire_action(
+        self,
+        rule: dict[str, Any],
+        health: dict[str, Any],
+        metric_value: float,
+        action_type: str,
+        action_config: dict[str, Any],
+    ) -> None:
+        """Dispatch the configured action for a triggered rule."""
+        if action_type == "log":
+            logger.warning(
+                "AlertEngine: rule %s triggered — flow=%s metric=%s value=%.4f "
+                "operator=%s threshold=%.4f",
+                rule["id"],
+                health.get("flow_id"),
+                rule["metric"],
+                metric_value,
+                rule["operator"],
+                rule["threshold"],
+            )
+        elif action_type == "webhook":
+            url = action_config.get("url")
+            if not url:
+                logger.warning(
+                    "AlertEngine: webhook rule %s has no url in action_config", rule["id"]
+                )
+                return
+            payload = {
+                "rule_id": rule["id"],
+                "flow_id": health.get("flow_id"),
+                "metric": rule["metric"],
+                "metric_value": metric_value,
+                "operator": rule["operator"],
+                "threshold": rule["threshold"],
+                "health_status": health.get("health_status"),
+                "triggered_at": time.time(),
+            }
+            # Non-blocking fire-and-forget via a background thread
+            import threading as _threading
+
+            def _post() -> None:
+                try:
+                    httpx.post(url, json=payload, timeout=10.0)
+                except Exception as exc:
+                    logger.warning(
+                        "AlertEngine: webhook delivery failed for rule %s url=%s: %s",
+                        rule["id"],
+                        url,
+                        exc,
+                    )
+
+            _threading.Thread(target=_post, daemon=True).start()
+        else:
+            logger.warning(
+                "AlertEngine: unknown action_type %r for rule %s — no action taken",
+                action_type,
+                rule["id"],
+            )
+
+
+alert_rule_store = AlertRuleStore()
+alert_engine = AlertEngine(alert_rule_store)
+workflow_health_service = WorkflowHealthService()
+
+
+# --- Monitoring endpoints ---
+
+
+@v1.get("/monitoring/workflows", tags=["Monitoring"])
+async def get_monitoring_workflows(
+    flow_id: str | None = Query(None, description="Filter to a specific flow ID."),
+    window_hours: int = Query(24, ge=1, le=168, description="Look-back window in hours."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Health summary for all workflows (or a specific flow) in the given window.
+
+    Also evaluates all enabled alert rules against the current health data.
+    """
+    health = await workflow_health_service.get_health(
+        flow_id=flow_id, window_hours=window_hours
+    )
+    alert_engine.evaluate(health)
+    return {"workflows": health, "total": len(health), "window_hours": window_hours}
+
+
+@v1.get("/monitoring/workflows/{flow_id}", tags=["Monitoring"])
+async def get_monitoring_workflow_detail(
+    flow_id: str,
+    window_hours: int = Query(24, ge=1, le=168, description="Look-back window in hours."),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Health detail for a single workflow.
+
+    Returns 404 if the flow has no runs in the requested window.
+    """
+    health = await workflow_health_service.get_health(
+        flow_id=flow_id, window_hours=window_hours
+    )
+    if not health:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No runs found for flow {flow_id!r} in the last {window_hours}h.",
+        )
+    alert_engine.evaluate(health)
+    return {"workflow": health[0], "window_hours": window_hours}
+
+
+@v1.post("/monitoring/alerts", tags=["Monitoring"], status_code=201)
+async def create_alert_rule(
+    body: dict[str, Any],
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Create a new alert rule.
+
+    Required body fields: metric, operator, threshold, action_type.
+    Optional: workflow_id (default "*"), window_minutes (default 60), action_config (default {}).
+    """
+    metric = body.get("metric")
+    operator = body.get("operator")
+    threshold = body.get("threshold")
+    action_type = body.get("action_type")
+
+    if metric not in AlertRuleStore.VALID_METRICS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid metric {metric!r}. Must be one of {sorted(AlertRuleStore.VALID_METRICS)}.",
+        )
+    if operator not in AlertRuleStore.VALID_OPERATORS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid operator {operator!r}. Must be one of {sorted(AlertRuleStore.VALID_OPERATORS)}.",
+        )
+    if threshold is None:
+        raise HTTPException(status_code=422, detail="'threshold' is required.")
+    try:
+        float(threshold)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="'threshold' must be numeric.")
+    if action_type not in AlertRuleStore.VALID_ACTION_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid action_type {action_type!r}. Must be one of {sorted(AlertRuleStore.VALID_ACTION_TYPES)}.",
+        )
+
+    rule = alert_rule_store.create(body)
+    return {"rule": rule}
+
+
+@v1.get("/monitoring/alerts", tags=["Monitoring"])
+async def list_alert_rules(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List all alert rules."""
+    rules = alert_rule_store.list_all()
+    return {"rules": rules, "total": len(rules)}
+
+
+@v1.put("/monitoring/alerts/{rule_id}", tags=["Monitoring"])
+async def update_alert_rule(
+    rule_id: str,
+    body: dict[str, Any],
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Partially update an alert rule (threshold, operator, enabled, action_config)."""
+    if "operator" in body and body["operator"] not in AlertRuleStore.VALID_OPERATORS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid operator {body['operator']!r}.",
+        )
+    updated = alert_rule_store.update(rule_id, body)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id!r} not found.")
+    return {"rule": updated}
+
+
+@v1.delete("/monitoring/alerts/{rule_id}", tags=["Monitoring"], status_code=204)
+async def delete_alert_rule(
+    rule_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Delete an alert rule by id."""
+    deleted = alert_rule_store.delete(rule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id!r} not found.")
+
+
+# ============================================================
 # Workflow Testing Framework — N-34
 # ============================================================
 
@@ -15343,6 +15796,422 @@ async def stream_execution_events(
             sse_event_bus.unsubscribe(run_id, q)
 
     return EventSourceResponse(_event_generator())
+
+
+# ============================================================
+# OAuth2 Provider — SSO for Enterprise (N-36)
+# ============================================================
+
+
+class OAuthClientRegistry:
+    """In-memory registry for OAuth2 client registrations.
+
+    Client secrets are stored as SHA-256 hashes; the plain secret is returned
+    only at registration time and never again.
+    """
+
+    def __init__(self) -> None:
+        self._clients: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def register(
+        self,
+        name: str,
+        redirect_uris: list[str],
+        allowed_scopes: list[str],
+        grant_types: list[str],
+    ) -> dict[str, Any]:
+        """Register a new OAuth2 client and return the full record including plain secret."""
+        client_id = str(uuid.uuid4())
+        plain_secret = secrets.token_hex(32)
+        secret_hash = hashlib.sha256(plain_secret.encode("utf-8")).hexdigest()
+        record: dict[str, Any] = {
+            "client_id": client_id,
+            "_secret_hash": secret_hash,
+            "name": name,
+            "redirect_uris": list(redirect_uris),
+            "allowed_scopes": list(allowed_scopes),
+            "grant_types": list(grant_types),
+            "is_active": True,
+            "created_at": time.time(),
+        }
+        with self._lock:
+            self._clients[client_id] = record
+        return {**{k: v for k, v in record.items() if k != "_secret_hash"}, "client_secret": plain_secret}
+
+    def get(self, client_id: str) -> dict[str, Any] | None:
+        """Return client record (without secret hash) or None if not found."""
+        with self._lock:
+            record = self._clients.get(client_id)
+        if record is None:
+            return None
+        return {k: v for k, v in record.items() if k != "_secret_hash"}
+
+    def validate_secret(self, client_id: str, client_secret: str) -> bool:
+        """Return True if the client exists, is active, and the secret matches."""
+        with self._lock:
+            record = self._clients.get(client_id)
+        if record is None or not record.get("is_active", False):
+            return False
+        candidate_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(candidate_hash, record["_secret_hash"])
+
+    def list_all(self) -> list[dict[str, Any]]:
+        """Return all client records without secret hashes."""
+        with self._lock:
+            records = list(self._clients.values())
+        return [{k: v for k, v in r.items() if k != "_secret_hash"} for r in records]
+
+    def revoke(self, client_id: str) -> bool:
+        """Mark a client as inactive. Returns True if the client existed."""
+        with self._lock:
+            if client_id not in self._clients:
+                return False
+            self._clients[client_id]["is_active"] = False
+            return True
+
+    def reset(self) -> None:
+        """Clear all registrations (for tests)."""
+        with self._lock:
+            self._clients.clear()
+
+
+class AuthorizationCodeStore:
+    """In-memory store for OAuth2 authorization codes with 10-minute TTL."""
+
+    _CODE_TTL_SECONDS: int = 600
+
+    def __init__(self) -> None:
+        self._codes: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def create(
+        self,
+        client_id: str,
+        user_id: str,
+        scopes: list[str],
+        redirect_uri: str,
+    ) -> str:
+        """Create and store a new authorization code; return the code string."""
+        code = secrets.token_urlsafe(32)
+        record: dict[str, Any] = {
+            "code": code,
+            "client_id": client_id,
+            "user_id": user_id,
+            "scopes": list(scopes),
+            "redirect_uri": redirect_uri,
+            "expires_at": time.time() + self._CODE_TTL_SECONDS,
+            "used": False,
+        }
+        with self._lock:
+            self._codes[code] = record
+        return code
+
+    def consume(self, code: str) -> dict[str, Any] | None:
+        """Return and mark-used the code record if valid, None if expired/used/missing."""
+        with self._lock:
+            record = self._codes.get(code)
+            if record is None:
+                return None
+            if record["used"]:
+                return None
+            if time.time() > record["expires_at"]:
+                return None
+            record["used"] = True
+            return dict(record)
+
+    def cleanup_expired(self) -> None:
+        """Remove expired code records from memory."""
+        now = time.time()
+        with self._lock:
+            expired = [c for c, r in self._codes.items() if now > r["expires_at"]]
+            for c in expired:
+                del self._codes[c]
+
+    def reset(self) -> None:
+        """Clear all codes (for tests)."""
+        with self._lock:
+            self._codes.clear()
+
+
+# Module-level singletons
+oauth_client_registry = OAuthClientRegistry()
+auth_code_store = AuthorizationCodeStore()
+
+# OAuth2 token lifetime (1 hour)
+_OAUTH2_TOKEN_EXPIRE_SECONDS = 3600
+
+
+def _create_oauth2_token(
+    sub: str,
+    client_id: str,
+    scope: str,
+    expires_in: int = _OAUTH2_TOKEN_EXPIRE_SECONDS,
+) -> str:
+    """Issue a JWT for an OAuth2 grant with token_type='oauth2'."""
+    now = int(time.time())
+    payload: dict[str, Any] = {
+        "sub": sub,
+        "token_type": "oauth2",
+        "oauth2_client_id": client_id,
+        "scope": scope,
+        "iat": now,
+        "exp": now + expires_in,
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+# --- Pydantic request models ---
+
+
+class OAuthClientRegisterRequest(BaseModel):
+    """Request body for registering a new OAuth2 client."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    redirect_uris: list[str] = Field(..., min_length=1)
+    allowed_scopes: list[str] = Field(default=["read"])
+    grant_types: list[str] = Field(default=["authorization_code"])
+
+
+# --- Client Management Endpoints ---
+
+
+@v1.post("/oauth/clients", status_code=201)
+async def oauth_register_client(
+    body: OAuthClientRegisterRequest,
+    _user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Register a new OAuth2 client application.
+
+    The ``client_secret`` is included in the response exactly once and is not
+    retrievable afterwards.
+    """
+    record = oauth_client_registry.register(
+        name=body.name,
+        redirect_uris=body.redirect_uris,
+        allowed_scopes=body.allowed_scopes,
+        grant_types=body.grant_types,
+    )
+    logger.info("OAuth2 client registered: client_id=%s name=%s", record["client_id"], body.name)
+    return record
+
+
+@v1.get("/oauth/clients")
+async def oauth_list_clients(
+    _user: dict[str, Any] = Depends(get_authenticated_user),
+) -> list[dict[str, Any]]:
+    """List all registered OAuth2 clients (secrets not included)."""
+    return oauth_client_registry.list_all()
+
+
+@v1.delete("/oauth/clients/{client_id}", status_code=204)
+async def oauth_revoke_client(
+    client_id: str,
+    _user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Revoke (deactivate) a registered OAuth2 client."""
+    revoked = oauth_client_registry.revoke(client_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="OAuth2 client not found")
+    logger.info("OAuth2 client revoked: client_id=%s", client_id)
+
+
+# --- Authorization Flow Endpoints ---
+
+
+@v1.get("/oauth/authorize")
+async def oauth_authorize(
+    client_id: str = Query(...),
+    redirect_uri: str = Query(...),
+    response_type: str = Query(...),
+    scope: str = Query(default="read"),
+    state: str | None = Query(default=None),
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict[str, Any]:
+    """OAuth2 authorization endpoint (authorization_code flow).
+
+    Requires a valid user JWT in the ``Authorization: Bearer`` header to
+    identify the authorizing user.  Auto-approves the grant (no consent UI).
+    """
+    if response_type != "code":
+        raise HTTPException(
+            status_code=400,
+            detail="Only response_type=code is supported",
+        )
+
+    # Validate the client exists and is active.
+    client = oauth_client_registry.get(client_id)
+    if client is None or not client.get("is_active", False):
+        raise HTTPException(status_code=400, detail="Unknown or inactive OAuth2 client")
+
+    # Validate the redirect_uri against the registered list.
+    if redirect_uri not in client["redirect_uris"]:
+        raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
+
+    # Identify the authorizing user from the Bearer token.
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header with Bearer token required")
+    token_str = authorization.removeprefix("Bearer ").strip()
+    try:
+        payload = jwt.decode(token_str, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id: str = payload.get("sub", "")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token subject")
+    except jwt.ExpiredSignatureError as err:
+        raise HTTPException(status_code=401, detail="Token expired") from err
+    except jwt.InvalidTokenError as err:
+        raise HTTPException(status_code=401, detail="Invalid token") from err
+
+    # Parse and validate requested scopes.
+    requested_scopes = [s.strip() for s in scope.split() if s.strip()]
+    allowed = client["allowed_scopes"]
+    invalid_scopes = [s for s in requested_scopes if s not in allowed]
+    if invalid_scopes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Requested scopes not allowed: {invalid_scopes}",
+        )
+
+    code = auth_code_store.create(
+        client_id=client_id,
+        user_id=user_id,
+        scopes=requested_scopes,
+        redirect_uri=redirect_uri,
+    )
+    logger.info(
+        "OAuth2 authorization code issued: client_id=%s user_id=%s",
+        client_id,
+        user_id,
+    )
+    response: dict[str, Any] = {"code": code}
+    if state is not None:
+        response["state"] = state
+    return response
+
+
+@v1.post("/oauth/token")
+async def oauth_token(
+    grant_type: str = Form(...),
+    client_id: str = Form(...),
+    client_secret: str = Form(...),
+    code: str | None = Form(default=None),
+    redirect_uri: str | None = Form(default=None),
+    scope: str | None = Form(default=None),
+) -> dict[str, Any]:
+    """OAuth2 token endpoint supporting authorization_code and client_credentials grants.
+
+    Accepts ``application/x-www-form-urlencoded`` body (standard OAuth2).
+    Returns a JWT access token with ``token_type='oauth2'`` in the payload.
+    """
+    # Validate the client credentials regardless of grant type.
+    if not oauth_client_registry.validate_secret(client_id, client_secret):
+        logger.warning("OAuth2 token request failed: invalid client credentials client_id=%s", client_id)
+        raise HTTPException(status_code=401, detail="Invalid client credentials")
+
+    client = oauth_client_registry.get(client_id)
+    if client is None:
+        raise HTTPException(status_code=401, detail="Invalid client credentials")
+
+    if grant_type not in client["grant_types"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"grant_type '{grant_type}' not allowed for this client",
+        )
+
+    if grant_type == "authorization_code":
+        if not code or not redirect_uri:
+            raise HTTPException(
+                status_code=400,
+                detail="code and redirect_uri are required for authorization_code grant",
+            )
+        record = auth_code_store.consume(code)
+        if record is None:
+            logger.warning(
+                "OAuth2 token request: invalid/expired/used code client_id=%s", client_id
+            )
+            raise HTTPException(status_code=400, detail="Invalid, expired, or already-used authorization code")
+        if record["client_id"] != client_id:
+            raise HTTPException(status_code=400, detail="Authorization code was issued to a different client")
+        if record["redirect_uri"] != redirect_uri:
+            raise HTTPException(status_code=400, detail="redirect_uri does not match authorization request")
+
+        token_scope = " ".join(record["scopes"])
+        access_token = _create_oauth2_token(
+            sub=record["user_id"],
+            client_id=client_id,
+            scope=token_scope,
+        )
+        logger.info(
+            "OAuth2 authorization_code token issued: client_id=%s user_id=%s",
+            client_id,
+            record["user_id"],
+        )
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": _OAUTH2_TOKEN_EXPIRE_SECONDS,
+            "scope": token_scope,
+        }
+
+    if grant_type == "client_credentials":
+        requested_scope = scope or " ".join(client["allowed_scopes"])
+        requested_scopes = [s.strip() for s in requested_scope.split() if s.strip()]
+        invalid_scopes = [s for s in requested_scopes if s not in client["allowed_scopes"]]
+        if invalid_scopes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Requested scopes not allowed: {invalid_scopes}",
+            )
+        token_scope = " ".join(requested_scopes)
+        access_token = _create_oauth2_token(
+            sub=client_id,
+            client_id=client_id,
+            scope=token_scope,
+        )
+        logger.info(
+            "OAuth2 client_credentials token issued: client_id=%s scope=%s",
+            client_id,
+            token_scope,
+        )
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": _OAUTH2_TOKEN_EXPIRE_SECONDS,
+            "scope": token_scope,
+        }
+
+    raise HTTPException(status_code=400, detail=f"Unsupported grant_type: {grant_type}")
+
+
+@v1.post("/oauth/introspect")
+async def oauth_introspect(
+    token: str = Form(...),
+) -> dict[str, Any]:
+    """OAuth2 token introspection endpoint (RFC 7662).
+
+    Decodes the JWT and returns active=True with claims if valid, or
+    active=False if the token is invalid, expired, or not an OAuth2 token.
+    """
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        logger.debug("OAuth2 introspect: token expired")
+        return {"active": False}
+    except jwt.InvalidTokenError as err:
+        logger.debug("OAuth2 introspect: invalid token: %s", err)
+        return {"active": False}
+
+    if payload.get("token_type") != "oauth2":
+        return {"active": False}
+
+    result: dict[str, Any] = {
+        "active": True,
+        "sub": payload.get("sub"),
+        "client_id": payload.get("oauth2_client_id"),
+        "scope": payload.get("scope"),
+        "exp": payload.get("exp"),
+    }
+    return result
 
 
 # Include versioned router

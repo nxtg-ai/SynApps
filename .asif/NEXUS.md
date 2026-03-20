@@ -284,42 +284,42 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260319-156 — P1: N-35 Workflow Monitoring — Health Checks + Alerts
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Workflow health** — per-workflow: success rate (last 24h), avg duration trend, error count.
-2. [ ] **Alert rules** — configurable: "if error rate > 10% for 30 min, send webhook/email".
-3. [ ] **`GET /monitoring/workflows`** — health summary. **`POST /monitoring/alerts`** CRUD.
-4. [ ] Tests.
+1. [x] **Workflow health** — per-workflow: success rate (last 24h), avg duration trend, error count.
+2. [x] **Alert rules** — configurable: "if error rate > 10% for 30 min, send webhook/email".
+3. [x] **`GET /monitoring/workflows`** — health summary. **`POST /monitoring/alerts`** CRUD.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260319-157.
-**Response** (filled by team): >
+**Response** (filled by team): N-35 shipped. `WorkflowHealthService` — async `get_health(flow_id, window_hours=24)`: filters runs by time window, groups by flow_id, computes run_count/success_count/error_count/success_rate/error_rate/avg_duration_seconds/p95_duration_seconds/last_run_at/health_status (healthy<0.1/degraded 0.1-0.3/critical>0.3). `AlertRuleStore` — thread-safe in-memory CRUD: create/list/get/update(partial)/delete/mark_triggered/reset. `AlertEngine` — evaluate(health_results): checks all enabled rules, fires "log" (logger.warning) and "webhook" (httpx.post daemon thread, caught with logger.warning) actions, updates last_triggered_at. Singletons: alert_rule_store, alert_engine, workflow_health_service. 6 endpoints: GET/GET-single /monitoring/workflows, POST/GET/PUT/DELETE /monitoring/alerts — all require auth. Alert evaluation triggered inline on every GET /monitoring/workflows call. `test_workflow_monitoring.py` — 30 tests (TestWorkflowHealthService 6, TestAlertRuleStore 6, TestAlertEngine 5, TestMonitoringEndpoints 13). 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260319-157 — P1: N-36 OAuth2 Provider — SSO for Enterprise
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **OAuth2 server** — issue access tokens for API access. Support authorization_code + client_credentials flows.
-2. [ ] **Client registration** — `POST /oauth/clients` (name, redirect_uri, scopes).
-3. [ ] **Token introspection** — `POST /oauth/introspect`.
-4. [ ] Tests.
+1. [x] **OAuth2 server** — issue access tokens for API access. Support authorization_code + client_credentials flows.
+2. [x] **Client registration** — `POST /oauth/clients` (name, redirect_uri, scopes).
+3. [x] **Token introspection** — `POST /oauth/introspect`.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260319-158.
-**Response** (filled by team): >
+**Response** (filled by team): N-36 shipped. `OAuthClientRegistry` — in-memory thread-safe: register (generates client_id UUID + client_secret token_hex(32), stores SHA-256 hash), get/list_all (no secrets exposed), validate_secret (hmac.compare_digest), revoke, reset. `AuthorizationCodeStore` — in-memory: create (secrets.token_urlsafe(32), 600s TTL), consume (single-use enforcement + expiry check), cleanup_expired, reset. 6 endpoints: POST/GET/DELETE /oauth/clients (auth required), GET /oauth/authorize (Bearer user token), POST /oauth/token (Form: authorization_code or client_credentials), POST /oauth/introspect (RFC 7662: active bool + client_id/scope/exp/sub). JWT tokens with token_type="oauth2", oauth2_client_id, scope in payload. auth_code sub=user_id, client_credentials sub=client_id. `test_oauth2.py` — 29 tests (TestOAuthClientRegistry 6, TestAuthorizationCodeStore 5, TestOAuthFlows 8, TestOAuthIntrospect 6 + misc). Full suite: 2107 backend passed. 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260319-158 — P2: Final Session Summary + Test Count
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-19 09:00 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-19 09:00 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Final test count. 2. [ ] All initiatives. 3. [ ] README.
+1. [x] Final test count. 2. [x] All initiatives. 3. [x] README.
 
-**Response** (filled by team): >
+**Response** (filled by team): Final counts — **2,216 tests** (2,107 backend + 109 frontend unit + 0 E2E skipped). README updated: 36 N-series initiatives (added N-35 Workflow Monitoring, N-36 OAuth2 Provider rows). All PENDING directives cleared: D-128 (CLI), D-129 (SDK), D-130 (E2E integration), D-156 (N-35 Monitoring), D-157 (N-36 OAuth2), D-158 (this summary) — all DONE. 2026-03-19.
 
 ---
 

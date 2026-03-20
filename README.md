@@ -108,7 +108,7 @@ SynApps follows a microkernel architecture:
 
 ## Initiatives
 
-All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
+All 36 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 
 | # | Initiative | Pillar | Description |
 |---|-----------|--------|-------------|
@@ -146,6 +146,8 @@ All 25 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-32 | Real-Time Execution Streaming — SSE Progress | EXECUTION | Node-by-node execution progress via Server-Sent Events; `SSEEventBus` pub/sub, `useExecutionStream` React hook — `GET /executions/:id/stream` |
 | N-33 | Workflow Analytics Dashboard — Execution Insights | PLATFORM | Top workflows by executions, avg duration by node type, 24h error rate trends, peak usage hours; CSV export — `GET /analytics/dashboard` |
 | N-34 | Workflow Testing Framework — Automated Validation | EXECUTION | Assertion DSL (`output.field == value`, `output.count > 5`, `type(output.x) == list`), test history per version — `POST /workflows/:id/test` |
+| N-35 | Workflow Monitoring — Health Checks + Alerts | PLATFORM | Per-workflow health (success rate, error rate, p95 duration), configurable alert rules (threshold + operator + action), webhook/log dispatch — `GET /monitoring/workflows`, `POST /monitoring/alerts` |
+| N-36 | OAuth2 Provider — SSO for Enterprise | SECURITY | authorization_code + client_credentials flows, client registration, RFC 7662 token introspection, JWT-based tokens — `POST /oauth/clients`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/introspect` |
 
 ## Tech Stack
 
