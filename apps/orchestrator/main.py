@@ -13867,6 +13867,16 @@ async def marketplace_install(
     await FlowRepository.save(flow_data)
     marketplace_registry.increment_install(listing_id)
 
+    # Award credits to the listing publisher (N-47 revenue)
+    publisher_id = listing.get("publisher_id")
+    if publisher_id:
+        credit_ledger.credit(
+            publisher_id,
+            listing_id,
+            listing.get("name", ""),
+            CreditLedger.CREDITS_PER_INSTALL,
+        )
+
     return {
         "message": "Flow created from marketplace listing",
         "flow_id": new_flow_id,
@@ -19204,6 +19214,145 @@ async def abort_debug_session(
 
 
 # ---------------------------------------------------------------------------
+# Marketplace Revenue — Credit Ledger (N-47)
+# ---------------------------------------------------------------------------
+
+
+class CreditLedger:
+    """Track credits earned by template authors from installs.
+
+    Each install awards the publisher CREDITS_PER_INSTALL credits.
+    Ledger entries are immutable (append-only). Payouts reduce balance.
+    """
+
+    CREDITS_PER_INSTALL: int = 10
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, list[dict[str, Any]]] = {}
+
+    def credit(
+        self,
+        publisher_id: str,
+        listing_id: str,
+        listing_name: str,
+        amount: int,
+    ) -> dict[str, Any]:
+        """Add a credit entry (earned from install). Returns the entry."""
+        entry: dict[str, Any] = {
+            "entry_id": str(uuid.uuid4()),
+            "publisher_id": publisher_id,
+            "type": "credit",
+            "amount": amount,
+            "listing_id": listing_id,
+            "listing_name": listing_name,
+            "note": "",
+            "created_at": time.time(),
+        }
+        with self._lock:
+            self._entries.setdefault(publisher_id, []).append(entry)
+        return entry
+
+    def debit(
+        self, publisher_id: str, amount: int, note: str = ""
+    ) -> dict[str, Any]:
+        """Record a payout/debit. Returns the entry.
+
+        Raises:
+            ValueError: If current balance is less than the requested amount.
+        """
+        with self._lock:
+            bal = self._balance_unlocked(publisher_id)
+            if bal < amount:
+                raise ValueError(
+                    f"Insufficient balance: {bal} < {amount}"
+                )
+            entry: dict[str, Any] = {
+                "entry_id": str(uuid.uuid4()),
+                "publisher_id": publisher_id,
+                "type": "debit",
+                "amount": amount,
+                "listing_id": None,
+                "listing_name": None,
+                "note": note,
+                "created_at": time.time(),
+            }
+            self._entries.setdefault(publisher_id, []).append(entry)
+        return entry
+
+    def balance(self, publisher_id: str) -> int:
+        """Return current credit balance for publisher."""
+        with self._lock:
+            return self._balance_unlocked(publisher_id)
+
+    def _balance_unlocked(self, publisher_id: str) -> int:
+        """Compute balance without acquiring the lock (caller must hold it)."""
+        entries = self._entries.get(publisher_id, [])
+        total = 0
+        for e in entries:
+            if e["type"] == "credit":
+                total += e["amount"]
+            else:
+                total -= e["amount"]
+        return total
+
+    def ledger(
+        self, publisher_id: str, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return all ledger entries for publisher, newest first."""
+        with self._lock:
+            entries = list(self._entries.get(publisher_id, []))
+        entries.reverse()
+        return entries[:limit]
+
+    def total_earned(self, publisher_id: str) -> int:
+        """Return total credits ever earned (credits only, not debits)."""
+        with self._lock:
+            entries = self._entries.get(publisher_id, [])
+            return sum(e["amount"] for e in entries if e["type"] == "credit")
+
+    def payout_report(self, publisher_id: str) -> dict[str, Any]:
+        """Return summary: balance, total_earned, total_paid_out, entry_count, per_listing breakdown."""
+        with self._lock:
+            entries = self._entries.get(publisher_id, [])
+            total_earned = sum(
+                e["amount"] for e in entries if e["type"] == "credit"
+            )
+            total_paid_out = sum(
+                e["amount"] for e in entries if e["type"] == "debit"
+            )
+            per_listing: dict[str, dict[str, Any]] = {}
+            for e in entries:
+                if e["type"] != "credit":
+                    continue
+                lid = e["listing_id"]
+                if lid not in per_listing:
+                    per_listing[lid] = {
+                        "listing_id": lid,
+                        "listing_name": e["listing_name"],
+                        "installs": 0,
+                        "credits_earned": 0,
+                    }
+                per_listing[lid]["installs"] += 1
+                per_listing[lid]["credits_earned"] += e["amount"]
+            return {
+                "balance": total_earned - total_paid_out,
+                "total_earned": total_earned,
+                "total_paid_out": total_paid_out,
+                "entry_count": len(entries),
+                "per_listing": list(per_listing.values()),
+            }
+
+    def reset(self) -> None:
+        """Clear all data (for testing)."""
+        with self._lock:
+            self._entries.clear()
+
+
+credit_ledger = CreditLedger()
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -19520,6 +19669,68 @@ async def report_issue(
     """Report an issue with a marketplace listing (auth required)."""
     issue = issue_store.report(listing_id, current_user["id"], body.type, body.description)
     return issue
+
+
+# ---------------------------------------------------------------------------
+# Marketplace Revenue endpoints (N-47)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# Static segments (/publisher/credits/*) come before parametric routes.
+# ---------------------------------------------------------------------------
+
+
+class PayoutRequest(BaseModel):
+    """Request body for requesting a credit payout."""
+
+    model_config = ConfigDict(extra="forbid")
+    amount: int = Field(..., ge=1)
+
+
+@v1.get("/marketplace/publisher/credits", tags=["Marketplace"])
+async def publisher_credits(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return credit summary for the authenticated publisher."""
+    uid = current_user["id"]
+    return {
+        "balance": credit_ledger.balance(uid),
+        "total_earned": credit_ledger.total_earned(uid),
+        "total_paid_out": credit_ledger.total_earned(uid) - credit_ledger.balance(uid),
+        "entry_count": len(credit_ledger.ledger(uid, limit=10_000)),
+    }
+
+
+@v1.get("/marketplace/publisher/credits/ledger", tags=["Marketplace"])
+async def publisher_credits_ledger(
+    limit: int = Query(50, ge=1, le=500),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return ledger entries for the authenticated publisher."""
+    uid = current_user["id"]
+    return {
+        "entries": credit_ledger.ledger(uid, limit=limit),
+        "balance": credit_ledger.balance(uid),
+    }
+
+
+@v1.get("/marketplace/publisher/credits/payout-report", tags=["Marketplace"])
+async def publisher_payout_report(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return full payout report including per-listing breakdown."""
+    return credit_ledger.payout_report(current_user["id"])
+
+
+@v1.post("/marketplace/publisher/credits/payout", tags=["Marketplace"])
+async def publisher_payout(
+    body: PayoutRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Request a credit payout. Returns updated balance."""
+    try:
+        credit_ledger.debit(current_user["id"], body.amount, note="payout")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"balance": credit_ledger.balance(current_user["id"])}
 
 
 # Include versioned router

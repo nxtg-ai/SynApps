@@ -5,6 +5,7 @@ import pytest
 import apps.orchestrator.db as db_module
 from apps.orchestrator.main import (
     audit_log_store,
+    credit_ledger,
     execution_quota_store,
     issue_store,
     rating_store,
@@ -60,6 +61,7 @@ def _reset_shared_stores():
     review_store.reset()
     reply_store.reset()
     issue_store.reset()
+    credit_ledger.reset()
     yield
     # Post-test cleanup (belt-and-suspenders for any state written during test)
     execution_quota_store.reset()
@@ -68,3 +70,4 @@ def _reset_shared_stores():
     review_store.reset()
     reply_store.reset()
     issue_store.reset()
+    credit_ledger.reset()
