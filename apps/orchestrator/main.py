@@ -20376,6 +20376,104 @@ publisher_analytics_service = PublisherAnalyticsService()
 
 
 # ---------------------------------------------------------------------------
+# Cost Calculator — estimate workflow execution cost before running
+# ---------------------------------------------------------------------------
+
+
+class CostCalculator:
+    """Estimate execution cost of a workflow before running it.
+
+    Pricing table (per call):
+      llm:       $0.002  (e.g. GPT-3.5 equivalent, ~500 tokens)
+      imagegen:  $0.020  (e.g. DALL-E standard)
+      http:      $0.000  (free, external API cost not tracked)
+      code:      $0.001  (compute cost)
+      transform: $0.000  (free)
+      ifelse:    $0.000  (free)
+      merge:     $0.000  (free)
+      foreach:   $0.001  (per-iteration overhead)
+
+    For foreach nodes, multiply by expected_iterations (default 10).
+    Total = sum of per-node cost. Return itemized breakdown + total.
+    """
+
+    PRICING: dict[str, float] = {
+        "llm": 0.002,
+        "imagegen": 0.020,
+        "http": 0.000,
+        "code": 0.001,
+        "transform": 0.000,
+        "ifelse": 0.000,
+        "merge": 0.000,
+        "foreach": 0.001,
+    }
+    DEFAULT_FOREACH_ITERATIONS = 10
+
+    @classmethod
+    def estimate(cls, nodes: list[dict], foreach_iterations: int = 10) -> dict:
+        """Estimate execution cost for a list of workflow nodes.
+
+        Args:
+            nodes: list of node dicts with at least {"id": str, "type": str}
+            foreach_iterations: assumed iterations for foreach nodes
+
+        Returns:
+            Dictionary with total_usd, currency, breakdown, node_count,
+            and billable_node_count.
+        """
+        breakdown: list[dict[str, Any]] = []
+        total: float = 0.0
+        billable_count = 0
+
+        for node in nodes:
+            node_id = node.get("id", "unknown")
+            node_type = node.get("type", "unknown")
+            per_call = cls.PRICING.get(node_type, 0.0)
+
+            if node_type == "foreach":
+                cost = per_call * foreach_iterations
+                note = f"foreach x{foreach_iterations} iterations"
+            elif per_call > 0:
+                cost = per_call
+                note = f"{node_type} base cost"
+            else:
+                cost = 0.0
+                note = "free"
+
+            if cost > 0:
+                billable_count += 1
+
+            breakdown.append({
+                "node_id": node_id,
+                "node_type": node_type,
+                "cost_usd": round(cost, 6),
+                "note": note,
+            })
+            total += cost
+
+        return {
+            "total_usd": round(total, 6),
+            "currency": "USD",
+            "breakdown": breakdown,
+            "node_count": len(nodes),
+            "billable_node_count": billable_count,
+        }
+
+
+class EstimateCostRequest(BaseModel):
+    """Request body for estimating cost of arbitrary nodes."""
+
+    nodes: list[dict]
+    foreach_iterations: int = Field(10, ge=1, le=1000)
+
+
+class FlowEstimateCostRequest(BaseModel):
+    """Request body for estimating cost of a saved flow."""
+
+    foreach_iterations: int = Field(10, ge=1, le=1000)
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -20920,6 +21018,36 @@ async def marketplace_autocomplete(
     all_listings = marketplace_registry.list_all()
     suggestions = search_engine.autocomplete(listings=all_listings, q=q, limit=limit)
     return {"suggestions": suggestions}
+
+
+# ---------------------------------------------------------------------------
+# Cost Estimation endpoints
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/estimate-cost", tags=["Flows"])
+async def estimate_cost_arbitrary(
+    body: EstimateCostRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Estimate execution cost for an arbitrary list of nodes (before flow is saved)."""
+    return CostCalculator.estimate(body.nodes, body.foreach_iterations)
+
+
+@v1.post("/flows/{flow_id}/estimate-cost", tags=["Flows"])
+async def estimate_cost_flow(
+    flow_id: str,
+    body: FlowEstimateCostRequest | None = None,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Estimate execution cost for a saved flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    nodes = flow.get("nodes", [])
+    iterations = body.foreach_iterations if body else 10
+    return CostCalculator.estimate(nodes, iterations)
 
 
 # Include versioned router

@@ -9,6 +9,7 @@ import {
   CodeSuggestionRequest,
   CodeSuggestionResponse,
   WorkflowCostEstimate,
+  CostEstimate,
   FlowVersion,
   FlowVersionDetail,
   FlowDiffResult,
@@ -233,6 +234,32 @@ class ApiService {
     const response = await this.api.post(`/workflows/${flowId}/estimate-cost`, {
       input_data: {},
       input_text: inputText,
+    });
+    return response.data;
+  }
+
+  /**
+   * Estimate execution cost for a saved flow using the node-level calculator.
+   */
+  public async estimateFlowCost(
+    flowId: string,
+    foreachIterations?: number,
+  ): Promise<CostEstimate> {
+    const body = foreachIterations !== undefined ? { foreach_iterations: foreachIterations } : {};
+    const response = await this.api.post(`/flows/${flowId}/estimate-cost`, body);
+    return response.data;
+  }
+
+  /**
+   * Estimate execution cost for an arbitrary list of nodes (before flow is saved).
+   */
+  public async estimateCost(
+    nodes: Array<{ id: string; type: string }>,
+    foreachIterations?: number,
+  ): Promise<CostEstimate> {
+    const response = await this.api.post('/flows/estimate-cost', {
+      nodes,
+      foreach_iterations: foreachIterations ?? 10,
     });
     return response.data;
   }

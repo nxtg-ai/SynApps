@@ -9,6 +9,7 @@ import WorkflowCanvas from '../../components/WorkflowCanvas/WorkflowCanvas';
 import CodeEditor from '../../components/CodeEditor/CodeEditor';
 import TemplateLoader from '../../components/TemplateLoader/TemplateLoader';
 import CostEstimatePanel from '../../components/CostEstimatePanel/CostEstimatePanel';
+import CostEstimator from '../../components/CostEstimator/CostEstimator';
 import { Flow } from '../../types';
 import { generateId } from '../../utils/flowUtils';
 import apiService from '../../services/ApiService';
@@ -347,6 +348,7 @@ class ${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}Applet(BaseApplet):
       >
         Export
       </button>
+      {flow?.id && flowId && <CostEstimator flowId={flow.id} />}
       <button
         className="run-button"
         onClick={runFlow}

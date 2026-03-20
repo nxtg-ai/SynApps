@@ -150,7 +150,24 @@ export interface RollbackAuditEntry {
   rolled_back_at: number;
 }
 
-// ── Cost Estimation ─────────────────────────────────────────────────────
+// ── Cost Estimation (node-level calculator) ─────────────────────────────
+
+export interface CostEstimateBreakdownItem {
+  node_id: string;
+  node_type: string;
+  cost_usd: number;
+  note: string;
+}
+
+export interface CostEstimate {
+  total_usd: number;
+  currency: string;
+  breakdown: CostEstimateBreakdownItem[];
+  node_count: number;
+  billable_node_count: number;
+}
+
+// ── Cost Estimation (legacy token-based) ────────────────────────────────
 
 export interface CostBreakdownItem {
   node_id: string;
