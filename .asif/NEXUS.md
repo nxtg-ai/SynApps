@@ -282,6 +282,47 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-177 — P1: N-37 Workflow Branching — Conditional Logic Builder
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 10:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Visual branch builder** — drag-and-drop conditional logic: if output contains X → path A, else → path B.
+2. [ ] **Complex conditions** — AND/OR/NOT logic, regex matching, numeric comparisons.
+3. [ ] **Merge node** — rejoin split branches.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-178.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-178 — P1: N-38 Workflow Subflows — Reusable Components
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 10:15 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Subflow node** — embed one workflow inside another. Input/output mapping.
+2. [ ] **Subflow library** — `GET /subflows` list reusable components.
+3. [ ] **Nested execution** — parent workflow waits for subflow completion.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-179.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-179 — P2: Platform Showcase README + Final Count
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 10:15 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Final test count. 2. [ ] All 37+ initiatives listed. 3. [ ] README showcase.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260319-156 — P1: N-35 Workflow Monitoring — Health Checks + Alerts
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: DONE
