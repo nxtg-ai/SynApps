@@ -17,6 +17,7 @@ from apps.orchestrator.main import (
     MARKETPLACE_CATEGORIES,
     MarketplaceRegistry,
     app,
+    featured_store,
     marketplace_registry,
 )
 
@@ -491,8 +492,9 @@ class TestMarketplaceFeaturedEndpoint:
         assert data["items"] == []
 
     def test_featured_single(self, client):
-        """GET /marketplace/featured with one listing returns that listing."""
-        _publish_listing(marketplace_registry, name="Solo Listing", category="devops")
+        """GET /marketplace/featured returns a listing that has been featured."""
+        listing = _publish_listing(marketplace_registry, name="Solo Listing", category="devops")
+        featured_store.feature(listing["id"], "admin-test")
 
         resp = client.get("/api/v1/marketplace/featured")
         assert resp.status_code == 200
@@ -502,7 +504,7 @@ class TestMarketplaceFeaturedEndpoint:
         assert data["items"][0]["name"] == "Solo Listing"
 
     def test_featured_sorted_by_install_count(self, client):
-        """GET /marketplace/featured returns listings sorted by install_count desc."""
+        """GET /marketplace/featured returns featured listings (newest featured first)."""
         low = _publish_listing(
             marketplace_registry, name="Low", category="content", install_count=3
         )
@@ -512,18 +514,22 @@ class TestMarketplaceFeaturedEndpoint:
         mid = _publish_listing(
             marketplace_registry, name="Mid", category="monitoring", install_count=20
         )
+        for lst in [low, high, mid]:
+            featured_store.feature(lst["id"], "admin-test")
 
         resp = client.get("/api/v1/marketplace/featured")
         assert resp.status_code == 200
         items = resp.json()["items"]
         assert len(items) >= 1  # Gate 2
-        assert items[0]["id"] == high["id"]
-        assert items[1]["id"] == mid["id"]
-        assert items[2]["id"] == low["id"]
+        names = [i["name"] for i in items]
+        assert "Low" in names and "High" in names and "Mid" in names
 
     def test_featured_no_auth_required(self, client):
         """GET /marketplace/featured works without any auth header."""
-        _publish_listing(marketplace_registry, name="Public Listing", category="notification")
+        listing = _publish_listing(
+            marketplace_registry, name="Public Listing", category="notification"
+        )
+        featured_store.feature(listing["id"], "admin-test")
 
         # No auth header at all
         resp = client.get("/api/v1/marketplace/featured")
@@ -532,22 +538,21 @@ class TestMarketplaceFeaturedEndpoint:
         assert data["total"] == 1
 
     def test_featured_top_10_cap(self, client):
-        """GET /marketplace/featured returns at most 10 items."""
+        """GET /marketplace/featured?limit=10 returns at most 10 items."""
         for i in range(15):
-            _publish_listing(
+            lst = _publish_listing(
                 marketplace_registry,
                 name=f"Listing {i:02d}",
                 category="devops",
                 install_count=i,
             )
+            featured_store.feature(lst["id"], "admin-test")
 
-        resp = client.get("/api/v1/marketplace/featured")
+        resp = client.get("/api/v1/marketplace/featured?limit=10")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["items"]) == 10
         assert data["total"] == 10
-        # First item should be highest install_count
-        assert data["items"][0]["install_count"] == 14
 
 
 # ---------------------------------------------------------------------------

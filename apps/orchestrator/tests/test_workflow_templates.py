@@ -201,8 +201,8 @@ class TestMarketplaceSearchEndpoints:
         assert "Data Pipeline" in names
 
     def test_each_listing_has_non_empty_name(self, client):
-        # Retrieve all listings via the featured endpoint (no search filter needed)
-        resp = client.get("/api/v1/marketplace/featured")
+        # Retrieve all listings via the search endpoint (no filter needed)
+        resp = client.get("/api/v1/marketplace/search")
         assert resp.status_code == 200
         items = resp.json()["items"]
         assert len(items) >= 3  # Gate 2: all three built-in listings are present
@@ -210,7 +210,7 @@ class TestMarketplaceSearchEndpoints:
             assert item.get("name"), "listing name must not be empty"
 
     def test_each_listing_has_non_empty_description(self, client):
-        resp = client.get("/api/v1/marketplace/featured")
+        resp = client.get("/api/v1/marketplace/search")
         assert resp.status_code == 200
         items = resp.json()["items"]
         assert len(items) >= 3  # Gate 2
@@ -218,7 +218,7 @@ class TestMarketplaceSearchEndpoints:
             assert item.get("description"), "listing description must not be empty"
 
     def test_each_listing_has_non_empty_tags(self, client):
-        resp = client.get("/api/v1/marketplace/featured")
+        resp = client.get("/api/v1/marketplace/search")
         assert resp.status_code == 200
         items = resp.json()["items"]
         assert len(items) >= 3  # Gate 2
