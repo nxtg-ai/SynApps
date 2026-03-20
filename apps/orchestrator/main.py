@@ -13326,9 +13326,11 @@ class MarketplaceRegistry:
             "category": data["category"],
             "tags": list(data.get("tags", [])),
             "author": data.get("author", "anonymous"),
+            "publisher_id": data.get("publisher_id"),
             "nodes": data.get("nodes", []),
             "edges": data.get("edges", []),
             "install_count": 0,
+            "install_timestamps": [],
             "featured": False,
             "published_at": time.time(),
         }
@@ -13399,7 +13401,21 @@ class MarketplaceRegistry:
             if listing is None:
                 return False
             listing["install_count"] += 1
+            listing.setdefault("install_timestamps", []).append(time.time())
             return True
+
+    def get_install_timestamps(self, listing_id: str) -> list[float]:
+        """Return the list of install timestamps for a listing."""
+        with self._lock:
+            listing = self._listings.get(listing_id)
+            if listing is None:
+                return []
+            return list(listing.get("install_timestamps", []))
+
+    def list_all(self) -> list[dict[str, Any]]:
+        """Return all listings as a list."""
+        with self._lock:
+            return list(self._listings.values())
 
     def reset(self) -> None:
         """Clear all listings (for testing)."""
@@ -13744,6 +13760,7 @@ async def marketplace_publish(
         "category": body.category,
         "tags": body.tags,
         "author": body.author,
+        "publisher_id": current_user["id"],
         "nodes": _scrub_node_credentials(flow.get("nodes", [])),
         "edges": flow.get("edges", []),
     }
@@ -19178,6 +19195,208 @@ async def abort_debug_session(
     session.status = "aborted"
     session._resume_event.set()  # unblock any waiting background task
     logger.info("Debug session %s aborted", session_id)
+
+
+# ---------------------------------------------------------------------------
+# Marketplace Analytics (N-45) — stores and models
+# Defined here (before routes) so route functions can reference them.
+# ---------------------------------------------------------------------------
+
+
+class RatingStore:
+    """Per-listing star ratings. One rating per user per listing (upsert on re-rate)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # listing_id -> {user_id: int (1-5)}
+        self._ratings: dict[str, dict[str, int]] = {}
+
+    def rate(self, listing_id: str, user_id: str, stars: int) -> dict[str, Any]:
+        """Upsert a rating. Returns {avg_rating, rating_count}."""
+        with self._lock:
+            bucket = self._ratings.setdefault(listing_id, {})
+            bucket[user_id] = stars
+            return self._stats(listing_id)
+
+    def get_stats(self, listing_id: str) -> dict[str, Any]:
+        """Return {avg_rating: float, rating_count: int}."""
+        with self._lock:
+            return self._stats(listing_id)
+
+    def _stats(self, listing_id: str) -> dict[str, Any]:
+        bucket = self._ratings.get(listing_id, {})
+        if not bucket:
+            return {"avg_rating": 0.0, "rating_count": 0}
+        vals = list(bucket.values())
+        return {"avg_rating": round(sum(vals) / len(vals), 2), "rating_count": len(vals)}
+
+    def reset(self) -> None:
+        with self._lock:
+            self._ratings.clear()
+
+
+class ReviewStore:
+    """Text reviews with optional star rating per listing."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # listing_id -> list[review_dict]
+        self._reviews: dict[str, list[dict[str, Any]]] = {}
+
+    def add(
+        self, listing_id: str, user_id: str, text: str, stars: int | None = None
+    ) -> dict[str, Any]:
+        """Add a review for a listing. Returns the new review dict."""
+        with self._lock:
+            review: dict[str, Any] = {
+                "review_id": str(uuid.uuid4()),
+                "listing_id": listing_id,
+                "user_id": user_id,
+                "text": text,
+                "stars": stars,
+                "created_at": time.time(),
+            }
+            self._reviews.setdefault(listing_id, []).append(review)
+            return review
+
+    def list(self, listing_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Return reviews for a listing, newest first, up to limit."""
+        with self._lock:
+            items = self._reviews.get(listing_id, [])
+            # newest first
+            return list(reversed(items))[:limit]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._reviews.clear()
+
+
+class TrendingService:
+    """Compute trending score: installs in last 7 days (weighted) + all-time install_count."""
+
+    RECENCY_WINDOW_SECONDS: float = 7 * 24 * 3600  # 7 days
+
+    @staticmethod
+    def score(listing: dict[str, Any]) -> float:
+        """Trending score = recent installs × 10 + all-time install_count."""
+        now = time.time()
+        recent_installs = sum(
+            1
+            for ts in listing.get("install_timestamps", [])
+            if now - ts < TrendingService.RECENCY_WINDOW_SECONDS
+        )
+        # Recent installs worth 10x, historical worth 1x
+        return recent_installs * 10 + listing.get("install_count", 0)
+
+    @staticmethod
+    def top(listings: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
+        """Return the top-N listings sorted by trending score descending."""
+        return sorted(listings, key=TrendingService.score, reverse=True)[:limit]
+
+
+rating_store = RatingStore()
+review_store = ReviewStore()
+trending_service = TrendingService()
+
+
+class RateListingRequest(BaseModel):
+    """Request body for rating a marketplace listing."""
+
+    model_config = ConfigDict(extra="forbid")
+    stars: int = Field(..., ge=1, le=5, description="Star rating 1-5")
+
+
+class ReviewListingRequest(BaseModel):
+    """Request body for reviewing a marketplace listing."""
+
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=1, max_length=2000)
+    stars: int | None = Field(None, ge=1, le=5)
+
+
+# ---------------------------------------------------------------------------
+# Marketplace Analytics endpoints (N-45)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# Static segments (/trending, /publisher/dashboard) come before parametric
+# (/marketplace/{listing_id}/...) to ensure correct route matching.
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/marketplace/trending", tags=["Marketplace"])
+async def get_trending_listings(
+    limit: int = Query(10, ge=1, le=50),
+) -> dict[str, Any]:
+    """Return trending marketplace listings (no auth required).
+
+    Trending score = recent installs (last 7 days) × 10 + all-time install_count.
+    """
+    all_listings = marketplace_registry.list_all()
+    top = TrendingService.top(all_listings, limit=limit)
+    return {"items": top, "total": len(top)}
+
+
+@v1.get("/marketplace/publisher/dashboard", tags=["Marketplace"])
+async def publisher_dashboard(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return the publisher's own listings with rating and review stats."""
+    all_listings = marketplace_registry.list_all()
+    my_listings = [
+        lst for lst in all_listings if lst.get("publisher_id") == current_user["id"]
+    ]
+    result = []
+    for listing in my_listings:
+        lid = listing.get("listing_id", listing.get("id", ""))
+        stats = rating_store.get_stats(lid)
+        reviews = review_store.list(lid, limit=5)
+        result.append(
+            {
+                **listing,
+                "avg_rating": stats["avg_rating"],
+                "rating_count": stats["rating_count"],
+                "recent_reviews": reviews,
+                "trending_score": TrendingService.score(listing),
+            }
+        )
+    return {"listings": result, "total": len(result)}
+
+
+@v1.post("/marketplace/{listing_id}/rate", tags=["Marketplace"])
+async def rate_listing(
+    listing_id: str,
+    body: RateListingRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Submit or update a star rating for a marketplace listing."""
+    listing = marketplace_registry.get(listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    stats = rating_store.rate(listing_id, current_user["id"], body.stars)
+    return {"listing_id": listing_id, **stats}
+
+
+@v1.post("/marketplace/{listing_id}/review", status_code=201, tags=["Marketplace"])
+async def add_review(
+    listing_id: str,
+    body: ReviewListingRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Submit a text review for a marketplace listing."""
+    listing = marketplace_registry.get(listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    review = review_store.add(listing_id, current_user["id"], body.text, body.stars)
+    return review
+
+
+@v1.get("/marketplace/{listing_id}/reviews", tags=["Marketplace"])
+async def list_reviews(
+    listing_id: str,
+    limit: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    """List reviews for a marketplace listing (no auth required)."""
+    items = review_store.list(listing_id, limit=limit)
+    return {"listing_id": listing_id, "items": items, "total": len(items)}
 
 
 # Include versioned router

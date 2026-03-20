@@ -48,6 +48,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/applets', icon: '🧩', label: 'Applet Library' },
     { path: '/playground', icon: '⚡', label: 'Playground' },
     { path: '/gallery', icon: '🗂️', label: 'Gallery' },
+    { path: '/publisher/dashboard', icon: '📊', label: 'Publisher' },
     { path: '/settings', icon: '⚙️', label: 'Settings' }
   ];
   

@@ -165,12 +165,17 @@ describe('GalleryPage', () => {
 
   describe('search', () => {
     it('fires API call with q param after debounce', async () => {
-      // First call: initial load
+      // Call 1: initial listings load
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => makeSearchResponse([]),
       });
-      // Second call: after search
+      // Call 2: trending (non-critical, mounted after listings)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [], total: 0 }),
+      });
+      // Call 3: after search
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => makeSearchResponse([makeListing({ name: 'LLM Pipeline' })]),
@@ -179,19 +184,19 @@ describe('GalleryPage', () => {
       const Page = await importPage();
       renderPage(Page);
 
-      // Settle initial load
+      // Settle initial load (listings + trending)
       await act(async () => { vi.runAllTimers(); });
-      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
 
       const input = screen.getByRole('searchbox');
       fireEvent.change(input, { target: { value: 'llm' } });
 
       // Advance debounce (400 ms)
       await act(async () => { vi.advanceTimersByTime(500); });
-      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
 
-      const secondCall = mockFetch.mock.calls[1][0] as string;
-      expect(secondCall).toContain('q=llm');
+      const searchCall = mockFetch.mock.calls[2][0] as string;
+      expect(searchCall).toContain('q=llm');
     });
   });
 
@@ -252,6 +257,7 @@ describe('GalleryPage', () => {
       const listing = makeListing({ id: 'abc-123', name: 'Pipeline Alpha' });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => makeSearchResponse([listing]) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], total: 0 }) }) // trending
         .mockResolvedValueOnce({ ok: true, json: async () => ({ flow_id: 'new-flow' }) });
 
       const Page = await importPage();
@@ -274,6 +280,7 @@ describe('GalleryPage', () => {
       const listing = makeListing({ id: 'fail-id', name: 'Broken Pipeline' });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => makeSearchResponse([listing]) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], total: 0 }) }) // trending
         .mockResolvedValueOnce({ ok: false, text: async () => 'Not found' });
 
       const Page = await importPage();

@@ -40,6 +40,11 @@ interface SearchResponse {
   per_page: number;
 }
 
+interface TrendingResponse {
+  items: MarketplaceListing[];
+  total: number;
+}
+
 type SortOption = 'popular' | 'newest' | 'most_installed' | 'alphabetical';
 
 // ---------------------------------------------------------------------------
@@ -273,6 +278,12 @@ const Toast: React.FC<ToastProps> = ({ messages, onDismiss }) => {
 // Main component
 // ---------------------------------------------------------------------------
 
+const TRENDING_RANK_BADGES: Record<number, string> = {
+  0: '🥇',
+  1: '🥈',
+  2: '🥉',
+};
+
 const GalleryPage: React.FC = () => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -287,6 +298,7 @@ const GalleryPage: React.FC = () => {
   const [installingIds, setInstallingIds] = useState<Set<string>>(new Set());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastCounter = useRef(0);
+  const [trendingItems, setTrendingItems] = useState<MarketplaceListing[]>([]);
 
   // Debounce search query
   useEffect(() => {
@@ -354,6 +366,21 @@ const GalleryPage: React.FC = () => {
   useEffect(() => {
     fetchListings(1, false);
   }, [fetchListings]);
+
+  // Fetch trending listings once on mount
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<TrendingResponse>('/api/v1/marketplace/trending?limit=3')
+      .then((data) => {
+        if (!cancelled) setTrendingItems(data.items);
+      })
+      .catch(() => {
+        // Trending section is non-critical; silently skip on error
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLoadMore = () => {
     const nextPage = page + 1;
@@ -481,6 +508,85 @@ const GalleryPage: React.FC = () => {
           <span>{formatInstallCount(totalInstalls)} installs</span>
         </div>
       </section>
+
+      {/* Trending This Week */}
+      {trendingItems.length > 0 && (
+        <section className="gallery-trending" aria-label="Trending this week">
+          <h2 className="gallery-trending-title">🔥 Trending This Week</h2>
+          <div className="gallery-trending-row">
+            {trendingItems.map((listing, idx) => {
+              const isInstalled = installedIds.has(listing.id);
+              const isInstalling = installingIds.has(listing.id);
+              const rankBadge = TRENDING_RANK_BADGES[idx] ?? `#${idx + 1}`;
+
+              return (
+                <article key={listing.id} className="gallery-card gallery-card--compact">
+                  <div className="gallery-trending-rank">{rankBadge}</div>
+                  <div className="gallery-card-body">
+                    <div className="gallery-card-top">
+                      <h3 className="gallery-card-title gallery-card-title--sm" title={listing.name}>
+                        {listing.name}
+                      </h3>
+                      <p className="gallery-card-description gallery-card-description--sm">
+                        {listing.description}
+                      </p>
+                    </div>
+
+                    <div className="gallery-card-meta">
+                      <span
+                        className="gallery-category-badge"
+                        style={{
+                          backgroundColor: `${getCategoryColor(listing.category)}22`,
+                          color: getCategoryColor(listing.category),
+                          borderColor: `${getCategoryColor(listing.category)}44`,
+                        }}
+                      >
+                        {listing.category}
+                      </span>
+                    </div>
+
+                    <div className="gallery-card-footer">
+                      <span className="gallery-installs">
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        {formatInstallCount(listing.install_count)}
+                      </span>
+
+                      <button
+                        className={`gallery-install-btn ${isInstalled ? 'gallery-install-btn--installed' : ''} ${isInstalling ? 'gallery-install-btn--installing' : ''}`}
+                        onClick={() => handleInstall(listing)}
+                        disabled={isInstalled || isInstalling}
+                        aria-label={isInstalled ? 'Installed' : `Install ${listing.name}`}
+                      >
+                        {isInstalling ? (
+                          <span className="gallery-btn-spinner" />
+                        ) : isInstalled ? (
+                          'Installed'
+                        ) : (
+                          'Install'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Body: sidebar + grid */}
       <div className="gallery-body">

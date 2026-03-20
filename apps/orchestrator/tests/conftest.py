@@ -3,6 +3,7 @@ import importlib
 import pytest
 
 import apps.orchestrator.db as db_module
+from apps.orchestrator.main import audit_log_store, execution_quota_store, rating_store, review_store
 from apps.orchestrator.middleware.rate_limiter import (
     TokenBucketRegistry,
     _SlidingWindowCounter,
@@ -35,3 +36,24 @@ def _reset_rate_limit_counter(monkeypatch):
         "apps.orchestrator.middleware.rate_limiter._token_buckets",
         TokenBucketRegistry(),
     )
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_stores():
+    """Reset in-memory stores that accumulate state across the full test suite.
+
+    execution_quota_store and audit_log_store are module-level singletons.
+    Without resetting them between tests, quota counts and audit entries from
+    one test bleed into later tests — causing intermittent 429s and stale
+    audit results in webhook/analytics integration tests.
+    """
+    execution_quota_store.reset()
+    audit_log_store.reset()
+    rating_store.reset()
+    review_store.reset()
+    yield
+    # Post-test cleanup (belt-and-suspenders for any state written during test)
+    execution_quota_store.reset()
+    audit_log_store.reset()
+    rating_store.reset()
+    review_store.reset()

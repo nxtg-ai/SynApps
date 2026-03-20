@@ -23,6 +23,7 @@ const PricingPage = React.lazy(() => import('./pages/PricingPage/PricingPage'));
 const PlaygroundPage = React.lazy(() => import('./pages/PlaygroundPage/PlaygroundPage'));
 const GalleryPage = React.lazy(() => import('./pages/GalleryPage/GalleryPage'));
 const WorkflowDiffPage = React.lazy(() => import('./pages/WorkflowDiffPage/WorkflowDiffPage'));
+const PublisherDashboardPage = React.lazy(() => import('./pages/PublisherDashboardPage/PublisherDashboardPage'));
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -66,6 +67,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
           <Route path="/playground" element={<ProtectedRoute><PlaygroundPage /></ProtectedRoute>} />
           <Route path="/gallery" element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
+          <Route path="/publisher/dashboard" element={<ProtectedRoute><PublisherDashboardPage /></ProtectedRoute>} />
           <Route path="/workflows/:id/diff" element={<ProtectedRoute><WorkflowDiffPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
