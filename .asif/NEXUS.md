@@ -282,6 +282,47 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-195 — P1: N-39 Workflow AI Assist — Auto-Suggest Next Node
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 11:00 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **AI suggestions** — after adding a node, suggest likely next node type based on workflow patterns.
+2. [ ] **Auto-complete** — type description of what you want → suggest node configuration.
+3. [ ] **Pattern library** — learn from marketplace templates which node combinations are common.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-196.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-196 — P1: N-40 Workflow Debugging — Step-Through Execution
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 11:00 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Debug mode** — execute one node at a time, inspect input/output between steps.
+2. [ ] **Breakpoints** — set on any node. Execution pauses, shows state.
+3. [ ] **Resume/skip** — continue from breakpoint or skip node.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-197.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-197 — P2: Final MAXOUT Archive
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 11:00 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Final test count. 2. [ ] All 40 initiatives. 3. [ ] README.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260319-177 — P1: N-37 Workflow Branching — Conditional Logic Builder
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-19 10:15 | **Estimate**: M | **Status**: DONE
