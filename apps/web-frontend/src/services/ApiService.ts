@@ -381,6 +381,71 @@ class ApiService {
     const response = await this.api.get(`/flows/${flowId}/rollback/history`);
     return response.data;
   }
+
+  // ── Workflow Test Runner (N-33b) ─────────────────────────────────────────
+
+  /**
+   * List all test cases for a flow.
+   */
+  public async getFlowTests(flowId: string): Promise<{ tests: any[]; total: number }> {
+    const response = await this.api.get(`/flows/${flowId}/tests`);
+    return response.data;
+  }
+
+  /**
+   * Add a test case to a flow.
+   */
+  public async addFlowTest(
+    flowId: string,
+    data: {
+      name: string;
+      description?: string;
+      input?: Record<string, any>;
+      expected_output?: Record<string, any>;
+      match_mode?: 'exact' | 'contains' | 'keys_present';
+    },
+  ): Promise<any> {
+    const response = await this.api.post(`/flows/${flowId}/tests`, data);
+    return response.data;
+  }
+
+  /**
+   * Delete a test case from a flow.
+   */
+  public async deleteFlowTest(flowId: string, testId: string): Promise<void> {
+    await this.api.delete(`/flows/${flowId}/tests/${testId}`);
+  }
+
+  /**
+   * Run all or selected test cases for a flow.
+   */
+  public async runFlowTests(
+    flowId: string,
+    testIds?: string[],
+  ): Promise<{ results: any[]; summary: any; exit_code: number }> {
+    const response = await this.api.post(`/flows/${flowId}/tests/run`, {
+      test_ids: testIds || [],
+    });
+    return response.data;
+  }
+
+  /**
+   * Get test results for a flow.
+   */
+  public async getFlowTestResults(flowId: string): Promise<{ results: any[]; total: number }> {
+    const response = await this.api.get(`/flows/${flowId}/tests/results`);
+    return response.data;
+  }
+
+  /**
+   * Get test suite summary for a flow.
+   */
+  public async getFlowTestSummary(
+    flowId: string,
+  ): Promise<{ total: number; passed: number; failed: number; error: number; pass_rate_pct: number }> {
+    const response = await this.api.get(`/flows/${flowId}/tests/summary`);
+    return response.data;
+  }
 }
 
 // Create a singleton instance

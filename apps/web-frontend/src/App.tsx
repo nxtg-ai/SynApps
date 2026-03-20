@@ -49,6 +49,12 @@ const SearchPage = React.lazy(() => import('./pages/SearchPage/SearchPage'));
 const PublisherAnalyticsDashboard = React.lazy(
   () => import('./pages/PublisherAnalyticsDashboard/PublisherAnalyticsDashboard'),
 );
+const ExecutionDashboardPage = React.lazy(
+  () => import('./pages/ExecutionDashboardPage/ExecutionDashboardPage'),
+);
+const TestRunnerPage = React.lazy(
+  () => import('./pages/TestRunnerPage/TestRunnerPage'),
+);
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -219,10 +225,26 @@ const AppRoutes: React.FC = () => {
             }
           />
           <Route
+            path="/admin/executions"
+            element={
+              <ProtectedRoute>
+                <ExecutionDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/workflows/:id/rollback"
             element={
               <ProtectedRoute>
                 <RollbackPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflows/:id/tests"
+            element={
+              <ProtectedRoute>
+                <TestRunnerPage />
               </ProtectedRoute>
             }
           />

@@ -6,6 +6,7 @@ import apps.orchestrator.db as db_module
 from apps.orchestrator.main import (
     audit_log_store,
     credit_ledger,
+    execution_dashboard_store,
     execution_quota_store,
     featured_store,
     issue_store,
@@ -14,6 +15,7 @@ from apps.orchestrator.main import (
     review_store,
     rollback_audit_store,
     sla_store,
+    test_suite_store,
     webhook_debug_store,
 )
 from apps.orchestrator.middleware.rate_limiter import (
@@ -70,6 +72,8 @@ def _reset_shared_stores():
     webhook_debug_store.reset()
     featured_store.reset()
     rollback_audit_store.reset()
+    execution_dashboard_store.reset()
+    test_suite_store.reset()
     yield
     # Post-test cleanup (belt-and-suspenders for any state written during test)
     execution_quota_store.reset()
@@ -82,4 +86,6 @@ def _reset_shared_stores():
     credit_ledger.reset()
     sla_store.reset()
     webhook_debug_store.reset()
+    execution_dashboard_store.reset()
+    test_suite_store.reset()
     rollback_audit_store.reset()

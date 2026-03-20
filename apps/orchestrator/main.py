@@ -10825,6 +10825,20 @@ class Orchestrator:
             },
         )
 
+        # Register with execution dashboard (best-effort, never blocks execution)
+        try:
+            _input_bytes = len(str(input_data).encode("utf-8", errors="replace"))
+            execution_dashboard_store.register(
+                run_id=run_id,
+                flow_id=flow_id or "",
+                flow_name=flow_name,
+                user_id="",  # user context not available in static method
+                node_count=len(flow.get("nodes", [])),
+                input_size_bytes=_input_bytes,
+            )
+        except Exception as _dash_exc:
+            logger.warning("Execution dashboard register failed: %s", _dash_exc)
+
         workflow_run_repo = WorkflowRunRepository()
         logger.info(f"Starting workflow execution with run ID: {run_id}")
         await workflow_run_repo.save(status_dict)
@@ -11631,6 +11645,19 @@ class Orchestrator:
                 if "input_data" not in status or not status["input_data"]:
                     status["input_data"] = input_data
                 await workflow_run_repo.save(status)
+                # Update execution dashboard (best-effort)
+                try:
+                    _out_bytes = len(
+                        str(context.get("results", {})).encode("utf-8", errors="replace")
+                    )
+                    execution_dashboard_store.update_status(
+                        run_id,
+                        "completed",
+                        completed_nodes=len(memory_completed_applets),
+                        output_size_bytes=_out_bytes,
+                    )
+                except Exception as _dash_exc:
+                    logger.warning("Execution dashboard update (success) failed: %s", _dash_exc)
                 # N-41: record execution costs (best-effort — never block completion)
                 try:
                     _flow_id_for_cost = flow.get("id", "")
@@ -11716,6 +11743,15 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"Error executing workflow: {e}")
             end_time = time.time()
+            # Update execution dashboard (best-effort)
+            try:
+                execution_dashboard_store.update_status(
+                    run_id,
+                    "error",
+                    completed_nodes=len(memory_completed_applets),
+                )
+            except Exception as _dash_exc:
+                logger.warning("Execution dashboard update (error) failed: %s", _dash_exc)
             _append_trace_error(
                 {
                     "code": NodeErrorCode.UNKNOWN_ERROR,
@@ -20474,6 +20510,374 @@ class FlowEstimateCostRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Workflow Test Runner (N-33b) — stores and models
+# Defined here (before routes) so route functions can reference them.
+# ---------------------------------------------------------------------------
+
+
+class TestSuiteStore:
+    """Thread-safe in-memory store for workflow test cases and their results.
+
+    Test cases define expected outputs for a workflow. Results capture the
+    outcome of running a test case against the live execution engine.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._tests: dict[str, dict[str, Any]] = {}  # test_id -> test_case
+        self._results: list[dict[str, Any]] = []
+
+    def add_test(
+        self,
+        flow_id: str,
+        name: str,
+        description: str,
+        input_data: dict[str, Any],
+        expected_output: dict[str, Any],
+        match_mode: str = "contains",
+        created_by: str = "",
+    ) -> dict[str, Any]:
+        """Create a new test case and return it."""
+        with self._lock:
+            test_id = str(uuid.uuid4())
+            test_case: dict[str, Any] = {
+                "test_id": test_id,
+                "flow_id": flow_id,
+                "name": name,
+                "description": description,
+                "input": input_data,
+                "expected_output": expected_output,
+                "match_mode": match_mode,
+                "created_at": time.time(),
+                "created_by": created_by,
+            }
+            self._tests[test_id] = test_case
+            return test_case
+
+    def get_test(self, test_id: str) -> dict[str, Any] | None:
+        """Return a test case by ID, or None if not found."""
+        with self._lock:
+            return self._tests.get(test_id)
+
+    def list_tests(self, flow_id: str) -> list[dict[str, Any]]:
+        """Return all test cases for a given flow."""
+        with self._lock:
+            return [t for t in self._tests.values() if t["flow_id"] == flow_id]
+
+    def delete_test(self, test_id: str) -> bool:
+        """Delete a test case. Returns True if found and deleted, False otherwise."""
+        with self._lock:
+            if test_id in self._tests:
+                del self._tests[test_id]
+                return True
+            return False
+
+    def add_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Store a test result and return it."""
+        with self._lock:
+            result.setdefault("result_id", str(uuid.uuid4()))
+            self._results.append(result)
+            return result
+
+    def list_results(
+        self,
+        test_id: str | None = None,
+        flow_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return results filtered by test_id or flow_id, newest first."""
+        with self._lock:
+            filtered = self._results
+            if test_id is not None:
+                filtered = [r for r in filtered if r.get("test_id") == test_id]
+            if flow_id is not None:
+                filtered = [r for r in filtered if r.get("flow_id") == flow_id]
+            return list(reversed(filtered[-limit:]))
+
+    def suite_summary(self, flow_id: str) -> dict[str, Any]:
+        """Return aggregate pass/fail/error counts for a flow."""
+        with self._lock:
+            results = [r for r in self._results if r.get("flow_id") == flow_id]
+            total = len(results)
+            passed = sum(1 for r in results if r.get("status") == "pass")
+            failed = sum(1 for r in results if r.get("status") == "fail")
+            error = sum(1 for r in results if r.get("status") == "error")
+            pass_rate = round((passed / total) * 100, 2) if total > 0 else 0.0
+            return {
+                "total": total,
+                "passed": passed,
+                "failed": failed,
+                "error": error,
+                "pass_rate_pct": pass_rate,
+            }
+
+    def reset(self) -> None:
+        """Clear all stored test cases and results."""
+        with self._lock:
+            self._tests.clear()
+            self._results.clear()
+
+
+test_suite_store = TestSuiteStore()
+
+
+class TestCaseRequest(BaseModel):
+    """Request body for adding a workflow test case."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field("", max_length=1000)
+    input: dict[str, Any] = Field(default_factory=dict)
+    expected_output: dict[str, Any] = Field(default_factory=dict)
+    match_mode: Literal["exact", "contains", "keys_present"] = "contains"
+
+
+class RunTestSuiteRequest(BaseModel):
+    """Request body for running a test suite against a flow."""
+
+    test_ids: list[str] = Field(default_factory=list)
+    foreach_parallel: bool = False
+
+
+def _match_output(
+    actual: dict[str, Any],
+    expected: dict[str, Any],
+    mode: str,
+) -> tuple[bool, dict[str, Any]]:
+    """Compare actual output against expected using the specified match mode.
+
+    Returns (passed, diff_dict). diff_dict maps keys to {expected, actual} for
+    any mismatches found.
+    """
+    diff: dict[str, Any] = {}
+
+    if mode == "exact":
+        if actual == expected:
+            return True, {}
+        # Build diff for all keys in expected
+        all_keys = set(expected.keys()) | set(actual.keys())
+        for key in all_keys:
+            exp_val = expected.get(key)
+            act_val = actual.get(key)
+            if exp_val != act_val:
+                diff[key] = {"expected": exp_val, "actual": act_val}
+        return False, diff
+
+    if mode == "keys_present":
+        for key in expected:
+            if key not in actual:
+                diff[key] = {"expected": "(key present)", "actual": "(missing)"}
+        return len(diff) == 0, diff
+
+    # Default: "contains" — all expected keys exist with matching values
+    for key, exp_val in expected.items():
+        if key not in actual:
+            diff[key] = {"expected": exp_val, "actual": "(missing)"}
+        elif actual[key] != exp_val:
+            diff[key] = {"expected": exp_val, "actual": actual[key]}
+    return len(diff) == 0, diff
+
+
+def _extract_final_output(run: dict[str, Any]) -> dict[str, Any]:
+    """Extract the output dict from a completed workflow run.
+
+    The run's results dict contains per-node outputs keyed by node ID.
+    We look for the last node output that has an 'output' field, falling
+    back to the whole results dict if nothing matches.
+    """
+    results = run.get("results", {})
+    if not isinstance(results, dict):
+        return {}
+
+    # Collect node outputs (skip the __execution_trace__ key)
+    last_output: dict[str, Any] = {}
+    for key, val in results.items():
+        if key == TRACE_RESULTS_KEY:
+            continue
+        if isinstance(val, dict) and "output" in val:
+            last_output = val["output"] if isinstance(val["output"], dict) else {}
+
+    return last_output if last_output else results
+
+
+# ---------------------------------------------------------------------------
+# Execution Dashboard (N-XX) — real-time admin execution monitoring
+# ---------------------------------------------------------------------------
+
+
+class ExecutionDashboardStore:
+    """In-memory registry of active/recent workflow executions for real-time dashboard.
+
+    Tracks: run_id, flow_id, flow_name, user_id, status, started_at,
+    updated_at, node_count, completed_nodes, input_size_bytes, output_size_bytes,
+    paused (bool), killed (bool)
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, dict[str, Any]] = {}
+
+    def _build_entry(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of the entry with computed fields."""
+        e = dict(entry)
+        node_count = e.get("node_count", 0)
+        completed = e.get("completed_nodes", 0)
+        e["progress_pct"] = (completed / node_count * 100) if node_count > 0 else 0.0
+        started = e.get("started_at", 0.0)
+        updated = e.get("updated_at", started)
+        e["duration_ms"] = (updated - started) * 1000
+        return e
+
+    def register(
+        self,
+        run_id: str,
+        flow_id: str,
+        flow_name: str,
+        user_id: str,
+        node_count: int,
+        input_size_bytes: int = 0,
+    ) -> dict[str, Any]:
+        """Register a new execution. Returns the created entry dict."""
+        now = time.time()
+        entry: dict[str, Any] = {
+            "run_id": run_id,
+            "flow_id": flow_id,
+            "flow_name": flow_name,
+            "user_id": user_id,
+            "status": "running",
+            "started_at": now,
+            "updated_at": now,
+            "node_count": node_count,
+            "completed_nodes": 0,
+            "input_size_bytes": input_size_bytes,
+            "output_size_bytes": 0,
+            "paused": False,
+            "killed": False,
+        }
+        with self._lock:
+            self._entries[run_id] = entry
+        return self._build_entry(entry)
+
+    def update_status(
+        self,
+        run_id: str,
+        status: str,
+        completed_nodes: int | None = None,
+        output_size_bytes: int | None = None,
+    ) -> bool:
+        """Update the status of an execution. Returns False if run_id not found."""
+        with self._lock:
+            entry = self._entries.get(run_id)
+            if entry is None:
+                return False
+            entry["status"] = status
+            entry["updated_at"] = time.time()
+            if completed_nodes is not None:
+                entry["completed_nodes"] = completed_nodes
+            if output_size_bytes is not None:
+                entry["output_size_bytes"] = output_size_bytes
+        return True
+
+    def pause(self, run_id: str) -> bool:
+        """Set paused=True for the given run. Returns False if not found."""
+        with self._lock:
+            entry = self._entries.get(run_id)
+            if entry is None:
+                return False
+            entry["paused"] = True
+            entry["status"] = "paused"
+            entry["updated_at"] = time.time()
+        return True
+
+    def resume(self, run_id: str) -> bool:
+        """Set paused=False for the given run. Returns False if not found."""
+        with self._lock:
+            entry = self._entries.get(run_id)
+            if entry is None:
+                return False
+            entry["paused"] = False
+            entry["status"] = "running"
+            entry["updated_at"] = time.time()
+        return True
+
+    def kill(self, run_id: str) -> bool:
+        """Set killed=True and status='killed'. Returns False if not found."""
+        with self._lock:
+            entry = self._entries.get(run_id)
+            if entry is None:
+                return False
+            entry["killed"] = True
+            entry["status"] = "killed"
+            entry["updated_at"] = time.time()
+        return True
+
+    def get(self, run_id: str) -> dict[str, Any] | None:
+        """Return a single entry by run_id, or None."""
+        with self._lock:
+            entry = self._entries.get(run_id)
+            if entry is None:
+                return None
+            return self._build_entry(entry)
+
+    def list_active(self) -> list[dict[str, Any]]:
+        """Return entries with status in ('running', 'paused'), newest first."""
+        with self._lock:
+            active = [
+                self._build_entry(e)
+                for e in self._entries.values()
+                if e.get("status") in ("running", "paused")
+            ]
+        active.sort(key=lambda e: e.get("started_at", 0), reverse=True)
+        return active
+
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return all entries, newest first, up to *limit*."""
+        with self._lock:
+            entries = [self._build_entry(e) for e in self._entries.values()]
+        entries.sort(key=lambda e: e.get("started_at", 0), reverse=True)
+        return entries[:limit]
+
+    def stats(self) -> dict[str, Any]:
+        """Return aggregate statistics for the dashboard."""
+        now = time.time()
+        today_start = now - (now % 86400)  # midnight UTC approximation
+        with self._lock:
+            all_entries = list(self._entries.values())
+
+        active_count = 0
+        total_today = 0
+        kill_count = 0
+        durations: list[float] = []
+
+        for e in all_entries:
+            if e.get("status") in ("running", "paused"):
+                active_count += 1
+            if e.get("started_at", 0) >= today_start:
+                total_today += 1
+            if e.get("killed"):
+                kill_count += 1
+            started = e.get("started_at", 0)
+            updated = e.get("updated_at", started)
+            durations.append((updated - started) * 1000)
+
+        avg_duration_ms = sum(durations) / len(durations) if durations else 0.0
+
+        return {
+            "active_count": active_count,
+            "total_today": total_today,
+            "avg_duration_ms": round(avg_duration_ms, 2),
+            "kill_count": kill_count,
+        }
+
+    def reset(self) -> None:
+        """Clear all entries."""
+        with self._lock:
+            self._entries.clear()
+
+
+execution_dashboard_store = ExecutionDashboardStore()
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -21048,6 +21452,267 @@ async def estimate_cost_flow(
     nodes = flow.get("nodes", [])
     iterations = body.foreach_iterations if body else 10
     return CostCalculator.estimate(nodes, iterations)
+
+
+# ---------------------------------------------------------------------------
+# Execution Dashboard admin endpoints
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/admin/executions", tags=["Admin"])
+async def admin_list_executions(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List all recent executions (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return {"items": execution_dashboard_store.list_recent()}
+
+
+@v1.get("/admin/executions/active", tags=["Admin"])
+async def admin_list_active_executions(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List currently active (running/paused) executions (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return {"items": execution_dashboard_store.list_active()}
+
+
+@v1.get("/admin/executions/stats", tags=["Admin"])
+async def admin_execution_stats(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return aggregate execution statistics (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return execution_dashboard_store.stats()
+
+
+@v1.get("/admin/executions/{run_id}", tags=["Admin"])
+async def admin_get_execution(
+    run_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Get a single execution entry by run_id (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    entry = execution_dashboard_store.get(run_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return entry
+
+
+@v1.post("/admin/executions/{run_id}/pause", tags=["Admin"])
+async def admin_pause_execution(
+    run_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Pause a running execution (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    if not execution_dashboard_store.pause(run_id):
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"status": "paused", "run_id": run_id}
+
+
+@v1.post("/admin/executions/{run_id}/resume", tags=["Admin"])
+async def admin_resume_execution(
+    run_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Resume a paused execution (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    if not execution_dashboard_store.resume(run_id):
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"status": "running", "run_id": run_id}
+
+
+@v1.post("/admin/executions/{run_id}/kill", tags=["Admin"])
+async def admin_kill_execution(
+    run_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Kill a running execution (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    if not execution_dashboard_store.kill(run_id):
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"status": "killed", "run_id": run_id}
+
+
+# ---------------------------------------------------------------------------
+# Workflow Test Runner endpoints (N-33b)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/tests", status_code=201, tags=["Testing"])
+async def add_flow_test_case(
+    flow_id: str,
+    body: TestCaseRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Add a test case to a flow's test suite."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return test_suite_store.add_test(
+        flow_id=flow_id,
+        name=body.name,
+        description=body.description,
+        input_data=body.input,
+        expected_output=body.expected_output,
+        match_mode=body.match_mode,
+        created_by=current_user.get("email", ""),
+    )
+
+
+@v1.get("/flows/{flow_id}/tests", tags=["Testing"])
+async def list_flow_test_cases(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List all test cases for a flow."""
+    tests = test_suite_store.list_tests(flow_id)
+    return {"tests": tests, "total": len(tests)}
+
+
+@v1.get("/flows/{flow_id}/tests/results", tags=["Testing"])
+async def list_flow_test_results(
+    flow_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List test results for a flow, newest first."""
+    results = test_suite_store.list_results(flow_id=flow_id, limit=limit)
+    return {"results": results, "total": len(results)}
+
+
+@v1.get("/flows/{flow_id}/tests/summary", tags=["Testing"])
+async def get_flow_test_summary(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return aggregate test suite summary for a flow."""
+    return test_suite_store.suite_summary(flow_id)
+
+
+@v1.post("/flows/{flow_id}/tests/run", tags=["Testing"])
+async def run_flow_test_suite(
+    flow_id: str,
+    body: RunTestSuiteRequest | None = None,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Run all or selected test cases for a flow and return results with exit_code."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
+
+    all_tests = test_suite_store.list_tests(flow_id)
+    requested_ids = body.test_ids if body and body.test_ids else []
+    if requested_ids:
+        all_tests = [t for t in all_tests if t["test_id"] in requested_ids]
+
+    results: list[dict[str, Any]] = []
+    for test_case in all_tests:
+        start_ms = time.time() * 1000
+        try:
+            run_id = await Orchestrator.execute_flow(flow, test_case["input"])
+
+            # Poll for completion (max 60s)
+            deadline = time.time() + 60.0
+            run: dict[str, Any] | None = None
+            while time.time() < deadline:
+                await asyncio.sleep(0.1)
+                run = await WorkflowRunRepository.get_by_run_id(run_id)
+                if run and run.get("status") in ("success", "error"):
+                    break
+
+            if run is None:
+                run = {"status": "unknown", "results": {}}
+
+            actual_output = _extract_final_output(run)
+            passed, diff = _match_output(
+                actual_output,
+                test_case["expected_output"],
+                test_case["match_mode"],
+            )
+
+            status = "pass" if passed else "fail"
+            if run.get("status") == "error":
+                status = "error"
+
+            result: dict[str, Any] = {
+                "result_id": str(uuid.uuid4()),
+                "test_id": test_case["test_id"],
+                "flow_id": flow_id,
+                "run_id": run_id,
+                "status": status,
+                "actual_output": actual_output,
+                "expected_output": test_case["expected_output"],
+                "diff": diff,
+                "error_message": run.get("error", "") if status == "error" else "",
+                "duration_ms": time.time() * 1000 - start_ms,
+                "ran_at": time.time(),
+            }
+        except Exception as exc:
+            logger.warning(
+                "Test case %s failed with error: %s", test_case["test_id"], exc
+            )
+            result = {
+                "result_id": str(uuid.uuid4()),
+                "test_id": test_case["test_id"],
+                "flow_id": flow_id,
+                "run_id": "",
+                "status": "error",
+                "actual_output": {},
+                "expected_output": test_case["expected_output"],
+                "diff": {},
+                "error_message": str(exc),
+                "duration_ms": time.time() * 1000 - start_ms,
+                "ran_at": time.time(),
+            }
+
+        test_suite_store.add_result(result)
+        results.append(result)
+
+    summary = test_suite_store.suite_summary(flow_id)
+    all_passed = all(r["status"] == "pass" for r in results)
+    exit_code = 0 if (all_passed or len(results) == 0) else 1
+
+    return {"results": results, "summary": summary, "exit_code": exit_code}
+
+
+@v1.get("/flows/{flow_id}/tests/{test_id}", tags=["Testing"])
+async def get_flow_test_case(
+    flow_id: str,
+    test_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Get a single test case by ID."""
+    test = test_suite_store.get_test(test_id)
+    if not test or test.get("flow_id") != flow_id:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    return test
+
+
+@v1.delete("/flows/{flow_id}/tests/{test_id}", status_code=204, tags=["Testing"])
+async def delete_flow_test_case(
+    flow_id: str,
+    test_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Delete a test case."""
+    test = test_suite_store.get_test(test_id)
+    if not test or test.get("flow_id") != flow_id:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    test_suite_store.delete_test(test_id)
+    return None
 
 
 # Include versioned router
