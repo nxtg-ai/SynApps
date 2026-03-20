@@ -18,6 +18,7 @@ SynApps is a **web-based visual platform for modular AI agents called Snaplets**
 - **Extensibility:** 9 built-in node types (LLM, ImageGen, Code, HTTP Request, Transform, IfElse, Merge, ForEach, Memory) with support for custom logic via the Code node.
 - **Universal API Connector:** The HTTP Request node (N-18) supports GET/POST/PUT/PATCH/DELETE, bearer/basic/API-key auth, SSRF protection, retry with exponential backoff, and response header capture.
 - **Inbound Webhook Trigger:** The Webhook Trigger node (N-19) exposes a unique URL per trigger. Any external service can POST to that URL to start the workflow. Optional HMAC-SHA256 signature verification rejects unsigned or tampered requests.
+- **Workflow Diff (N-43):** Compare any two saved workflow snapshots side-by-side — added/removed/modified nodes with expandable field-level diffs, edge changes, and a summary badge row. Accessible at `/workflows/:id/diff`.
 
 ## Quick Start
 
@@ -201,7 +202,7 @@ See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
-**2,438 tests** (2,329 backend + 109 frontend unit) — all passing.
+**2,451 tests** (2,329 backend + 122 frontend unit) — all passing.
 
 ### Backend
 

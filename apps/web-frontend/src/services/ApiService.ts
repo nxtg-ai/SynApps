@@ -9,6 +9,9 @@ import {
   CodeSuggestionRequest,
   CodeSuggestionResponse,
   WorkflowCostEstimate,
+  FlowVersion,
+  FlowVersionDetail,
+  FlowDiffResult,
 } from '../types';
 
 // ── Token refresh queue ────────────────────────────────────────────────
@@ -257,6 +260,37 @@ class ApiService {
     length: number;
   }> {
     const response = await this.api.get(`/executions/${executionId}/replay-history`);
+    return response.data;
+  }
+
+  /**
+   * List all saved snapshots for a flow, newest-first.
+   */
+  public async getFlowVersions(flowId: string): Promise<{ items: FlowVersion[] }> {
+    const response = await this.api.get(`/flows/${flowId}/versions`);
+    return response.data;
+  }
+
+  /**
+   * Fetch a specific version snapshot including the full node/edge graph.
+   */
+  public async getFlowVersion(flowId: string, versionId: string): Promise<FlowVersionDetail> {
+    const response = await this.api.get(`/flows/${flowId}/versions/${versionId}`);
+    return response.data;
+  }
+
+  /**
+   * Compute the diff between two versions. Pass "current" as versionB to
+   * compare against the live (unsaved) flow.
+   */
+  public async diffFlowVersions(
+    flowId: string,
+    versionA: string,
+    versionB: string
+  ): Promise<FlowDiffResult> {
+    const response = await this.api.get(`/flows/${flowId}/diff`, {
+      params: { version_a: versionA, version_b: versionB },
+    });
     return response.data;
   }
 }

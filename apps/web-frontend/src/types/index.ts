@@ -106,6 +106,38 @@ export interface UserProfile {
   created_at: number;
 }
 
+// ── Workflow Versioning + Diff ────────────────────────────────────────
+
+export interface FlowVersion {
+  version_id: string;
+  flow_id: string;
+  version: number;
+  snapshotted_at: string;
+}
+
+export interface FlowVersionDetail extends FlowVersion {
+  snapshot: {
+    nodes: any[];
+    edges: any[];
+    name?: string;
+  };
+}
+
+export interface FlowDiffResult {
+  nodes_added: string[];
+  nodes_removed: string[];
+  nodes_changed: string[];
+  edges_added: string[];
+  edges_removed: string[];
+  summary: {
+    nodes_added: number;
+    nodes_removed: number;
+    nodes_changed: number;
+    edges_added: number;
+    edges_removed: number;
+  };
+}
+
 // ── Cost Estimation ─────────────────────────────────────────────────────
 
 export interface CostBreakdownItem {
