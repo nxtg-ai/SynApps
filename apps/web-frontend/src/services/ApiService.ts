@@ -232,6 +232,33 @@ class ApiService {
     });
     return response.data;
   }
+
+  /**
+   * Trigger a replay of an execution. Returns metadata about the newly
+   * created replay run so callers can track or navigate to it.
+   */
+  public async replayExecution(executionId: string): Promise<{
+    replay_run_id: string;
+    original_run_id: string;
+    flow_id: string;
+    status: string;
+  }> {
+    const response = await this.api.post(`/executions/${executionId}/replay`);
+    return response.data;
+  }
+
+  /**
+   * Fetch the full replay chain for an execution — the original run plus
+   * every subsequent replay, ordered chronologically.
+   */
+  public async getReplayHistory(executionId: string): Promise<{
+    execution_id: string;
+    chain: string[];
+    length: number;
+  }> {
+    const response = await this.api.get(`/executions/${executionId}/replay-history`);
+    return response.data;
+  }
 }
 
 // Create a singleton instance

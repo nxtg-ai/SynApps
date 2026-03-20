@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import MainLayout from '../../components/Layout/MainLayout';
 import { WorkflowRunStatus } from '../../types';
 import apiService from '../../services/ApiService';
+import ReplayViewer from '../../components/ReplayViewer/ReplayViewer';
 import './HistoryPage.css';
 
 // Interfaces for node data
@@ -39,6 +40,7 @@ const HistoryPage: React.FC = () => {
   const [flowNames, setFlowNames] = useState<Record<string, string>>({});
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // Default to newest first
   const [flowDetails, setFlowDetails] = useState<Record<string, any>>({});
+  const [detailsTab, setDetailsTab] = useState<'results' | 'replay'>('results');
   
   // Load workflow runs and flow details
   useEffect(() => {
@@ -255,6 +257,7 @@ const HistoryPage: React.FC = () => {
                     className={`run-item ${run.status} ${selectedRun?.run_id === run.run_id ? 'selected' : ''}`}
                     onClick={() => {
                       setSelectedRun(run);
+                      setDetailsTab('results');
                       // Update URL without navigating
                       navigate(`/history?run=${run.run_id}`, { replace: true });
                     }}
@@ -353,8 +356,33 @@ const HistoryPage: React.FC = () => {
                       <div className="error-message">{selectedRun.error}</div>
                     </div>
                   )}
-                  
-                  <h3>Results</h3>
+
+                  {/* Tab bar */}
+                  <div className="details-tabs">
+                    <button
+                      className={`details-tab-button${detailsTab === 'results' ? ' active' : ''}`}
+                      onClick={() => setDetailsTab('results')}
+                    >
+                      Results
+                    </button>
+                    <button
+                      className={`details-tab-button${detailsTab === 'replay' ? ' active' : ''}`}
+                      onClick={() => setDetailsTab('replay')}
+                    >
+                      Replay
+                    </button>
+                  </div>
+
+                  {/* Replay tab */}
+                  {detailsTab === 'replay' && (
+                    <ReplayViewer
+                      executionId={selectedRun.run_id}
+                      flowResults={selectedRun.results || {}}
+                    />
+                  )}
+
+                  {/* Results tab */}
+                  {detailsTab === 'results' && (
                   <div className="results-panel">
                     {selectedRun && flowDetails[selectedRun.flow_id] ? (
                       <div className="results-tree">
@@ -573,6 +601,7 @@ const HistoryPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  )}
                 </>
               ) : (
                 <div className="no-run-selected">

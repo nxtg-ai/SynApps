@@ -374,3 +374,33 @@
     max-height: 300px;
   }
 }
+
+/* ── Replay / Results tab bar ──────────────────────────────────────── */
+
+.details-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #2d3748;
+}
+
+.details-tab-button {
+  padding: 6px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #a0aec0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.details-tab-button:hover {
+  color: #e2e8f0;
+}
+
+.details-tab-button.active {
+  color: #63b3ed;
+  border-bottom-color: #63b3ed;
+}
