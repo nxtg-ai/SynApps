@@ -282,6 +282,47 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
 
+### DIRECTIVE-NXTG-20260319-156 — P1: N-35 Workflow Monitoring — Health Checks + Alerts
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **Workflow health** — per-workflow: success rate (last 24h), avg duration trend, error count.
+2. [ ] **Alert rules** — configurable: "if error rate > 10% for 30 min, send webhook/email".
+3. [ ] **`GET /monitoring/workflows`** — health summary. **`POST /monitoring/alerts`** CRUD.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-157.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-157 — P1: N-36 OAuth2 Provider — SSO for Enterprise
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 09:00 | **Estimate**: M | **Status**: PENDING
+
+**Action Items**:
+1. [ ] **OAuth2 server** — issue access tokens for API access. Support authorization_code + client_credentials flows.
+2. [ ] **Client registration** — `POST /oauth/clients` (name, redirect_uri, scopes).
+3. [ ] **Token introspection** — `POST /oauth/introspect`.
+4. [ ] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-158.
+**Response** (filled by team): >
+
+---
+
+### DIRECTIVE-NXTG-20260319-158 — P2: Final Session Summary + Test Count
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 09:00 | **Estimate**: S | **Status**: PENDING
+
+**Action Items**:
+1. [ ] Final test count. 2. [ ] All initiatives. 3. [ ] README.
+
+**Response** (filled by team): >
+
+---
+
 ### DIRECTIVE-NXTG-20260319-128 — P1: SynApps CLI — Command-Line Workflow Management
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
 **Injected**: 2026-03-19 07:30 | **Estimate**: M | **Status**: DONE
