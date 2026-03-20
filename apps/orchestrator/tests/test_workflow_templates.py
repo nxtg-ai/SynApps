@@ -8,7 +8,6 @@ Covers:
 - Template install endpoint works for each listing
 """
 
-import os
 from pathlib import Path
 
 import pytest
