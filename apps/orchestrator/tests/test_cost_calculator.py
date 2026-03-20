@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import CostCalculator, app
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
