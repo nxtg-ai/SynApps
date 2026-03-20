@@ -14872,8 +14872,8 @@ async def create_alert_rule(
         raise HTTPException(status_code=422, detail="'threshold' is required.")
     try:
         float(threshold)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=422, detail="'threshold' must be numeric.")
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="'threshold' must be numeric.") from exc
     if action_type not in AlertRuleStore.VALID_ACTION_TYPES:
         raise HTTPException(
             status_code=422,
