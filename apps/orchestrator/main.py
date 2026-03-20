@@ -14053,6 +14053,9 @@ async def marketplace_search(
     q: str | None = Query(None, description="Text search on name, description, and tags"),
     category: str | None = Query(None, description="Filter by category"),
     tags: str | None = Query(None, description="Comma-separated tags to filter by"),
+    min_rating: float = Query(0.0, ge=0.0, description="Minimum average rating"),
+    min_installs: int = Query(0, ge=0, description="Minimum install count"),
+    sort_by: str = Query("relevance", description="Sort: relevance|installs|rating|newest"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     per_page: int = Query(20, ge=1, le=100, description="Results per page (max 100)"),
 ):
@@ -14061,16 +14064,25 @@ async def marketplace_search(
     if tags:
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-    items, total = marketplace_registry.search(
-        q=q,
-        category=category,
+    all_listings = marketplace_registry.list_all()
+    offset = (page - 1) * per_page
+
+    result = search_engine.search(
+        listings=all_listings,
+        q=q or "",
+        category=category or "",
+        min_rating=min_rating,
+        min_installs=min_installs,
+        sort_by=sort_by,
+        limit=per_page,
+        offset=offset,
         tags=tag_list,
-        page=page,
-        per_page=per_page,
+        rating_lookup=rating_store,
     )
+
     # Enrich each listing with avg_rating, rating_count, and is_featured
     enriched = []
-    for item in items:
+    for item in result["items"]:
         lid = item.get("listing_id", item.get("id", ""))
         stats = rating_store.get_stats(lid)
         enriched.append({
@@ -14079,7 +14091,14 @@ async def marketplace_search(
             "rating_count": stats["rating_count"],
             "is_featured": featured_store.is_featured(lid),
         })
-    return {"items": enriched, "total": total, "page": page, "per_page": per_page}
+    return {
+        "items": enriched,
+        "total": result["total"],
+        "page": page,
+        "per_page": per_page,
+        "query": result["query"],
+        "filters_applied": result["filters_applied"],
+    }
 
 
 @v1.get("/marketplace/featured", tags=["Marketplace"])
@@ -19989,6 +20008,201 @@ class FeatureListingRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Marketplace Search Engine (N-49)
+# Full-text search with scoring, autocomplete, and advanced filtering.
+# ---------------------------------------------------------------------------
+
+
+class MarketplaceSearchEngine:
+    """Full-text search over marketplace listings.
+
+    Indexes: name, description, tags (joined), author.
+    Supports: keyword search (case-insensitive, partial match),
+              autocomplete (prefix match on name + tags),
+              filter by category, min_rating, min_installs.
+    Scoring: name match = 3pts, tag match = 2pts, description match = 1pt, author match = 1pt.
+    Results sorted by score desc, then install_count desc.
+    """
+
+    def search(
+        self,
+        listings: list[dict[str, Any]],
+        q: str = "",
+        category: str = "",
+        min_rating: float = 0.0,
+        min_installs: int = 0,
+        sort_by: str = "relevance",
+        limit: int = 12,
+        offset: int = 0,
+        tags: list[str] | None = None,
+        rating_lookup: Any | None = None,
+    ) -> dict[str, Any]:
+        """Return {items, total, query, filters_applied}.
+
+        Args:
+            listings: Raw listing dicts from the registry.
+            q: Keyword query string (case-insensitive, partial match).
+            category: Filter by category (case-insensitive).
+            min_rating: Minimum avg_rating to include.
+            min_installs: Minimum install_count to include.
+            sort_by: One of "relevance", "installs", "rating", "newest".
+            limit: Max items to return.
+            offset: Pagination offset.
+            tags: Optional list of tags to filter by (any-match).
+            rating_lookup: Optional RatingStore for rating-based filtering.
+        """
+        q_lower = q.strip().lower()
+        results: list[dict[str, Any]] = []
+
+        for listing in listings:
+            # Category filter
+            if category and listing.get("category", "").lower() != category.lower():
+                continue
+
+            # Tag filter (legacy support)
+            if tags:
+                tag_set = {t.lower() for t in tags}
+                listing_tags = [t.lower() for t in listing.get("tags", [])]
+                if not any(t in tag_set for t in listing_tags):
+                    continue
+
+            # Install count filter
+            if listing.get("install_count", 0) < min_installs:
+                continue
+
+            # Rating filter
+            if min_rating > 0.0 and rating_lookup is not None:
+                lid = listing.get("listing_id", listing.get("id", ""))
+                stats = rating_lookup.get_stats(lid)
+                if stats["avg_rating"] < min_rating:
+                    continue
+
+            # Score against query
+            score = self._score(listing, q_lower) if q_lower else 0.0
+
+            # If query provided, only include matches
+            if q_lower and score <= 0.0:
+                continue
+
+            results.append({**listing, "_score": score})
+
+        # Sort
+        if sort_by == "installs":
+            results.sort(key=lambda x: (-x.get("install_count", 0), -x["_score"]))
+        elif sort_by == "rating":
+            # Sort by avg_rating from rating_lookup if available
+            def _rating_key(item: dict[str, Any]) -> float:
+                if rating_lookup is not None:
+                    lid = item.get("listing_id", item.get("id", ""))
+                    return rating_lookup.get_stats(lid)["avg_rating"]
+                return 0.0
+
+            results.sort(key=lambda x: (-_rating_key(x), -x["_score"]))
+        elif sort_by == "newest":
+            results.sort(key=lambda x: (-x.get("published_at", 0), -x["_score"]))
+        else:
+            # relevance (default)
+            results.sort(key=lambda x: (-x["_score"], -x.get("install_count", 0)))
+
+        total = len(results)
+        page_items = results[offset : offset + limit]
+
+        filters_applied: dict[str, Any] = {}
+        if category:
+            filters_applied["category"] = category
+        if min_rating > 0.0:
+            filters_applied["min_rating"] = min_rating
+        if min_installs > 0:
+            filters_applied["min_installs"] = min_installs
+        if sort_by != "relevance":
+            filters_applied["sort_by"] = sort_by
+        if tags:
+            filters_applied["tags"] = tags
+
+        return {
+            "items": page_items,
+            "total": total,
+            "query": q,
+            "filters_applied": filters_applied,
+        }
+
+    def autocomplete(
+        self,
+        listings: list[dict[str, Any]],
+        q: str,
+        limit: int = 8,
+    ) -> list[str]:
+        """Return unique suggestion strings matching prefix of name or individual tags."""
+        prefix = q.strip().lower()
+        if not prefix:
+            return []
+
+        seen: set[str] = set()
+        suggestions: list[str] = []
+
+        for listing in listings:
+            name = listing.get("name", "")
+            if name.lower().startswith(prefix) and name.lower() not in seen:
+                seen.add(name.lower())
+                suggestions.append(name)
+
+            for tag in listing.get("tags", []):
+                if tag.lower().startswith(prefix) and tag.lower() not in seen:
+                    seen.add(tag.lower())
+                    suggestions.append(tag)
+
+            if len(suggestions) >= limit:
+                break
+
+        return suggestions[:limit]
+
+    def _score(self, listing: dict[str, Any], q_lower: str) -> float:
+        """Score a single listing against the query.
+
+        Scoring weights:
+        - name match = 3 points per query word
+        - tag match = 2 points per query word
+        - description match = 1 point per query word
+        - author match = 1 point per query word
+
+        Multi-word queries: each word scored independently and summed.
+        Exact full-query matches get a 2x bonus on the matching field.
+        """
+        if not q_lower:
+            return 0.0
+
+        words = q_lower.split()
+        score = 0.0
+
+        name_lower = listing.get("name", "").lower()
+        desc_lower = listing.get("description", "").lower()
+        tags_lower = " ".join(listing.get("tags", [])).lower()
+        individual_tags = [t.lower() for t in listing.get("tags", [])]
+        author_lower = listing.get("author", "").lower()
+
+        for word in words:
+            if word in name_lower:
+                score += 3.0
+            if any(word in t for t in individual_tags):
+                score += 2.0
+            if word in desc_lower:
+                score += 1.0
+            if word in author_lower:
+                score += 1.0
+
+        # Exact full-query bonus
+        if q_lower in name_lower:
+            score += 3.0
+        if q_lower in tags_lower:
+            score += 2.0
+
+        return score
+
+
+search_engine = MarketplaceSearchEngine()
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics (N-45) — stores and models
 # Defined here (before routes) so route functions can reference them.
 # ---------------------------------------------------------------------------
@@ -20481,6 +20695,23 @@ async def unfeature_listing(
         raise HTTPException(status_code=403, detail="Admin access required")
     featured_store.unfeature(listing_id)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Marketplace Autocomplete endpoint (N-49)
+# MUST be registered before app.include_router(v1) so FastAPI sees it.
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/marketplace/autocomplete", tags=["Marketplace"])
+async def marketplace_autocomplete(
+    q: str = Query("", description="Prefix query for autocomplete suggestions"),
+    limit: int = Query(8, ge=1, le=50, description="Max suggestions to return"),
+):
+    """Return autocomplete suggestions matching prefix of listing names or tags."""
+    all_listings = marketplace_registry.list_all()
+    suggestions = search_engine.autocomplete(listings=all_listings, q=q, limit=limit)
+    return {"suggestions": suggestions}
 
 
 # Include versioned router

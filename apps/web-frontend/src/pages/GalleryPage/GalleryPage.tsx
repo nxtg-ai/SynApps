@@ -60,6 +60,11 @@ interface TrendingResponse {
 }
 
 type SortOption = 'popular' | 'newest' | 'most_installed' | 'alphabetical';
+type ServerSortOption = 'relevance' | 'installs' | 'rating' | 'newest';
+
+interface AutocompleteResponse {
+  suggestions: string[];
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -314,6 +319,12 @@ const GalleryPage: React.FC = () => {
   const toastCounter = useRef(0);
   const [trendingItems, setTrendingItems] = useState<MarketplaceListing[]>([]);
   const [featuredItems, setFeaturedItems] = useState<FeaturedListing[]>([]);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [minRating, setMinRating] = useState<number>(0);
+  const [minInstalls, setMinInstalls] = useState<number>(0);
+  const [serverSort, setServerSort] = useState<ServerSortOption>('relevance');
+  const autocompleteRef = useRef<HTMLDivElement>(null);
 
   // Debounce search query
   useEffect(() => {
@@ -323,11 +334,45 @@ const GalleryPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Reset to page 1 when search/category changes
+  // Autocomplete: fetch suggestions after 200ms debounce
+  useEffect(() => {
+    if (!query.trim()) {
+      setAutocompleteSuggestions([]);
+      setShowAutocomplete(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      apiFetch<AutocompleteResponse>(
+        `/api/v1/marketplace/autocomplete?q=${encodeURIComponent(query.trim())}&limit=8`,
+      )
+        .then((data) => {
+          setAutocompleteSuggestions(data.suggestions);
+          setShowAutocomplete(data.suggestions.length > 0);
+        })
+        .catch(() => {
+          setAutocompleteSuggestions([]);
+          setShowAutocomplete(false);
+        });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Close autocomplete on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
+        setShowAutocomplete(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Reset to page 1 when search/category/filter changes
   useEffect(() => {
     setPage(1);
     setAllItems([]);
-  }, [debouncedQuery, selectedCategories]);
+  }, [debouncedQuery, selectedCategories, minRating, minInstalls, serverSort]);
 
   const addToast = useCallback((text: string, type: 'success' | 'error') => {
     const id = ++toastCounter.current;
@@ -359,6 +404,9 @@ const GalleryPage: React.FC = () => {
           const [cat] = selectedCategories;
           params.set('category', cat);
         }
+        if (minRating > 0) params.set('min_rating', String(minRating));
+        if (minInstalls > 0) params.set('min_installs', String(minInstalls));
+        if (serverSort !== 'relevance') params.set('sort_by', serverSort);
 
         const data = await apiFetch<SearchResponse>(
           `/api/v1/marketplace/search?${params.toString()}`,
@@ -374,7 +422,7 @@ const GalleryPage: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [debouncedQuery, selectedCategories, addToast],
+    [debouncedQuery, selectedCategories, addToast, minRating, minInstalls, serverSort],
   );
 
   // Initial load and re-fetch on filter change
@@ -468,6 +516,14 @@ const GalleryPage: React.FC = () => {
     setSelectedCategories(new Set());
     setSort('popular');
     setQuery('');
+    setMinRating(0);
+    setMinInstalls(0);
+    setServerSort('relevance');
+  };
+
+  const handleAutocompletePick = (suggestion: string) => {
+    setQuery(suggestion);
+    setShowAutocomplete(false);
   };
 
   // Client-side filtering by multiple categories (server supports only one)
@@ -504,7 +560,7 @@ const GalleryPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="gallery-search-bar">
+        <div className="gallery-search-bar" ref={autocompleteRef} style={{ position: 'relative' }}>
           <span className="gallery-search-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" />
@@ -517,6 +573,9 @@ const GalleryPage: React.FC = () => {
             placeholder="Search workflows by name, description, or tag..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => {
+              if (autocompleteSuggestions.length > 0) setShowAutocomplete(true);
+            }}
             aria-label="Search workflows"
           />
           {query && (
@@ -527,6 +586,47 @@ const GalleryPage: React.FC = () => {
             >
               x
             </button>
+          )}
+          {showAutocomplete && autocompleteSuggestions.length > 0 && (
+            <div
+              className="gallery-autocomplete-dropdown"
+              data-testid="autocomplete-dropdown"
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                zIndex: 50,
+                background: '#1e293b',
+                border: '1px solid #334155',
+                borderRadius: '0 0 8px 8px',
+                maxHeight: '240px',
+                overflowY: 'auto',
+              }}
+            >
+              {autocompleteSuggestions.map((suggestion, idx) => (
+                <button
+                  key={`${suggestion}-${idx}`}
+                  data-testid={`autocomplete-item-${idx}`}
+                  className="gallery-autocomplete-item"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 16px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#cbd5e1',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleAutocompletePick(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -724,6 +824,54 @@ const GalleryPage: React.FC = () => {
                   {opt.label}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div className="gallery-sidebar-section">
+            <h3 className="gallery-sidebar-title">Min Rating</h3>
+            <select
+              className="gallery-sort-select"
+              data-testid="min-rating-filter"
+              value={minRating}
+              onChange={(e) => setMinRating(Number(e.target.value))}
+              aria-label="Minimum rating"
+            >
+              <option value={0}>Any</option>
+              <option value={3}>3+ stars</option>
+              <option value={4}>4+ stars</option>
+              <option value={4.5}>4.5+ stars</option>
+            </select>
+          </div>
+
+          <div className="gallery-sidebar-section">
+            <h3 className="gallery-sidebar-title">Min Installs</h3>
+            <select
+              className="gallery-sort-select"
+              data-testid="min-installs-filter"
+              value={minInstalls}
+              onChange={(e) => setMinInstalls(Number(e.target.value))}
+              aria-label="Minimum installs"
+            >
+              <option value={0}>Any</option>
+              <option value={10}>10+</option>
+              <option value={100}>100+</option>
+              <option value={1000}>1000+</option>
+            </select>
+          </div>
+
+          <div className="gallery-sidebar-section">
+            <h3 className="gallery-sidebar-title">Server Sort</h3>
+            <select
+              className="gallery-sort-select"
+              data-testid="sort-by-filter"
+              value={serverSort}
+              onChange={(e) => setServerSort(e.target.value as ServerSortOption)}
+              aria-label="Server sort order"
+            >
+              <option value="relevance">Relevance</option>
+              <option value="installs">Most Installed</option>
+              <option value="rating">Highest Rated</option>
+              <option value="newest">Newest</option>
             </select>
           </div>
         </aside>

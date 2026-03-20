@@ -30,6 +30,7 @@ const SLADashboardPage = React.lazy(() => import('./pages/SLADashboardPage/SLADa
 const WebhookDebuggerPage = React.lazy(() => import('./pages/WebhookDebuggerPage/WebhookDebuggerPage'));
 const AdminFeaturedPage = React.lazy(() => import('./pages/AdminFeaturedPage/AdminFeaturedPage'));
 const RollbackPage = React.lazy(() => import('./pages/RollbackPage/RollbackPage'));
+const SearchPage = React.lazy(() => import('./pages/SearchPage/SearchPage'));
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -81,6 +82,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/webhooks/debug" element={<ProtectedRoute><WebhookDebuggerPage /></ProtectedRoute>} />
           <Route path="/admin/featured" element={<ProtectedRoute><AdminFeaturedPage /></ProtectedRoute>} />
           <Route path="/workflows/:id/rollback" element={<ProtectedRoute><RollbackPage /></ProtectedRoute>} />
+          <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </React.Suspense>

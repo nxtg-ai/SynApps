@@ -205,7 +205,12 @@ describe('GalleryPage', () => {
         ok: true,
         json: async () => EMPTY_FEATURED,
       });
-      // Call 4: after search
+      // Call 4: autocomplete (fires at 200ms debounce)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ suggestions: [] }),
+      });
+      // Call 5: after search debounce (fires at 400ms)
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => makeSearchResponse([makeListing({ name: 'LLM Pipeline' })]),
@@ -221,12 +226,15 @@ describe('GalleryPage', () => {
       const input = screen.getByRole('searchbox');
       fireEvent.change(input, { target: { value: 'llm' } });
 
-      // Advance debounce (400 ms)
+      // Advance debounce (500 ms covers both autocomplete 200ms and search 400ms)
       await act(async () => { vi.advanceTimersByTime(500); });
-      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
 
-      const searchCall = mockFetch.mock.calls[3][0] as string;
-      expect(searchCall).toContain('q=llm');
+      // Find the search call (contains marketplace/search and q=llm)
+      const searchCalls = mockFetch.mock.calls.filter(
+        (call: unknown[]) => (call[0] as string).includes('marketplace/search') && (call[0] as string).includes('q=llm'),
+      );
+      expect(searchCalls.length).toBeGreaterThanOrEqual(1);
     });
   });
 
