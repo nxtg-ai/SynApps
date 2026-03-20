@@ -12,6 +12,7 @@ from apps.orchestrator.main import (
     reply_store,
     review_store,
     sla_store,
+    webhook_debug_store,
 )
 from apps.orchestrator.middleware.rate_limiter import (
     TokenBucketRegistry,
@@ -64,6 +65,7 @@ def _reset_shared_stores():
     issue_store.reset()
     credit_ledger.reset()
     sla_store.reset()
+    webhook_debug_store.reset()
     yield
     # Post-test cleanup (belt-and-suspenders for any state written during test)
     execution_quota_store.reset()
@@ -74,3 +76,4 @@ def _reset_shared_stores():
     issue_store.reset()
     credit_ledger.reset()
     sla_store.reset()
+    webhook_debug_store.reset()

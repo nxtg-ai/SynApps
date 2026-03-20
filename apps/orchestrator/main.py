@@ -12242,6 +12242,99 @@ async def validate_template_endpoint(
 
 
 # ---------------------------------------------------------------------------
+# Webhook Debugger endpoints (N-34)
+# MUST be registered BEFORE /webhooks/{hook_id} routes so FastAPI matches
+# /webhooks/debug before the path-parameter catch-all.
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/webhooks/debug", tags=["Webhook Debugger"])
+async def list_webhook_debug_entries(
+    flow_id: str | None = None,
+    limit: int = 50,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """List recent webhook debug entries, newest first."""
+    items = webhook_debug_store.list(flow_id=flow_id, limit=limit)
+    return {"items": items, "total": len(items)}
+
+
+@v1.get("/webhooks/debug/{entry_id}", tags=["Webhook Debugger"])
+async def get_webhook_debug_entry(
+    entry_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Get a single webhook debug entry by ID."""
+    entry = webhook_debug_store.get(entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Webhook debug entry not found")
+    return entry
+
+
+@v1.post("/webhooks/debug/{entry_id}/retry", tags=["Webhook Debugger"])
+async def retry_webhook_debug_entry(
+    entry_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Retry a webhook delivery by re-sending the original payload.
+
+    Increments retry_count and updates last_retry_at on the entry.
+    Re-invokes the same flow with the original body.
+    """
+    entry = webhook_debug_store.get(entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Webhook debug entry not found")
+
+    flow_id = entry.get("flow_id")
+    if not flow_id:
+        raise HTTPException(status_code=400, detail="No flow_id associated with this entry")
+
+    # Re-parse the stored body to build flow input
+    body_text = entry.get("body", "")
+    try:
+        parsed = json.loads(body_text) if body_text else {}
+        if not isinstance(parsed, dict):
+            parsed = {"payload": parsed}
+    except (json.JSONDecodeError, ValueError):
+        parsed = {"raw": body_text}
+
+    flow_input = {"payload": parsed, "trigger_id": entry_id}
+    run_body = RunFlowRequest(input=flow_input)
+
+    retry_status = 202
+    retry_response = ""
+    try:
+        result = await _run_flow_impl(flow_id, run_body)
+        retry_response = json.dumps(
+            {"accepted": True, "run_id": result["run_id"]}
+        )
+    except HTTPException as exc:
+        retry_status = exc.status_code
+        retry_response = json.dumps({"detail": exc.detail})[:2000]
+    except Exception as exc:
+        retry_status = 500
+        retry_response = json.dumps({"detail": str(exc)})[:2000]
+        logger.warning("Webhook retry failed for entry %s: %s", entry_id, exc)
+
+    # Update the entry in place
+    entry["retry_count"] = entry.get("retry_count", 0) + 1
+    entry["last_retry_at"] = time.time()
+    entry["status_code"] = retry_status
+    entry["response_body"] = retry_response[:2000]
+
+    return entry
+
+
+@v1.delete("/webhooks/debug", status_code=204, tags=["Webhook Debugger"])
+async def clear_webhook_debug_entries(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Clear all webhook debug entries."""
+    webhook_debug_store.clear()
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Webhook CRUD endpoints
 # ---------------------------------------------------------------------------
 
@@ -12425,9 +12518,40 @@ async def receive_webhook_trigger(
     ``payload``.  If the body is valid JSON it is inlined directly; otherwise
     it is wrapped as ``{"raw": "<body_text>"}``.
     """
+    _wh_start = time.time()
     body_bytes = await request.body()
+    body_text = body_bytes.decode("utf-8", errors="replace")
+
+    # Build sanitized headers (drop Authorization value for security)
+    raw_headers: dict[str, str] = {}
+    for k, v in request.headers.items():
+        if k.lower() == "authorization":
+            raw_headers[k] = "[REDACTED]"
+        else:
+            raw_headers[k] = v
+
+    # Determine flow_id from the trigger registry (may be None if trigger unknown)
+    trigger_meta = webhook_trigger_registry.get(trigger_id)
+    debug_flow_id: str | None = trigger_meta["flow_id"] if trigger_meta else None
 
     if not webhook_trigger_registry.verify_signature(trigger_id, body_bytes, x_webhook_signature):
+        # Record failed delivery before raising
+        _wh_dur = (time.time() - _wh_start) * 1000
+        webhook_debug_store.record({
+            "entry_id": str(uuid.uuid4()),
+            "flow_id": debug_flow_id,
+            "received_at": _wh_start,
+            "method": request.method,
+            "path": str(request.url.path),
+            "headers": raw_headers,
+            "body": body_text[:10_000],
+            "body_size": len(body_bytes),
+            "status_code": 401,
+            "response_body": '{"detail":"Invalid or missing webhook signature"}',
+            "duration_ms": _wh_dur,
+            "retry_count": 0,
+            "last_retry_at": None,
+        })
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing webhook signature",
@@ -12435,6 +12559,22 @@ async def receive_webhook_trigger(
 
     trigger = webhook_trigger_registry.get(trigger_id)
     if not trigger:
+        _wh_dur = (time.time() - _wh_start) * 1000
+        webhook_debug_store.record({
+            "entry_id": str(uuid.uuid4()),
+            "flow_id": None,
+            "received_at": _wh_start,
+            "method": request.method,
+            "path": str(request.url.path),
+            "headers": raw_headers,
+            "body": body_text[:10_000],
+            "body_size": len(body_bytes),
+            "status_code": 404,
+            "response_body": f'{{"detail":"Trigger \'{trigger_id}\' not found"}}',
+            "duration_ms": _wh_dur,
+            "retry_count": 0,
+            "last_retry_at": None,
+        })
         raise HTTPException(status_code=404, detail=f"Trigger '{trigger_id}' not found")
 
     # Parse body → flow input
@@ -12443,12 +12583,44 @@ async def receive_webhook_trigger(
         if not isinstance(parsed, dict):
             parsed = {"payload": parsed}
     except (json.JSONDecodeError, ValueError):
-        parsed = {"raw": body_bytes.decode("utf-8", errors="replace")}
+        parsed = {"raw": body_text}
 
     flow_input = {"payload": parsed, "trigger_id": trigger_id}
     run_body = RunFlowRequest(input=flow_input)
 
-    result = await _run_flow_impl(trigger["flow_id"], run_body)
+    status_code = 202
+    response_body = ""
+    try:
+        result = await _run_flow_impl(trigger["flow_id"], run_body)
+        response_body = json.dumps(
+            {"accepted": True, "run_id": result["run_id"], "trigger_id": trigger_id}
+        )
+    except HTTPException as exc:
+        status_code = exc.status_code
+        response_body = json.dumps({"detail": exc.detail})[:2000]
+        raise
+    except Exception as exc:
+        status_code = 500
+        response_body = json.dumps({"detail": str(exc)})[:2000]
+        raise
+    finally:
+        _wh_dur = (time.time() - _wh_start) * 1000
+        webhook_debug_store.record({
+            "entry_id": str(uuid.uuid4()),
+            "flow_id": trigger["flow_id"],
+            "received_at": _wh_start,
+            "method": request.method,
+            "path": str(request.url.path),
+            "headers": raw_headers,
+            "body": body_text[:10_000],
+            "body_size": len(body_bytes),
+            "status_code": status_code,
+            "response_body": response_body[:2000],
+            "duration_ms": _wh_dur,
+            "retry_count": 0,
+            "last_retry_at": None,
+        })
+
     return {"accepted": True, "run_id": result["run_id"], "trigger_id": trigger_id}
 
 
@@ -19544,6 +19716,74 @@ class SLAStore:
 
 
 sla_store = SLAStore()
+
+
+# ---------------------------------------------------------------------------
+# Webhook Debugger (N-34) — store and models
+# Defined here (before routes) so route functions can reference them.
+# ---------------------------------------------------------------------------
+
+
+class WebhookDebugStore:
+    """Thread-safe in-memory store for webhook debug entries.
+
+    Maintains a bounded FIFO buffer of webhook deliveries for real-time
+    inspection and retry.  Oldest entries are evicted when the store
+    exceeds MAX_ENTRIES.
+    """
+
+    MAX_ENTRIES = 200
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: list[dict[str, Any]] = []
+
+    def record(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """Append a debug entry, evicting the oldest if over capacity."""
+        with self._lock:
+            self._entries.append(entry)
+            while len(self._entries) > self.MAX_ENTRIES:
+                self._entries.pop(0)
+        return entry
+
+    def list(
+        self,
+        flow_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return entries newest-first, optionally filtered by *flow_id*."""
+        with self._lock:
+            items = list(self._entries)
+        if flow_id is not None:
+            items = [e for e in items if e.get("flow_id") == flow_id]
+        items.reverse()
+        return items[:limit]
+
+    def get(self, entry_id: str) -> dict[str, Any] | None:
+        """Return a single entry by ID, or None."""
+        with self._lock:
+            for entry in self._entries:
+                if entry["entry_id"] == entry_id:
+                    return entry
+        return None
+
+    def clear(self) -> None:
+        """Remove all stored debug entries."""
+        with self._lock:
+            self._entries.clear()
+
+    def reset(self) -> None:
+        """Alias for clear — used by conftest between tests."""
+        self.clear()
+
+
+webhook_debug_store = WebhookDebugStore()
+
+
+class RetryWebhookRequest(StrictRequestModel):
+    """Request body for retrying a webhook delivery."""
+
+    entry_id: str
 
 
 # ---------------------------------------------------------------------------
