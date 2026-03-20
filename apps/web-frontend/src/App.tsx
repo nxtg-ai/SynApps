@@ -21,6 +21,7 @@ const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
 const RegisterPage = React.lazy(() => import('./pages/RegisterPage/RegisterPage'));
 const PricingPage = React.lazy(() => import('./pages/PricingPage/PricingPage'));
 const PlaygroundPage = React.lazy(() => import('./pages/PlaygroundPage/PlaygroundPage'));
+const GalleryPage = React.lazy(() => import('./pages/GalleryPage/GalleryPage'));
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -63,6 +64,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
           <Route path="/playground" element={<ProtectedRoute><PlaygroundPage /></ProtectedRoute>} />
+          <Route path="/gallery" element={<ProtectedRoute><GalleryPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </React.Suspense>
