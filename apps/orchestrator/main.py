@@ -26,6 +26,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -17081,6 +17082,870 @@ async def validate_subflow(
     return {"valid": True, "error": None}
 
 
+# ---------------------------------------------------------------------------
+# N-39: Workflow AI Assist — Auto-Suggest Next Node
+# ---------------------------------------------------------------------------
+
+# Hardcoded transition probability table derived from common workflow patterns.
+# Keys are node types; values map next-node-type → weight (higher = more common).
+_NODE_TRANSITION_WEIGHTS: dict[str, dict[str, float]] = {
+    "start": {"llm": 3.0, "http": 2.5, "code": 1.5, "transform": 1.0, "scheduler": 0.5},
+    "llm": {"code": 2.5, "transform": 2.0, "llm": 1.5, "http": 1.5, "memory": 1.5, "end": 2.0},
+    "http": {"transform": 2.5, "code": 2.0, "llm": 1.5, "memory": 1.0, "end": 1.0},
+    "code": {"llm": 2.0, "transform": 2.0, "memory": 1.5, "http": 1.0, "end": 1.5},
+    "transform": {"llm": 2.5, "code": 2.0, "memory": 1.5, "http": 1.0, "end": 1.0},
+    "memory": {"llm": 2.0, "end": 2.5, "code": 1.5, "transform": 1.0},
+    "imagegen": {"code": 2.0, "transform": 1.5, "memory": 1.5, "end": 2.0},
+    "ifelse": {"llm": 1.5, "code": 1.5, "http": 1.5, "transform": 1.5, "end": 1.0},
+    "branch": {"llm": 1.5, "code": 1.5, "http": 1.5, "transform": 1.5, "end": 1.0},
+    "foreach": {"code": 2.5, "llm": 2.0, "transform": 1.5, "http": 1.5, "merge": 2.0},
+    "merge": {"code": 2.0, "transform": 2.0, "llm": 1.5, "end": 1.5},
+    "compound_merge": {"code": 2.0, "transform": 2.0, "llm": 1.5, "end": 1.5},
+    "webhook_trigger": {"llm": 2.5, "code": 2.0, "http": 1.5, "transform": 1.5},
+    "scheduler": {"http": 2.5, "llm": 2.0, "code": 1.5, "transform": 1.0},
+    "subflow": {"transform": 2.0, "code": 1.5, "memory": 1.5, "end": 2.0},
+    "error_handler": {"llm": 1.5, "http": 1.5, "code": 1.5, "end": 2.0},
+}
+
+# Keyword → node-type mapping for autocomplete.
+_KEYWORD_NODE_MAP: list[tuple[list[str], str]] = [
+    (["gpt", "openai", "claude", "anthropic", "llm", "text", "generate", "summarize",
+      "classify", "analyze", "chat", "completion", "ai", "model"], "llm"),
+    (["image", "picture", "stable diffusion", "dall-e", "art", "photo", "visual", "draw"], "imagegen"),
+    (["http", "rest", "api", "fetch", "request", "get", "post", "webhook", "call",
+      "endpoint", "external", "url", "curl"], "http"),
+    (["code", "python", "javascript", "script", "execute", "run", "compute", "calculate",
+      "custom", "logic", "function"], "code"),
+    (["transform", "map", "reshape", "convert", "format", "parse", "extract",
+      "jinja", "template", "filter", "select"], "transform"),
+    (["memory", "store", "save", "remember", "retrieve", "search", "vector", "chroma",
+      "context", "recall", "lookup"], "memory"),
+    (["if", "else", "condition", "branch", "route", "check", "decision", "compare",
+      "switch", "when"], "ifelse"),
+    (["merge", "join", "combine", "collect", "aggregate", "fan-in", "gather"], "merge"),
+    (["loop", "foreach", "iterate", "each", "list", "array", "repeat", "batch"], "foreach"),
+    (["schedule", "cron", "timer", "interval", "recurring", "periodic", "daily",
+      "hourly", "trigger"], "scheduler"),
+    (["webhook", "inbound", "receive", "listen", "incoming", "event", "trigger"], "webhook_trigger"),
+    (["subflow", "reuse", "embed", "nested", "component", "workflow"], "subflow"),
+    (["end", "finish", "done", "output", "result", "complete", "final"], "end"),
+]
+
+# Node-type default configuration templates for autocomplete.
+_NODE_CONFIG_TEMPLATES: dict[str, dict] = {
+    "llm": {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "system_prompt": "You are a helpful assistant.",
+        "temperature": 0.7,
+    },
+    "imagegen": {
+        "model": "stable-diffusion-xl-1024-v1-0",
+        "steps": 30,
+        "cfg_scale": 7.0,
+        "width": 1024,
+        "height": 1024,
+    },
+    "http": {
+        "method": "GET",
+        "url": "",
+        "headers": {},
+        "auth_type": "none",
+        "retry_count": 3,
+        "timeout": 30,
+    },
+    "code": {
+        "language": "python",
+        "code": "# input is available as 'input_data'\noutput = input_data",
+        "timeout": 30,
+    },
+    "transform": {
+        "template": "{{ input }}",
+        "mode": "jinja2",
+    },
+    "memory": {
+        "operation": "store",
+        "backend": "sqlite_fts",
+        "collection": "default",
+    },
+    "ifelse": {
+        "condition": "{{output}} != ''",
+        "true_output": "{{output}}",
+        "false_output": "",
+    },
+    "merge": {
+        "strategy": "first",
+    },
+    "foreach": {
+        "items_path": "{{output}}",
+    },
+    "scheduler": {
+        "cron": "0 9 * * 1-5",
+        "timezone": "UTC",
+    },
+    "webhook_trigger": {
+        "verify_signature": False,
+    },
+    "subflow": {
+        "flow_id": "",
+        "input_mapping": {},
+        "max_depth": 3,
+    },
+    "error_handler": {
+        "suppress_error": False,
+        "fallback_content": "",
+    },
+}
+
+# Common workflow patterns (sequence of node types) from marketplace templates.
+_WORKFLOW_PATTERNS: list[dict] = [
+    {
+        "name": "Inbox Triage",
+        "description": "Classify and route incoming messages",
+        "sequence": ["start", "llm", "code", "memory", "end"],
+        "tags": ["classification", "triage", "email"],
+    },
+    {
+        "name": "Content Research Pipeline",
+        "description": "Fetch content, summarize, and store",
+        "sequence": ["start", "http", "llm", "code", "memory", "end"],
+        "tags": ["research", "content", "summarization"],
+    },
+    {
+        "name": "API → Transform → Store",
+        "description": "Call external API, transform response, persist result",
+        "sequence": ["start", "http", "transform", "memory", "end"],
+        "tags": ["api", "etl", "integration"],
+    },
+    {
+        "name": "Scheduled Report",
+        "description": "Cron-triggered data fetch and report generation",
+        "sequence": ["scheduler", "http", "llm", "http", "end"],
+        "tags": ["reporting", "scheduled", "automation"],
+    },
+    {
+        "name": "Conditional Processing",
+        "description": "Branch based on content, execute different paths",
+        "sequence": ["start", "llm", "ifelse", "code", "end"],
+        "tags": ["conditional", "branching", "routing"],
+    },
+    {
+        "name": "Webhook → Enrich → Notify",
+        "description": "Receive event, enrich with AI, send notification",
+        "sequence": ["webhook_trigger", "llm", "http", "end"],
+        "tags": ["webhook", "enrichment", "notification"],
+    },
+    {
+        "name": "Batch Processing",
+        "description": "Iterate over list items, process each with AI",
+        "sequence": ["start", "http", "foreach", "llm", "merge", "end"],
+        "tags": ["batch", "loop", "list"],
+    },
+    {
+        "name": "Image Generation Pipeline",
+        "description": "Generate prompt, create image, store result",
+        "sequence": ["start", "llm", "imagegen", "memory", "end"],
+        "tags": ["image", "generation", "creative"],
+    },
+]
+
+
+def _score_node_suggestions(
+    current_node_type: str,
+    existing_node_types: list[str],
+) -> list[dict]:
+    """Return ranked next-node suggestions for *current_node_type*.
+
+    Combines the static transition table with a recency penalty for node
+    types that already appear many times in the workflow.
+    """
+    base_weights = _NODE_TRANSITION_WEIGHTS.get(current_node_type, {})
+    if not base_weights:
+        # Fallback: generic suggestions
+        base_weights = {"llm": 2.0, "code": 1.5, "http": 1.5, "transform": 1.0, "end": 1.0}
+
+    # Count existing occurrences for penalty
+    type_counts: dict[str, int] = {}
+    for t in existing_node_types:
+        type_counts[t] = type_counts.get(t, 0) + 1
+
+    scored: list[tuple[float, str]] = []
+    for node_type, weight in base_weights.items():
+        penalty = 0.3 * type_counts.get(node_type, 0)
+        final_score = max(0.0, weight - penalty)
+        scored.append((final_score, node_type))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [
+        {"node_type": nt, "score": round(score, 3), "config_template": _NODE_CONFIG_TEMPLATES.get(nt, {})}
+        for score, nt in scored
+        if score > 0
+    ]
+
+
+def _match_description_to_node(description: str) -> list[dict]:
+    """Return node suggestions ranked by keyword overlap with *description*."""
+    desc_lower = description.lower()
+    scores: dict[str, float] = {}
+    for keywords, node_type in _KEYWORD_NODE_MAP:
+        for kw in keywords:
+            if kw in desc_lower:
+                scores[node_type] = scores.get(node_type, 0.0) + 1.0
+    if not scores:
+        return []
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return [
+        {
+            "node_type": nt,
+            "confidence": round(score / max(scores.values()), 3),
+            "config_template": _NODE_CONFIG_TEMPLATES.get(nt, {}),
+        }
+        for nt, score in ranked
+    ]
+
+
+class SuggestNextNodeRequest(BaseModel):
+    """Request body for POST /ai-assist/suggest-next."""
+
+    current_node_type: str
+    existing_node_types: list[str] = []
+    limit: int = 5
+
+
+class AutocompleteRequest(BaseModel):
+    """Request body for POST /ai-assist/autocomplete."""
+
+    description: str
+    limit: int = 5
+
+
+@v1.post("/ai-assist/suggest-next", tags=["AI Assist"])
+async def ai_assist_suggest_next(
+    body: SuggestNextNodeRequest,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Suggest likely next-node types given the current node type.
+
+    Uses a weighted transition table derived from common workflow patterns,
+    adjusted by recency penalty for node types already present in the workflow.
+    Returns up to *limit* suggestions ordered by score descending.
+    """
+    suggestions = _score_node_suggestions(body.current_node_type, body.existing_node_types)
+    return {"suggestions": suggestions[: body.limit]}
+
+
+@v1.post("/ai-assist/autocomplete", tags=["AI Assist"])
+async def ai_assist_autocomplete(
+    body: AutocompleteRequest,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Suggest node configurations from a natural-language description.
+
+    Matches keywords in *description* against known node-type vocabulary.
+    Returns matching node types with their default configuration templates.
+    """
+    matches = _match_description_to_node(body.description)
+    return {"matches": matches[: body.limit]}
+
+
+@v1.get("/ai-assist/patterns", tags=["AI Assist"])
+async def ai_assist_patterns(
+    tag: str | None = None,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Return the built-in workflow pattern library.
+
+    Optionally filter by *tag* (case-insensitive substring match).
+    Each pattern includes a name, description, node sequence, and tags.
+    """
+    patterns = _WORKFLOW_PATTERNS
+    if tag:
+        tag_lower = tag.lower()
+        patterns = [p for p in patterns if any(tag_lower in t for t in p["tags"])]
+    return {"patterns": patterns, "total": len(patterns)}
+
+
+# ---------------------------------------------------------------------------
+# N-40: Workflow Debugging — Step-Through Execution
+# ---------------------------------------------------------------------------
+
+@dataclass
+class DebugSession:
+    """Represents a single step-through debug session for a workflow run.
+
+    The session tracks which nodes have been visited, stores captured
+    input/output at each breakpoint, and exposes an asyncio.Event so the
+    background execution task can be paused and resumed from the API.
+    """
+
+    session_id: str
+    run_id: str
+    flow_id: str
+    status: str  # "paused" | "running" | "completed" | "aborted"
+    breakpoints: set[str]
+    current_node_id: str | None
+    current_node_input: dict
+    current_node_output: dict
+    execution_history: list  # list[dict]: {node_id, input, output, skipped, timestamp}
+    created_at: float
+    paused_at: float | None
+    _resume_event: asyncio.Event
+    _skip_flag: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the session to a dict safe for API responses."""
+        return {
+            "session_id": self.session_id,
+            "run_id": self.run_id,
+            "flow_id": self.flow_id,
+            "status": self.status,
+            "breakpoints": sorted(self.breakpoints),
+            "current_node_id": self.current_node_id,
+            "current_node_input": self.current_node_input,
+            "current_node_output": self.current_node_output,
+            "execution_history": list(self.execution_history),
+            "created_at": self.created_at,
+            "paused_at": self.paused_at,
+        }
+
+
+class DebugSessionStore:
+    """Thread-safe in-memory registry of active DebugSession objects.
+
+    Provides create/get/delete/list operations. A ``reset()`` method is
+    available for test teardown.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._sessions: dict[str, DebugSession] = {}  # session_id → DebugSession
+        self._by_run: dict[str, str] = {}  # run_id → session_id
+
+    def create(self, run_id: str, flow_id: str, breakpoints: list[str]) -> DebugSession:
+        """Create and register a new DebugSession.
+
+        Args:
+            run_id: The workflow run ID this session is attached to.
+            flow_id: The flow being debugged.
+            breakpoints: Node IDs where execution should pause.
+
+        Returns:
+            The newly created DebugSession.
+        """
+        session = DebugSession(
+            session_id=str(uuid.uuid4()),
+            run_id=run_id,
+            flow_id=flow_id,
+            status="running",
+            breakpoints=set(breakpoints),
+            current_node_id=None,
+            current_node_input={},
+            current_node_output={},
+            execution_history=[],
+            created_at=time.time(),
+            paused_at=None,
+            _resume_event=asyncio.Event(),
+            _skip_flag=False,
+        )
+        with self._lock:
+            self._sessions[session.session_id] = session
+            self._by_run[run_id] = session.session_id
+        return session
+
+    def get(self, session_id: str) -> "DebugSession | None":
+        """Return the DebugSession for *session_id*, or None."""
+        with self._lock:
+            return self._sessions.get(session_id)
+
+    def get_by_run_id(self, run_id: str) -> "DebugSession | None":
+        """Return the DebugSession attached to *run_id*, or None."""
+        with self._lock:
+            sid = self._by_run.get(run_id)
+            if sid is None:
+                return None
+            return self._sessions.get(sid)
+
+    def list_active(self) -> "list[DebugSession]":
+        """Return all sessions that are not yet completed or aborted."""
+        with self._lock:
+            return [
+                s
+                for s in self._sessions.values()
+                if s.status not in ("completed", "aborted")
+            ]
+
+    def delete(self, session_id: str) -> None:
+        """Remove the session from the registry.
+
+        Args:
+            session_id: The session to remove.
+        """
+        with self._lock:
+            session = self._sessions.pop(session_id, None)
+            if session is not None:
+                self._by_run.pop(session.run_id, None)
+
+    def reset(self) -> None:
+        """Clear all sessions — for test teardown only."""
+        with self._lock:
+            self._sessions.clear()
+            self._by_run.clear()
+
+
+debug_session_store = DebugSessionStore()
+
+_DEBUG_BREAKPOINT_TIMEOUT_SECONDS = 300.0
+
+
+async def _run_flow_debug(
+    flow_id: str,
+    run_id: str,
+    session_id: str,
+    input_data: dict[str, Any],
+) -> None:
+    """Self-contained debug execution function.
+
+    Iterates over a flow's nodes in topological order. Before each node it
+    checks whether a breakpoint is set. If so, the execution pauses and waits
+    for the /continue or /skip signal. After each node it records the result
+    in the session's execution_history.
+
+    This function is designed to run as a background asyncio task. It never
+    modifies the main execution engine.
+
+    Args:
+        flow_id: The flow to execute.
+        run_id: The pre-generated run ID returned to the caller.
+        session_id: The DebugSession to drive.
+        input_data: Initial input passed to each node.
+    """
+    session = debug_session_store.get(session_id)
+    if session is None:
+        logger.warning("Debug background task: session %s not found, aborting", session_id)
+        return
+
+    # Persist a stub WorkflowRun so GET /runs/{run_id} works
+    workflow_run_repo = WorkflowRunRepository()
+    stub_status: dict[str, Any] = {
+        "run_id": run_id,
+        "flow_id": flow_id,
+        "status": "running",
+        "current_applet": None,
+        "progress": 0,
+        "total_steps": 0,
+        "start_time": time.time(),
+        "results": {},
+        "input_data": input_data,
+        "completed_applets": [],
+    }
+    try:
+        await workflow_run_repo.save(stub_status)
+    except Exception as exc:
+        logger.warning("Debug run %s: failed to persist stub status: %s", run_id, exc)
+
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        logger.error("Debug run %s: flow %s not found", run_id, flow_id)
+        session.status = "aborted"
+        session._resume_event.set()
+        return
+
+    flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=False) or flow
+
+    flow_nodes: list[dict[str, Any]] = flow.get("nodes", [])
+    flow_edges: list[dict[str, Any]] = flow.get("edges", [])
+
+    # Build adjacency structures for topological sort
+    nodes_by_id: dict[str, dict[str, Any]] = {
+        n["id"]: n
+        for n in flow_nodes
+        if isinstance(n, dict) and isinstance(n.get("id"), str)
+    }
+    edges_by_source: dict[str, list[dict[str, Any]]] = {}
+    incoming_sources_by_target: dict[str, list[str]] = {}
+    for edge in flow_edges:
+        if not isinstance(edge, dict):
+            continue
+        src = edge.get("source")
+        tgt = edge.get("target")
+        if not isinstance(src, str) or not isinstance(tgt, str):
+            continue
+        edges_by_source.setdefault(src, []).append(edge)
+        srcs = incoming_sources_by_target.setdefault(tgt, [])
+        if src not in srcs:
+            srcs.append(src)
+
+    # Produce a flat linear order via topological layers
+    layers = Orchestrator._topological_layers(nodes_by_id, edges_by_source, incoming_sources_by_target)
+    ordered_node_ids: list[str] = [nid for layer in layers for nid in layer]
+
+    stub_status["total_steps"] = len(ordered_node_ids)
+    try:
+        await workflow_run_repo.save(stub_status)
+    except Exception as exc:
+        logger.warning("Debug run %s: failed to update total_steps: %s", run_id, exc)
+
+    context: dict[str, Any] = {"input": input_data, "results": {}, "run_id": run_id}
+
+    for node_id in ordered_node_ids:
+        # Check abort before every node
+        if session.status == "aborted":
+            logger.info("Debug session %s aborted before node %s", session_id, node_id)
+            return
+
+        node = nodes_by_id.get(node_id)
+        if not isinstance(node, dict):
+            continue
+
+        node_type = str(node.get("type", "")).strip().lower()
+
+        # ---- Breakpoint gate ----
+        if node_id in session.breakpoints:
+            session.status = "paused"
+            session.current_node_id = node_id
+            session.current_node_input = dict(input_data)
+            session.current_node_output = {}
+            session.paused_at = time.time()
+            session._resume_event.clear()
+            session._skip_flag = False
+
+            logger.info(
+                "Debug session %s paused at node %s (breakpoint)", session_id, node_id
+            )
+
+            try:
+                await asyncio.wait_for(
+                    session._resume_event.wait(),
+                    timeout=_DEBUG_BREAKPOINT_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Debug session %s timed out waiting at node %s; aborting",
+                    session_id,
+                    node_id,
+                )
+                session.status = "aborted"
+                return
+
+            # Re-check abort after resume
+            if session.status == "aborted":
+                logger.info(
+                    "Debug session %s aborted after resume signal at node %s",
+                    session_id,
+                    node_id,
+                )
+                return
+
+        # ---- Skip or execute ----
+        skipped = session._skip_flag
+        node_output: dict[str, Any] = {}
+
+        if skipped:
+            node_output = {}
+            logger.info("Debug session %s skipping node %s", session_id, node_id)
+        else:
+            if node_type in ("start", "end"):
+                node_output = dict(input_data)
+            else:
+                try:
+                    applet = await Orchestrator.load_applet(node_type)
+                    node_data = node.get("data", {})
+                    if not isinstance(node_data, dict):
+                        node_data = {}
+
+                    message = AppletMessage(
+                        content=input_data,
+                        context=context,
+                        metadata={"node_id": node_id, "run_id": run_id, "node_data": node_data},
+                    )
+
+                    response: AppletMessage = await asyncio.wait_for(
+                        applet.on_message(message),
+                        timeout=float(node_data.get("timeout_seconds", 60.0)),
+                    )
+                    node_output = (
+                        response.content
+                        if isinstance(response.content, dict)
+                        else {"output": response.content}
+                    )
+                    context.update(response.context)
+                    context["results"][node_id] = node_output
+                except TimeoutError:
+                    logger.warning(
+                        "Debug session %s: node %s timed out during execution",
+                        session_id,
+                        node_id,
+                    )
+                    node_output = {"error": "timeout"}
+                except Exception as exc:
+                    logger.error(
+                        "Debug session %s: node %s execution error: %s",
+                        session_id,
+                        node_id,
+                        exc,
+                    )
+                    node_output = {"error": str(exc)}
+
+        # ---- Record history ----
+        history_entry: dict[str, Any] = {
+            "node_id": node_id,
+            "input": dict(input_data),
+            "output": node_output,
+            "skipped": skipped,
+            "timestamp": time.time(),
+        }
+        session.execution_history.append(history_entry)
+
+        # Update current_node_output so GET reflects the completed node
+        if session.current_node_id == node_id:
+            session.current_node_output = node_output
+
+        # Reset skip flag for the next node
+        session._skip_flag = False
+
+        # Use node output as next input for simple linear flows
+        if node_output and not skipped:
+            input_data = node_output
+
+        if session.status not in ("paused", "aborted"):
+            session.status = "running"
+
+    # All nodes done
+    session.status = "completed"
+    session.current_node_id = None
+
+    try:
+        stub_status["status"] = "success"
+        stub_status["end_time"] = time.time()
+        await workflow_run_repo.save(stub_status)
+    except Exception as exc:
+        logger.warning("Debug run %s: failed to persist final status: %s", run_id, exc)
+
+    logger.info("Debug session %s completed (run_id=%s)", session_id, run_id)
+
+
+# ---- Pydantic request models ----
+
+
+class StartDebugRequest(BaseModel):
+    """Body for POST /workflows/{flow_id}/debug."""
+
+    input_data: dict[str, Any] = Field(default_factory=dict)
+    breakpoints: list[str] = Field(default_factory=list)
+
+
+class UpdateBreakpointsRequest(BaseModel):
+    """Body for POST /debug/{session_id}/breakpoints."""
+
+    breakpoints: list[str] = Field(..., description="New breakpoint node IDs (replaces current set).")
+
+
+# ---- Debug endpoints ----
+
+
+@v1.post("/workflows/{flow_id}/debug", tags=["Debug"], status_code=201)
+async def start_debug_session(
+    flow_id: str,
+    body: StartDebugRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Start a new step-through debug execution for a flow.
+
+    Creates a DebugSession and launches the debug execution as a background
+    task. Returns the session_id and run_id immediately so the caller can
+    poll GET /debug/{session_id} for state.
+
+    Args:
+        flow_id: The flow to debug.
+        body: input_data and list of breakpoint node IDs.
+        current_user: Authenticated user (injected by FastAPI).
+
+    Returns:
+        JSON with session_id, run_id, status, and breakpoints.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    run_id = str(uuid.uuid4())
+    session = debug_session_store.create(
+        run_id=run_id,
+        flow_id=flow_id,
+        breakpoints=body.breakpoints,
+    )
+
+    asyncio.create_task(
+        _run_flow_debug(
+            flow_id=flow_id,
+            run_id=run_id,
+            session_id=session.session_id,
+            input_data=dict(body.input_data),
+        )
+    )
+
+    logger.info(
+        "Debug session %s started for flow %s (run_id=%s, breakpoints=%s)",
+        session.session_id,
+        flow_id,
+        run_id,
+        body.breakpoints,
+    )
+
+    return {
+        "session_id": session.session_id,
+        "run_id": run_id,
+        "status": session.status,
+        "breakpoints": sorted(session.breakpoints),
+    }
+
+
+@v1.get("/debug/{session_id}", tags=["Debug"])
+async def get_debug_session(
+    session_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return the current state of a debug session.
+
+    Args:
+        session_id: The debug session to query.
+        current_user: Authenticated user.
+
+    Returns:
+        Full session state dict including execution history.
+
+    Raises:
+        HTTPException 404: When session_id is not found.
+    """
+    session = debug_session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Debug session not found")
+    return session.to_dict()
+
+
+@v1.post("/debug/{session_id}/continue", tags=["Debug"])
+async def debug_continue(
+    session_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Resume execution from a breakpoint.
+
+    Signals the paused background task to continue to the next node (or next
+    breakpoint). If the session is not currently paused the call is a no-op
+    that still returns 200.
+
+    Args:
+        session_id: The debug session to resume.
+        current_user: Authenticated user.
+
+    Returns:
+        Updated session state.
+
+    Raises:
+        HTTPException 404: When session_id is not found.
+    """
+    session = debug_session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Debug session not found")
+
+    if session.status == "paused":
+        session._skip_flag = False
+        session.status = "running"
+        session._resume_event.set()
+        logger.info("Debug session %s resumed (continue)", session_id)
+
+    return session.to_dict()
+
+
+@v1.post("/debug/{session_id}/skip", tags=["Debug"])
+async def debug_skip(
+    session_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Skip the currently paused node and resume execution.
+
+    The paused node's output is recorded as an empty dict and marked
+    ``skipped=True`` in the execution history.
+
+    Args:
+        session_id: The debug session in which to skip the current node.
+        current_user: Authenticated user.
+
+    Returns:
+        Updated session state.
+
+    Raises:
+        HTTPException 404: When session_id is not found.
+    """
+    session = debug_session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Debug session not found")
+
+    if session.status == "paused":
+        session._skip_flag = True
+        session.status = "running"
+        session._resume_event.set()
+        logger.info("Debug session %s resumed with skip at node %s", session_id, session.current_node_id)
+
+    return session.to_dict()
+
+
+@v1.post("/debug/{session_id}/breakpoints", tags=["Debug"])
+async def update_debug_breakpoints(
+    session_id: str,
+    body: UpdateBreakpointsRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Replace the breakpoint set for a debug session.
+
+    The new list takes effect immediately: the next node evaluated against the
+    breakpoint set will see the updated collection.
+
+    Args:
+        session_id: The debug session to update.
+        body: New breakpoints list (replaces existing set).
+        current_user: Authenticated user.
+
+    Returns:
+        Updated session state.
+
+    Raises:
+        HTTPException 404: When session_id is not found.
+    """
+    session = debug_session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Debug session not found")
+
+    session.breakpoints = set(body.breakpoints)
+    logger.info("Debug session %s breakpoints updated: %s", session_id, body.breakpoints)
+    return session.to_dict()
+
+
+@v1.delete("/debug/{session_id}", tags=["Debug"], status_code=204)
+async def abort_debug_session(
+    session_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Abort a debug session, stopping the background execution task.
+
+    Sets status to "aborted" and signals the resume event so the background
+    task can detect the abort and exit cleanly.
+
+    Args:
+        session_id: The debug session to abort.
+        current_user: Authenticated user.
+
+    Raises:
+        HTTPException 404: When session_id is not found.
+    """
+    session = debug_session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Debug session not found")
+
+    session.status = "aborted"
+    session._resume_event.set()  # unblock any waiting background task
+    logger.info("Debug session %s aborted", session_id)
+
+
 # Include versioned router
 app.include_router(v1)
 
@@ -17494,7 +18359,6 @@ async def websocket_endpoint(websocket: WebSocket):
             f"WebSocket session {session_id} cleaned up. "
             f"Remaining clients: {len(ws_manager.connected_websockets)}"
         )
-
 
 # For direct execution
 if __name__ == "__main__":

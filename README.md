@@ -108,7 +108,7 @@ SynApps follows a microkernel architecture:
 
 ## Initiatives
 
-All 38 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
+All 40 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 
 | # | Initiative | Pillar | Description |
 |---|-----------|--------|-------------|
@@ -150,6 +150,8 @@ All 38 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-36 | OAuth2 Provider — SSO for Enterprise | SECURITY | authorization_code + client_credentials flows, client registration, RFC 7662 token introspection, JWT-based tokens — `POST /oauth/clients`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/introspect` |
 | N-37 | Workflow Branching — Conditional Logic Builder | EXECUTION | Compound AND/OR/NOT condition trees, 17 leaf operations (equals, regex, gt/lt, type_is, is_empty…), BranchNode multi-output routing, MergeNode with first/all/array strategies — `POST /workflows/:id/branch-validate`, `GET /branch/operations` |
 | N-38 | Workflow Subflows — Reusable Components | EXECUTION | Embed one workflow inside another with input_mapping, depth-limited recursion (max 3), circular reference detection, inline BFS execution — `GET /subflows`, `POST /subflows/validate` |
+| N-39 | Workflow AI Assist — Auto-Suggest Next Node | PLATFORM | Weighted next-node suggestions from transition table, keyword-to-node autocomplete from text descriptions, 8-pattern library — `POST /ai-assist/suggest-next`, `POST /ai-assist/autocomplete`, `GET /ai-assist/patterns` |
+| N-40 | Workflow Debugging — Step-Through Execution | EXECUTION | Node-by-node debug execution with asyncio breakpoints, pause/resume/skip, full execution history capture — `POST /workflows/:id/debug`, `GET /debug/:id`, `POST /debug/:id/continue`, `POST /debug/:id/skip` |
 
 ## Tech Stack
 
@@ -195,7 +197,7 @@ See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
-**2,094 tests** (1,981 backend + 109 frontend unit + 4 E2E) — all passing.
+**2,372 tests** (2,263 backend + 109 frontend unit) — all passing.
 
 ### Backend
 

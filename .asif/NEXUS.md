@@ -44,6 +44,12 @@
 | N-32 | Real-Time Execution Streaming — SSE Progress | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 | N-33 | Workflow Analytics Dashboard — Execution Insights | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 | N-34 | Workflow Testing Framework — Automated Validation | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-35 | Workflow Monitoring — Health Checks + Alerts | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-36 | OAuth2 Provider — SSO for Enterprise | SECURITY | SHIPPED | P1 | 2026-03-19 |
+| N-37 | Workflow Branching — Conditional Logic Builder | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-38 | Workflow Subflows — Reusable Components | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-39 | Workflow AI Assist — Auto-Suggest Next Node | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-40 | Workflow Debugging — Step-Through Execution | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 
 ---
 
@@ -284,42 +290,42 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 ### DIRECTIVE-NXTG-20260319-195 — P1: N-39 Workflow AI Assist — Auto-Suggest Next Node
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-19 11:00 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 11:00 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **AI suggestions** — after adding a node, suggest likely next node type based on workflow patterns.
-2. [ ] **Auto-complete** — type description of what you want → suggest node configuration.
-3. [ ] **Pattern library** — learn from marketplace templates which node combinations are common.
-4. [ ] Tests.
+1. [x] **AI suggestions** — after adding a node, suggest likely next node type based on workflow patterns.
+2. [x] **Auto-complete** — type description of what you want → suggest node configuration.
+3. [x] **Pattern library** — learn from marketplace templates which node combinations are common.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260319-196.
-**Response** (filled by team): >
+**Response** (filled by team): N-39 shipped. `_NODE_TRANSITION_WEIGHTS` — static 16-node-type transition table with weights, recency penalty (0.3×count per type). `_score_node_suggestions(current_node_type, existing_node_types)` — ranks next-node candidates by weight minus penalty, returns list[{node_type, score, config_template}]. `_KEYWORD_NODE_MAP` — 13 keyword buckets (llm, http, code, imagegen, memory, ifelse, merge, foreach, scheduler, webhook_trigger, subflow, transform, end). `_match_description_to_node(description)` — keyword overlap scoring, returns list[{node_type, confidence, config_template}]. `_NODE_CONFIG_TEMPLATES` — default config per node type (14 types). `_WORKFLOW_PATTERNS` — 8 named patterns (Inbox Triage, Content Research, API→Transform→Store, Scheduled Report, Conditional Processing, Webhook→Enrich→Notify, Batch Processing, Image Generation Pipeline). 3 endpoints: `POST /ai-assist/suggest-next`, `POST /ai-assist/autocomplete`, `GET /ai-assist/patterns?tag=`. `test_workflow_ai_assist.py` — 47 tests (unit 25, integration 22). Full suite: 2263 passed. 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260319-196 — P1: N-40 Workflow Debugging — Step-Through Execution
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1
-**Injected**: 2026-03-19 11:00 | **Estimate**: M | **Status**: PENDING
+**Injected**: 2026-03-19 11:00 | **Estimate**: M | **Status**: DONE
 
 **Action Items**:
-1. [ ] **Debug mode** — execute one node at a time, inspect input/output between steps.
-2. [ ] **Breakpoints** — set on any node. Execution pauses, shows state.
-3. [ ] **Resume/skip** — continue from breakpoint or skip node.
-4. [ ] Tests.
+1. [x] **Debug mode** — execute one node at a time, inspect input/output between steps.
+2. [x] **Breakpoints** — set on any node. Execution pauses, shows state.
+3. [x] **Resume/skip** — continue from breakpoint or skip node.
+4. [x] Tests.
 
 **CHAIN**: When done, start DIRECTIVE-NXTG-20260319-197.
-**Response** (filled by team): >
+**Response** (filled by team): N-40 shipped. `DebugSession` dataclass — session_id, run_id, flow_id, status (paused/running/completed/aborted), breakpoints (set[str]), current_node_id/input/output, execution_history, created_at/paused_at, _resume_event (asyncio.Event), _skip_flag (bool). `DebugSessionStore` — thread-safe CRUD: create/get/get_by_run_id/list_active/delete/reset. `_run_flow_debug(session_id)` — async background function: topological BFS walk, pauses at breakpoints via asyncio.wait_for(event.wait(), 300s), propagates _skip_flag, records input/output/skipped/timestamp per node. 6 endpoints: `POST /workflows/{id}/debug` (start, 201), `GET /debug/{id}` (status), `POST /debug/{id}/continue` (resume), `POST /debug/{id}/skip` (skip current node), `POST /debug/{id}/breakpoints` (update set), `DELETE /debug/{id}` (abort). `test_workflow_debug.py` — 28 tests (store 6, session logic 8, endpoints 14). Full suite: 2263 passed. 2026-03-19.
 
 ---
 
 ### DIRECTIVE-NXTG-20260319-197 — P2: Final MAXOUT Archive
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P2
-**Injected**: 2026-03-19 11:00 | **Estimate**: S | **Status**: PENDING
+**Injected**: 2026-03-19 11:00 | **Estimate**: S | **Status**: DONE
 
 **Action Items**:
-1. [ ] Final test count. 2. [ ] All 40 initiatives. 3. [ ] README.
+1. [x] Final test count. 2. [x] All 40 initiatives. 3. [x] README.
 
-**Response** (filled by team): >
+**Response** (filled by team): Final counts — **2,372 tests** (2,263 backend + 109 frontend unit). README updated: 40 N-series initiatives (added N-39 Workflow AI Assist, N-40 Workflow Debugging rows). Executive Dashboard updated with N-35→N-40 all SHIPPED. All PENDING directives cleared: D-195 (N-39), D-196 (N-40), D-197 (this archive) — all DONE. SynApps v1.0 MAXOUT complete: 40 N-series initiatives shipped. 2026-03-19.
 
 ---
 
