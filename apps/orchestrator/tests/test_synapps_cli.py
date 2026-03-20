@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 # Make synapps_cli importable from the repo root test runner
@@ -17,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cli"))
 
 from synapps_cli.config import DEFAULT_URL, get_config  # noqa: E402
 from synapps_cli.main import cli  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Helpers

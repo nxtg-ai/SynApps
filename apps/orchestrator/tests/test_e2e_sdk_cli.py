@@ -28,7 +28,6 @@ import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
@@ -72,9 +71,13 @@ _load_package(_D129_NS, _SDK_DIR, ["models", "client", "async_client"])
 _load_package("synapps_cli", _CLI_DIR, ["config", "main"])
 
 from _synapps_d129.client import Client  # noqa: E402
-from _synapps_d129.models import ExecutionLog, MarketplaceListing, Workflow, WorkflowRun  # noqa: E402
+from _synapps_d129.models import (  # noqa: E402
+    ExecutionLog,
+    MarketplaceListing,
+    Workflow,
+    WorkflowRun,
+)
 from synapps_cli.main import cli  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers

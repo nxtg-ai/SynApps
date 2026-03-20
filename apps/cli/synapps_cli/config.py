@@ -12,7 +12,7 @@ def get_config() -> dict:
         try:
             data = json.loads(CONFIG_PATH.read_text())
             cfg.update(data)
-        except (json.JSONDecodeError, OSError) as exc:
+        except (json.JSONDecodeError, OSError):
             # config file unreadable — fall through to env vars
             pass  # noqa: S110
     cfg["url"] = os.environ.get("SYNAPPS_URL", cfg["url"]).rstrip("/")
