@@ -50,6 +50,10 @@
 | N-38 | Workflow Subflows — Reusable Components | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 | N-39 | Workflow AI Assist — Auto-Suggest Next Node | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 | N-40 | Workflow Debugging — Step-Through Execution | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-41 | Workflow Cost Tracker | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-42 | Execution Replay | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-43 | Workflow Diff — Version Compare | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-44 | Node Performance Profiler | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 
 ---
 
@@ -287,6 +291,77 @@ IDEA ──> RESEARCHED ──> DECIDED ──> BUILDING ──> SHIPPED
 
 > 41 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-12, Wolf).
 > 15 completed directives archived to [NEXUS-archive.md](./NEXUS-archive.md) (2026-03-18, Wolf) — D-313-02, D-314-08, D-03, D-51, D-50, D-57, D-69, D-68, D-67, D-78, D-77, D-84, D-93, D-92, D-91.
+
+### DIRECTIVE-NXTG-20260319-201 — P1: N-41 Workflow Cost Tracker
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 20:00 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **Cost record** — per execution: token_input, token_output, model, estimated_usd (LLM nodes), api_calls (HTTP nodes).
+2. [x] **`GET /executions/{id}/cost`** — cost breakdown for one execution.
+3. [x] **`GET /workflows/{id}/cost-summary`** — aggregate cost across all runs: total_usd, avg_usd_per_run, total_tokens.
+4. [x] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-202.
+**Response** (filled by team): N-41 shipped. `ExecutionCostRecord` dataclass — execution_id, flow_id, node_costs (list[dict]: node_id, node_type, token_input, token_output, model, estimated_usd, api_calls), total_usd, total_tokens, created_at. `_estimate_node_cost()` — LLM: token_in=prompt_len//4, token_out=output_len//4, usd=(in×0.000005+out×0.000015); HTTP: api_calls=1, usd=0; others: all zero. `CostTrackerStore` — thread-safe CRUD + reset; cost_tracker_store singleton. Integration: fires post-execution in _run_flow_impl wrapped in try/except+logger.warning. 2 endpoints: GET /executions/{id}/cost (200/404), GET /workflows/{id}/cost-summary ({run_count, total_usd, avg_usd_per_run, total_tokens, avg_tokens_per_run, records}). test_workflow_cost.py — 19 tests. Full suite: 2329 passed. 2026-03-19.
+
+---
+
+### DIRECTIVE-NXTG-20260319-202 — P1: N-42 Execution Replay
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 20:00 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **Replay endpoint** — `POST /executions/{id}/replay` clones previous run's input payload and triggers a fresh execution.
+2. [x] **`GET /executions/{id}/replay-history`** — list replay chain (original → replay → replay-of-replay…).
+3. [x] **`ReplayStore`** — tracks original_run_id → [replay_run_ids] chain.
+4. [x] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-203.
+**Response** (filled by team): N-42 shipped. `ReplayStore` — thread-safe _chains (original→[replays]) + _reverse (replay→original); register_replay(), get_chain() (follows root), get_original(), reset(); replay_store singleton. `ExecutionLogStore` extended: _execution_inputs dict + record_input(run_id, flow_id, input)/get_input(run_id)→(flow_id,input)|None. Integration: record_input called in _run_flow_impl at start. POST /executions/{id}/replay: looks up input, spawns asyncio task, registers replay chain, returns 202 {replay_run_id, original_run_id, flow_id, status}. GET /executions/{id}/replay-history: {execution_id, chain, length}. test_execution_replay.py — 14 tests. Full suite: 2329 passed. 2026-03-19.
+
+---
+
+### DIRECTIVE-NXTG-20260319-203 — P1: N-43 Workflow Diff — Version Compare
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 20:00 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **`POST /workflows/{id}/diff`** — compare two workflow snapshots: `{v1: <flow_json>, v2: <flow_json>}`. Returns added/removed/modified nodes and edges.
+2. [x] **Diff engine** — node diff by id (added, removed, modified fields), edge diff by source+target.
+3. [x] **`GET /workflows/{id}/version-history`** — list saved snapshots with timestamps.
+4. [x] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-204.
+**Response** (filled by team): N-43 shipped. `_diff_workflows(v1, v2)` — pure function: node diff by id (added/removed/modified with field-level changes dict), edge diff by (source,target) tuple; summary: {nodes_added/removed/modified, edges_added/removed/modified, is_identical}. `WorkflowVersionStore` — thread-safe: save_version (uuid version_id, time.time()), list_versions (omits snapshot, includes node_count/edge_count), get_version (returns full snapshot), reset; workflow_version_store singleton. WorkflowDiffRequest + WorkflowVersionSaveRequest Pydantic models. 4 endpoints: POST /workflows/{id}/diff, POST /workflows/{id}/versions, GET /workflows/{id}/version-history, GET /workflows/{id}/versions/{vid}. test_workflow_profiler.py includes 8 TestDiffEngine + 6 TestVersionStore + 7 TestDiffEndpoints. Full suite: 2329 passed. 2026-03-19.
+
+---
+
+### DIRECTIVE-NXTG-20260319-204 — P1: N-44 Node Performance Profiler
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P1
+**Injected**: 2026-03-19 20:00 | **Estimate**: M | **Status**: DONE
+
+**Action Items**:
+1. [x] **`GET /workflows/{id}/profile`** — per-node: avg_ms, p50_ms, p95_ms, p99_ms, run_count, slowest_run_id, fastest_run_id.
+2. [x] **`GET /executions/{id}/profile`** — per-node timing for a single execution with bottleneck flag (slowest node).
+3. [x] **`WorkflowProfilerService`** — aggregates from execution_log_store, computes percentiles.
+4. [x] Tests.
+
+**CHAIN**: When done, start DIRECTIVE-NXTG-20260319-205.
+**Response** (filled by team): N-44 shipped. `WorkflowProfilerService` — profile_workflow(): scans all execution_log_store entries, groups by node_id, computes avg/p50/p95/p99/min/max from duration_ms; profile_execution(): per-single-run timing with bottleneck flag on slowest node; workflow_profiler singleton. 2 endpoints: GET /workflows/{id}/profile (200 always, may have empty nodes), GET /executions/{id}/profile (404 if no logs). test_workflow_profiler.py includes 6 TestWorkflowProfilerService + 6 TestProfilerEndpoints = 33 total tests in file. Full suite: 2329 passed. 2026-03-19.
+
+---
+
+### DIRECTIVE-NXTG-20260319-205 — P2: Final MAXOUT Archive (N-41 to N-44)
+**From**: NXTG-AI CoS (Wolf) | **Priority**: P2
+**Injected**: 2026-03-19 20:00 | **Estimate**: S | **Status**: DONE
+
+**Action Items**:
+1. [x] Final test count. 2. [x] All 44 initiatives in README. 3. [x] Executive Dashboard updated.
+
+**Response** (filled by team): Final counts — **2,438 tests** (2,329 backend + 109 frontend unit). README updated: 44 N-series initiatives (N-41 Cost Tracker, N-42 Execution Replay, N-43 Workflow Diff, N-44 Node Performance Profiler). Executive Dashboard updated N-41→N-44 all SHIPPED. All PENDING directives cleared: D-201/202/203/204/205 — all DONE. MAXOUT BURN complete: 44 N-series initiatives shipped. 2026-03-19.
+
+---
 
 ### DIRECTIVE-NXTG-20260319-195 — P1: N-39 Workflow AI Assist — Auto-Suggest Next Node
 **From**: NXTG-AI CoS (Wolf) | **Priority**: P1

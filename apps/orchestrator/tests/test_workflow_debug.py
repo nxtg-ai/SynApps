@@ -366,9 +366,7 @@ class TestDebugEndpoints:
 
     def test_continue_on_running_session_returns_200(self):
         """POST /continue on a running (non-paused) session should be a no-op with 200."""
-        session = debug_session_store.create(
-            run_id=str(uuid.uuid4()), flow_id="f1", breakpoints=[]
-        )
+        session = debug_session_store.create(run_id=str(uuid.uuid4()), flow_id="f1", breakpoints=[])
         session.status = "running"
 
         with TestClient(app) as client:
@@ -472,9 +470,7 @@ class TestDebugEndpoints:
 
     def test_abort_sets_status_aborted(self):
         """DELETE /debug/{id} should mark the session as aborted."""
-        session = debug_session_store.create(
-            run_id=str(uuid.uuid4()), flow_id="f1", breakpoints=[]
-        )
+        session = debug_session_store.create(run_id=str(uuid.uuid4()), flow_id="f1", breakpoints=[])
 
         with TestClient(app) as client:
             token, _ = _register(client)

@@ -9,6 +9,7 @@ The repository has a root-level ``synapps/`` package (providers etc.) that
 top-level name.  We load the SDK via importlib under the alias ``synapps_sdk``
 so we never shadow or evict the root package.
 """
+
 import importlib.util
 import sys
 import types
@@ -61,6 +62,7 @@ MarketplaceListing = _models_mod.MarketplaceListing
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_sync_response(data: object) -> MagicMock:
     """Return a mock httpx response whose .json() returns *data*."""
     resp = MagicMock()
@@ -96,6 +98,7 @@ def _make_async_http_mock(get_data: object = None, post_data: object = None) -> 
 # ---------------------------------------------------------------------------
 # TestSyncClientModels
 # ---------------------------------------------------------------------------
+
 
 class TestSyncClientModels:
     def test_workflow_model(self):
@@ -147,6 +150,7 @@ class TestSyncClientModels:
 # TestSyncClientMethods
 # ---------------------------------------------------------------------------
 
+
 class TestSyncClientMethods:
     def setup_method(self):
         self.client = Client(base_url="http://testserver", token="tok123")
@@ -174,8 +178,10 @@ class TestSyncClientMethods:
     def test_create_workflow(self):
         post_resp = {"id": "new1", "message": "created"}
         get_resp = {"id": "new1", "name": "New Flow", "nodes": [], "edges": []}
-        with patch("httpx.post", return_value=_make_sync_response(post_resp)), \
-             patch("httpx.get", return_value=_make_sync_response(get_resp)):
+        with (
+            patch("httpx.post", return_value=_make_sync_response(post_resp)),
+            patch("httpx.get", return_value=_make_sync_response(get_resp)),
+        ):
             result = self.client.create_workflow("New Flow")
         assert isinstance(result, Workflow)
         assert result.id == "new1"
@@ -266,6 +272,7 @@ class TestSyncClientMethods:
 # ---------------------------------------------------------------------------
 # TestAsyncClientMethods
 # ---------------------------------------------------------------------------
+
 
 class TestAsyncClientMethods:
     def setup_method(self):
@@ -369,6 +376,7 @@ class TestAsyncClientMethods:
 # ---------------------------------------------------------------------------
 # TestClientAuth
 # ---------------------------------------------------------------------------
+
 
 class TestClientAuth:
     def test_auth_header_set(self):

@@ -527,9 +527,7 @@ class TestFaultlineTemplateDocs:
         content = doc_path.read_text(encoding="utf-8")
         required_strings = ["Prerequisites", "FAULTLINE_API_URL", "trust score"]
         for required in required_strings:
-            assert required in content, (
-                f"Required string '{required}' not found in {doc_path}"
-            )
+            assert required in content, f"Required string '{required}' not found in {doc_path}"
 
     def test_yaml_template_exists(self):
         """The YAML template definition for Faultline compliance must exist."""

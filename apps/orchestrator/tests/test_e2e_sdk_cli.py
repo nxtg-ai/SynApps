@@ -55,9 +55,7 @@ def _load_package(pkg_name: str, pkg_dir: Path, modules: list[str]) -> None:
         full_name = f"{pkg_name}.{mod_name}"
         if full_name in sys.modules:
             continue  # already loaded
-        spec = importlib.util.spec_from_file_location(
-            full_name, pkg_dir / f"{mod_name}.py"
-        )
+        spec = importlib.util.spec_from_file_location(full_name, pkg_dir / f"{mod_name}.py")
         if spec is None or spec.loader is None:
             raise ImportError(f"Cannot find {full_name} in {pkg_dir}")
         mod = importlib.util.module_from_spec(spec)
@@ -381,9 +379,7 @@ class TestCLIWorkflow:
         mock_resp = _mock_response(data)
         runner = CliRunner()
         with patch("httpx.get", return_value=mock_resp):
-            result = runner.invoke(
-                cli, ["marketplace", "search", "compliance"], env=self._CLI_ENV
-            )
+            result = runner.invoke(cli, ["marketplace", "search", "compliance"], env=self._CLI_ENV)
 
         assert result.exit_code == 0, f"CLI exited non-zero: {result.output}"
         assert "Compliance Audit Kit" in result.output
@@ -417,9 +413,7 @@ class TestFullPlatformE2E:
             assert resp.status_code == 201, f"Flow creation failed: {resp.text}"
 
             # Run the flow
-            resp = client.post(
-                f"/api/v1/flows/{flow_id}/runs", json={}, headers=auth
-            )
+            resp = client.post(f"/api/v1/flows/{flow_id}/runs", json={}, headers=auth)
             assert resp.status_code == 202, f"Run failed: {resp.text}"
             run_data = resp.json()
             assert "run_id" in run_data  # Gate 2: run_id must be present
@@ -442,8 +436,7 @@ class TestFullPlatformE2E:
             run_started_entries = [
                 e
                 for e in audit_entries
-                if e.get("action") == "workflow_run_started"
-                and e.get("resource_id") == flow_id
+                if e.get("action") == "workflow_run_started" and e.get("resource_id") == flow_id
             ]
             assert len(run_started_entries) >= 1, (
                 f"No 'workflow_run_started' entry found for flow {flow_id} "
@@ -471,9 +464,7 @@ class TestFullPlatformE2E:
 
             # Run the flow twice
             for run_num in range(1, 3):
-                resp = client.post(
-                    f"/api/v1/flows/{flow_id}/runs", json={}, headers=auth
-                )
+                resp = client.post(f"/api/v1/flows/{flow_id}/runs", json={}, headers=auth)
                 assert resp.status_code == 202, f"Run {run_num} failed: {resp.text}"
                 assert "run_id" in resp.json()  # Gate 2: run_id present each time
 

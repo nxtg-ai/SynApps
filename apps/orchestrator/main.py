@@ -8644,6 +8644,17 @@ class ExecutionLogStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._logs: dict[str, list[dict[str, Any]]] = {}
+        self._execution_inputs: dict[str, tuple[str, dict[str, Any]]] = {}
+
+    def record_input(self, execution_id: str, flow_id: str, input_data: dict[str, Any]) -> None:
+        """Record the flow_id and input_data for an execution (used by replay)."""
+        with self._lock:
+            self._execution_inputs[execution_id] = (flow_id, dict(input_data))
+
+    def get_input(self, execution_id: str) -> tuple[str, dict[str, Any]] | None:
+        """Return (flow_id, input_data) for an execution, or None if not found."""
+        with self._lock:
+            return self._execution_inputs.get(execution_id)
 
     def append(self, run_id: str, entry: dict[str, Any]) -> None:
         """Append a log entry for *run_id* and notify SSE subscribers."""
@@ -8673,6 +8684,7 @@ class ExecutionLogStore:
         """Clear all logs (test teardown)."""
         with self._lock:
             self._logs.clear()
+            self._execution_inputs.clear()
 
 
 execution_log_store = ExecutionLogStore()
@@ -9877,8 +9889,7 @@ class SubflowApplet(BaseApplet):
         current_depth: int = int(context.get("_subflow_depth", 0))
         if current_depth >= max_depth:
             raise ValueError(
-                f"Maximum subflow depth {max_depth} exceeded "
-                f"(current depth: {current_depth})"
+                f"Maximum subflow depth {max_depth} exceeded (current depth: {current_depth})"
             )
 
         parent_run_id: str = context.get("run_id", "unknown")
@@ -11532,6 +11543,23 @@ class Orchestrator:
                 if "input_data" not in status or not status["input_data"]:
                     status["input_data"] = input_data
                 await workflow_run_repo.save(status)
+                # N-41: record execution costs (best-effort — never block completion)
+                try:
+                    _flow_id_for_cost = flow.get("id", "")
+                    _node_costs: list[dict[str, Any]] = []
+                    for _log_entry in execution_log_store.get(run_id):
+                        if _log_entry.get("event") == "node_success":
+                            _nid = _log_entry.get("node_id", "")
+                            _ntype = _log_entry.get("node_type", "")
+                            _node_data = nodes_by_id.get(_nid, {}).get("data", {})
+                            _output = _log_entry.get("output") or {}
+                            _node_costs.append(
+                                _estimate_node_cost(_ntype, _node_data, _output)
+                                | {"node_id": _nid, "node_type": _ntype}
+                            )
+                    cost_tracker_store.record(run_id, _flow_id_for_cost, _node_costs)
+                except Exception as _cost_exc:
+                    logger.warning("Cost tracking failed: %s", _cost_exc)
                 broadcast_data = status.copy()
                 broadcast_data["completed_applets"] = memory_completed_applets
                 await broadcast_status_fn(broadcast_data)
@@ -14045,6 +14073,7 @@ async def _run_flow_impl(
         raise HTTPException(status_code=404, detail="Flow not found")
     flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
     run_id = await Orchestrator.execute_flow(flow, body.input)
+    execution_log_store.record_input(run_id, flow_id, body.input or {})
     actor = current_user.get("email", "system") if current_user else "system"
     audit_log_store.record(
         actor, "workflow_run_started", "flow", flow_id, detail=f"Run {run_id} started."
@@ -15205,9 +15234,7 @@ class WorkflowHealthService:
                 idx = max(0, int(math.ceil(0.95 * len(sorted_durations))) - 1)
                 p95_duration_seconds = sorted_durations[idx]
 
-            start_times = [
-                float(r["start_time"]) for r in runs if r.get("start_time") is not None
-            ]
+            start_times = [float(r["start_time"]) for r in runs if r.get("start_time") is not None]
             last_run_at: float | None = max(start_times) if start_times else None
 
             if error_rate > 0.3:
@@ -15348,9 +15375,7 @@ class AlertEngine:
             health_results: List of WorkflowHealth dicts from WorkflowHealthService.
         """
         rules = self._store.list_all()
-        health_by_flow: dict[str, dict[str, Any]] = {
-            h["flow_id"]: h for h in health_results
-        }
+        health_by_flow: dict[str, dict[str, Any]] = {h["flow_id"]: h for h in health_results}
 
         for rule in rules:
             if not rule.get("enabled", True):
@@ -15485,9 +15510,7 @@ async def get_monitoring_workflows(
 
     Also evaluates all enabled alert rules against the current health data.
     """
-    health = await workflow_health_service.get_health(
-        flow_id=flow_id, window_hours=window_hours
-    )
+    health = await workflow_health_service.get_health(flow_id=flow_id, window_hours=window_hours)
     alert_engine.evaluate(health)
     return {"workflows": health, "total": len(health), "window_hours": window_hours}
 
@@ -15502,9 +15525,7 @@ async def get_monitoring_workflow_detail(
 
     Returns 404 if the flow has no runs in the requested window.
     """
-    health = await workflow_health_service.get_health(
-        flow_id=flow_id, window_hours=window_hours
-    )
+    health = await workflow_health_service.get_health(flow_id=flow_id, window_hours=window_hours)
     if not health:
         raise HTTPException(
             status_code=404,
@@ -16508,7 +16529,10 @@ class OAuthClientRegistry:
         }
         with self._lock:
             self._clients[client_id] = record
-        return {**{k: v for k, v in record.items() if k != "_secret_hash"}, "client_secret": plain_secret}
+        return {
+            **{k: v for k, v in record.items() if k != "_secret_hash"},
+            "client_secret": plain_secret,
+        }
 
     def get(self, client_id: str) -> dict[str, Any] | None:
         """Return client record (without secret hash) or None if not found."""
@@ -16721,7 +16745,9 @@ async def oauth_authorize(
 
     # Identify the authorizing user from the Bearer token.
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header with Bearer token required")
+        raise HTTPException(
+            status_code=401, detail="Authorization header with Bearer token required"
+        )
     token_str = authorization.removeprefix("Bearer ").strip()
     try:
         payload = jwt.decode(token_str, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -16776,7 +16802,9 @@ async def oauth_token(
     """
     # Validate the client credentials regardless of grant type.
     if not oauth_client_registry.validate_secret(client_id, client_secret):
-        logger.warning("OAuth2 token request failed: invalid client credentials client_id=%s", client_id)
+        logger.warning(
+            "OAuth2 token request failed: invalid client credentials client_id=%s", client_id
+        )
         raise HTTPException(status_code=401, detail="Invalid client credentials")
 
     client = oauth_client_registry.get(client_id)
@@ -16800,11 +16828,17 @@ async def oauth_token(
             logger.warning(
                 "OAuth2 token request: invalid/expired/used code client_id=%s", client_id
             )
-            raise HTTPException(status_code=400, detail="Invalid, expired, or already-used authorization code")
+            raise HTTPException(
+                status_code=400, detail="Invalid, expired, or already-used authorization code"
+            )
         if record["client_id"] != client_id:
-            raise HTTPException(status_code=400, detail="Authorization code was issued to a different client")
+            raise HTTPException(
+                status_code=400, detail="Authorization code was issued to a different client"
+            )
         if record["redirect_uri"] != redirect_uri:
-            raise HTTPException(status_code=400, detail="redirect_uri does not match authorization request")
+            raise HTTPException(
+                status_code=400, detail="redirect_uri does not match authorization request"
+            )
 
         token_scope = " ".join(record["scopes"])
         access_token = _create_oauth2_token(
@@ -16984,7 +17018,6 @@ async def branch_operations():
     return {"operations": operations, "total": len(operations)}
 
 
-
 # ============================================================
 # Subflow Endpoints (N-38)
 # ============================================================
@@ -17083,6 +17116,661 @@ async def validate_subflow(
 
 
 # ---------------------------------------------------------------------------
+# N-41: Workflow Cost Tracker
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ExecutionCostRecord:
+    """Cost record for a single workflow execution."""
+
+    execution_id: str
+    flow_id: str
+    node_costs: list[dict]
+    total_usd: float
+    total_tokens: int
+    created_at: float
+
+
+def _estimate_node_cost(node_type: str, node_data: dict, output: dict) -> dict:
+    """Estimate cost metrics for a single node execution.
+
+    Args:
+        node_type: The type identifier of the node (e.g. "llm", "http").
+        node_data: The node's configuration data dict.
+        output: The node's output dict from the execution log.
+
+    Returns:
+        A dict with keys: token_input, token_output, model, estimated_usd, api_calls.
+    """
+    ntype = str(node_type).lower().strip()
+    if ntype == "llm":
+        token_input = len(str(node_data.get("prompt", ""))) // 4
+        token_output = len(str(output)) // 4
+        model = str(node_data.get("model", "gpt-4o"))
+        estimated_usd = float(token_input * 0.000005 + token_output * 0.000015)
+        return {
+            "token_input": token_input,
+            "token_output": token_output,
+            "model": model,
+            "estimated_usd": estimated_usd,
+            "api_calls": 0,
+        }
+    if ntype == "http":
+        return {
+            "token_input": 0,
+            "token_output": 0,
+            "model": "",
+            "estimated_usd": 0.0,
+            "api_calls": 1,
+        }
+    return {
+        "token_input": 0,
+        "token_output": 0,
+        "model": "",
+        "estimated_usd": 0.0,
+        "api_calls": 0,
+    }
+
+
+class CostTrackerStore:
+    """Thread-safe store for per-execution cost records."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._records: dict[str, ExecutionCostRecord] = {}
+
+    def record(
+        self, execution_id: str, flow_id: str, node_costs: list[dict]
+    ) -> ExecutionCostRecord:
+        """Compute totals and persist cost record for an execution.
+
+        Args:
+            execution_id: The run/execution ID.
+            flow_id: The flow/workflow ID.
+            node_costs: List of per-node cost dicts (from _estimate_node_cost + node_id/node_type).
+
+        Returns:
+            The created ExecutionCostRecord.
+        """
+        total_usd = sum(float(nc.get("estimated_usd", 0.0)) for nc in node_costs)
+        total_tokens = sum(
+            int(nc.get("token_input", 0)) + int(nc.get("token_output", 0)) for nc in node_costs
+        )
+        rec = ExecutionCostRecord(
+            execution_id=execution_id,
+            flow_id=flow_id,
+            node_costs=list(node_costs),
+            total_usd=total_usd,
+            total_tokens=total_tokens,
+            created_at=time.time(),
+        )
+        with self._lock:
+            self._records[execution_id] = rec
+        return rec
+
+    def get(self, execution_id: str) -> ExecutionCostRecord | None:
+        """Return the cost record for an execution, or None."""
+        with self._lock:
+            return self._records.get(execution_id)
+
+    def list_for_flow(self, flow_id: str) -> list[ExecutionCostRecord]:
+        """Return all cost records for a given flow_id."""
+        with self._lock:
+            return [r for r in self._records.values() if r.flow_id == flow_id]
+
+    def reset(self) -> None:
+        """Clear all records (test teardown)."""
+        with self._lock:
+            self._records.clear()
+
+
+cost_tracker_store = CostTrackerStore()
+
+
+@v1.get("/executions/{execution_id}/cost", tags=["Cost"])
+async def get_execution_cost(
+    execution_id: str,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Return cost breakdown for a specific execution.
+
+    Returns 404 if no cost record exists for the given execution_id.
+    """
+    rec = cost_tracker_store.get(execution_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Cost record not found for this execution")
+    return {
+        "execution_id": rec.execution_id,
+        "flow_id": rec.flow_id,
+        "node_costs": rec.node_costs,
+        "total_usd": rec.total_usd,
+        "total_tokens": rec.total_tokens,
+        "created_at": rec.created_at,
+    }
+
+
+@v1.get("/workflows/{flow_id}/cost-summary", tags=["Cost"])
+async def get_workflow_cost_summary(
+    flow_id: str,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Return aggregated cost summary for all runs of a workflow."""
+    records = cost_tracker_store.list_for_flow(flow_id)
+    run_count = len(records)
+    if run_count == 0:
+        return {
+            "flow_id": flow_id,
+            "run_count": 0,
+            "total_usd": 0.0,
+            "avg_usd_per_run": 0.0,
+            "total_tokens": 0,
+            "avg_tokens_per_run": 0.0,
+            "records": [],
+        }
+    total_usd = sum(r.total_usd for r in records)
+    total_tokens = sum(r.total_tokens for r in records)
+    return {
+        "flow_id": flow_id,
+        "run_count": run_count,
+        "total_usd": total_usd,
+        "avg_usd_per_run": total_usd / run_count,
+        "total_tokens": total_tokens,
+        "avg_tokens_per_run": total_tokens / run_count,
+        "records": [
+            {
+                "execution_id": r.execution_id,
+                "flow_id": r.flow_id,
+                "node_costs": r.node_costs,
+                "total_usd": r.total_usd,
+                "total_tokens": r.total_tokens,
+                "created_at": r.created_at,
+            }
+            for r in records
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# N-42: Execution Replay
+# ---------------------------------------------------------------------------
+
+
+class ReplayStore:
+    """Thread-safe store tracking execution replay chains."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._chains: dict[str, list[str]] = {}
+        self._reverse: dict[str, str] = {}
+
+    def register_replay(self, original_run_id: str, replay_run_id: str) -> None:
+        """Record that *replay_run_id* is a replay of *original_run_id*.
+
+        Args:
+            original_run_id: The root (original) execution ID.
+            replay_run_id: The new replay execution ID.
+        """
+        with self._lock:
+            self._chains.setdefault(original_run_id, []).append(replay_run_id)
+            self._reverse[replay_run_id] = original_run_id
+
+    def get_chain(self, run_id: str) -> list[str]:
+        """Return the full replay chain starting from the root original run.
+
+        Returns [original_run_id, replay1, replay2, ...].
+        If run_id is itself a replay, follows back to the root first.
+        """
+        with self._lock:
+            # resolve root
+            root = run_id
+            while root in self._reverse:
+                root = self._reverse[root]
+            replays = list(self._chains.get(root, []))
+            return [root] + replays
+
+    def get_original(self, run_id: str) -> str:
+        """Return the root original run_id by following the reverse chain."""
+        with self._lock:
+            current = run_id
+            while current in self._reverse:
+                current = self._reverse[current]
+            return current
+
+    def reset(self) -> None:
+        """Clear all replay data (test teardown)."""
+        with self._lock:
+            self._chains.clear()
+            self._reverse.clear()
+
+
+replay_store = ReplayStore()
+
+
+@v1.post("/executions/{execution_id}/replay", status_code=202, tags=["Replay"])
+async def replay_execution(
+    execution_id: str,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Replay a previous execution using its original input data.
+
+    Looks up the stored input for *execution_id*, launches a new async
+    execution, and registers it in the replay chain.  Returns 404 if the
+    execution was never recorded.
+    """
+    stored = execution_log_store.get_input(execution_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    flow_id, input_data = stored
+
+    # Determine root of chain so replays stay flat under the original
+    original_run_id = replay_store.get_original(execution_id)
+
+    replay_run_id = str(uuid.uuid4())
+    replay_store.register_replay(original_run_id, replay_run_id)
+
+    # Fire-and-forget replay via existing flow machinery
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
+
+    async def _replay_task() -> None:
+        try:
+            # Re-use _run_flow_impl path: execute then register input for chaining
+            actual_run_id = await Orchestrator.execute_flow(flow, input_data)
+            execution_log_store.record_input(actual_run_id, flow_id, input_data)
+            # Re-register under the correct replay_run_id alias
+            replay_store.register_replay(original_run_id, actual_run_id)
+        except Exception as exc:
+            logger.warning("Replay task for %s failed: %s", replay_run_id, exc)
+
+    asyncio.create_task(_replay_task())
+
+    return {
+        "replay_run_id": replay_run_id,
+        "original_run_id": original_run_id,
+        "flow_id": flow_id,
+        "status": "started",
+    }
+
+
+@v1.get("/executions/{execution_id}/replay-history", tags=["Replay"])
+async def get_replay_history(
+    execution_id: str,
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """Return the replay chain for an execution.
+
+    Returns the full ordered chain [original, replay1, replay2, ...].
+    If the execution has never been replayed, returns an empty chain.
+    """
+    chain = replay_store.get_chain(execution_id)
+    # If the run is not the root AND has never been seen, chain will just be [execution_id]
+    # with no replays. But if execution_id was never recorded at all, still return gracefully.
+    return {
+        "execution_id": execution_id,
+        "chain": chain,
+        "length": len(chain),
+    }
+
+
+# ---------------------------------------------------------------------------
+# N-43: Workflow Diff — Version Compare
+# ---------------------------------------------------------------------------
+
+
+def _diff_workflows(v1: dict, v2: dict) -> dict:
+    """Compute a structural diff between two workflow snapshots.
+
+    Compares nodes by id and edges by (source, target) tuple, returning
+    added/removed/modified sets plus a summary with an is_identical flag.
+    """
+    v1_nodes: dict[str, dict] = {
+        n["id"]: n for n in v1.get("nodes", []) if isinstance(n, dict) and "id" in n
+    }
+    v2_nodes: dict[str, dict] = {
+        n["id"]: n for n in v2.get("nodes", []) if isinstance(n, dict) and "id" in n
+    }
+
+    added_nodes = [v2_nodes[nid] for nid in v2_nodes if nid not in v1_nodes]
+    removed_nodes = [v1_nodes[nid] for nid in v1_nodes if nid not in v2_nodes]
+    modified_nodes: list[dict] = []
+    for nid in v1_nodes:
+        if nid not in v2_nodes:
+            continue
+        v1n = v1_nodes[nid]
+        v2n = v2_nodes[nid]
+        if v1n == v2n:
+            continue
+        all_keys = set(list(v1n.keys()) + list(v2n.keys()))
+        changes = {
+            k: {"from": v1n.get(k), "to": v2n.get(k)} for k in all_keys if v1n.get(k) != v2n.get(k)
+        }
+        modified_nodes.append({"id": nid, "changes": changes})
+
+    def _edge_key(e: dict) -> tuple:
+        return (e.get("source", ""), e.get("target", ""))
+
+    v1_edges: dict[tuple, dict] = {
+        _edge_key(e): e for e in v1.get("edges", []) if isinstance(e, dict)
+    }
+    v2_edges: dict[tuple, dict] = {
+        _edge_key(e): e for e in v2.get("edges", []) if isinstance(e, dict)
+    }
+
+    added_edges = [v2_edges[k] for k in v2_edges if k not in v1_edges]
+    removed_edges = [v1_edges[k] for k in v1_edges if k not in v2_edges]
+    modified_edges: list[dict] = []
+    for ek in v1_edges:
+        if ek not in v2_edges:
+            continue
+        v1e = v1_edges[ek]
+        v2e = v2_edges[ek]
+        if v1e == v2e:
+            continue
+        all_keys = set(list(v1e.keys()) + list(v2e.keys()))
+        changes = {
+            k: {"from": v1e.get(k), "to": v2e.get(k)} for k in all_keys if v1e.get(k) != v2e.get(k)
+        }
+        modified_edges.append({"source": ek[0], "target": ek[1], "changes": changes})
+
+    summary = {
+        "nodes_added": len(added_nodes),
+        "nodes_removed": len(removed_nodes),
+        "nodes_modified": len(modified_nodes),
+        "edges_added": len(added_edges),
+        "edges_removed": len(removed_edges),
+        "edges_modified": len(modified_edges),
+        "is_identical": (
+            len(added_nodes) == 0
+            and len(removed_nodes) == 0
+            and len(modified_nodes) == 0
+            and len(added_edges) == 0
+            and len(removed_edges) == 0
+            and len(modified_edges) == 0
+        ),
+    }
+
+    return {
+        "added_nodes": added_nodes,
+        "removed_nodes": removed_nodes,
+        "modified_nodes": modified_nodes,
+        "added_edges": added_edges,
+        "removed_edges": removed_edges,
+        "modified_edges": modified_edges,
+        "summary": summary,
+    }
+
+
+class WorkflowVersionStore:
+    """In-memory version history for workflow snapshots.
+
+    Each version record contains a snapshot of the full workflow dict at the
+    time of saving.  list_versions omits the snapshot for efficiency.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._versions: dict[str, list[dict]] = {}  # flow_id -> list of version records
+
+    def save_version(self, flow_id: str, snapshot: dict, label: str = "") -> dict:
+        """Append a snapshot and return the version summary (without full snapshot)."""
+        version_id = str(uuid.uuid4())
+        created_at = time.time()
+        node_count = len(snapshot.get("nodes", []))
+        edge_count = len(snapshot.get("edges", []))
+        record = {
+            "version_id": version_id,
+            "snapshot": snapshot,
+            "created_at": created_at,
+            "label": label,
+            "node_count": node_count,
+            "edge_count": edge_count,
+        }
+        with self._lock:
+            self._versions.setdefault(flow_id, []).append(record)
+        return {
+            "version_id": version_id,
+            "created_at": created_at,
+            "label": label,
+            "node_count": node_count,
+            "edge_count": edge_count,
+        }
+
+    def list_versions(self, flow_id: str) -> list[dict]:
+        """Return version summaries for flow_id, omitting the full snapshot."""
+        with self._lock:
+            records = self._versions.get(flow_id, [])
+            return [
+                {
+                    "version_id": r["version_id"],
+                    "created_at": r["created_at"],
+                    "label": r["label"],
+                    "node_count": r["node_count"],
+                    "edge_count": r["edge_count"],
+                }
+                for r in records
+            ]
+
+    def get_version(self, flow_id: str, version_id: str) -> dict | None:
+        """Return the full version record (including snapshot) or None if not found."""
+        with self._lock:
+            for record in self._versions.get(flow_id, []):
+                if record["version_id"] == version_id:
+                    return dict(record)
+        return None
+
+    def reset(self) -> None:
+        """Clear all stored versions (test teardown)."""
+        with self._lock:
+            self._versions.clear()
+
+
+workflow_version_store = WorkflowVersionStore()
+
+
+class WorkflowDiffRequest(BaseModel):
+    v1: dict  # full workflow JSON (nodes, edges)
+    v2: dict  # full workflow JSON (nodes, edges)
+
+
+class WorkflowVersionSaveRequest(BaseModel):
+    snapshot: dict
+    label: str = ""
+
+
+@v1.post("/workflows/{flow_id}/diff", tags=["Workflow Diff"])
+async def workflow_diff(
+    flow_id: str,
+    body: WorkflowDiffRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    """Compute a structural diff between two workflow snapshots."""
+    return _diff_workflows(body.v1, body.v2)
+
+
+@v1.post("/workflows/{flow_id}/versions", tags=["Workflow Diff"])
+async def workflow_save_version(
+    flow_id: str,
+    body: WorkflowVersionSaveRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    """Save a workflow snapshot as a new named version."""
+    record = workflow_version_store.save_version(flow_id, body.snapshot, body.label)
+    return {**record, "flow_id": flow_id}
+
+
+@v1.get("/workflows/{flow_id}/version-history", tags=["Workflow Diff"])
+async def workflow_version_history(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    """Return all version summaries for a workflow (no full snapshots)."""
+    versions = workflow_version_store.list_versions(flow_id)
+    return {"flow_id": flow_id, "versions": versions, "total": len(versions)}
+
+
+@v1.get("/workflows/{flow_id}/versions/{version_id}", tags=["Workflow Diff"])
+async def workflow_get_version(
+    flow_id: str,
+    version_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    """Return the full snapshot record for a specific workflow version."""
+    record = workflow_version_store.get_version(flow_id, version_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return record
+
+
+# ---------------------------------------------------------------------------
+# N-44: Node Performance Profiler
+# ---------------------------------------------------------------------------
+
+
+class WorkflowProfilerService:
+    """Aggregate node-level performance statistics from execution logs.
+
+    Reads from the global execution_log_store to compute per-node latency
+    percentiles across all runs, and per-execution bottleneck analysis.
+    """
+
+    def profile_workflow(self, flow_id: str) -> dict:  # noqa: ARG002
+        """Profile all nodes seen across all execution runs.
+
+        flow_id is accepted for API consistency; the current in-memory store
+        has no flow_id index so statistics are aggregated across all runs.
+        Only node_success/node_completed events with a non-None duration_ms
+        are included.
+        """
+        node_durations: dict[str, list[float]] = {}
+        with execution_log_store._lock:
+            all_items = list(execution_log_store._logs.items())
+
+        for _run_id, entries in all_items:
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("event") not in ("node_success", "node_completed"):
+                    continue
+                nid = entry.get("node_id")
+                dur = entry.get("duration_ms")
+                if nid and dur is not None:
+                    try:
+                        node_durations.setdefault(nid, []).append(float(dur))
+                    except (TypeError, ValueError) as exc:
+                        logger.warning("Profiler: invalid duration_ms for node %s: %s", nid, exc)
+
+        nodes = []
+        for nid, durations in node_durations.items():
+            sorted_d = sorted(durations)
+            n = len(sorted_d)
+
+            def _pct(pct: float, _s: list = sorted_d, _n: int = n) -> float:
+                idx = min(int(pct / 100.0 * _n), _n - 1)
+                return _s[idx]
+
+            nodes.append(
+                {
+                    "node_id": nid,
+                    "run_count": n,
+                    "avg_ms": sum(sorted_d) / n,
+                    "p50_ms": _pct(50),
+                    "p95_ms": _pct(95),
+                    "p99_ms": _pct(99),
+                    "min_ms": sorted_d[0],
+                    "max_ms": sorted_d[-1],
+                }
+            )
+
+        return {
+            "flow_id": flow_id,
+            "profiled_at": time.time(),
+            "nodes": nodes,
+            "total_node_types_profiled": len(nodes),
+        }
+
+    def profile_execution(self, execution_id: str) -> dict | None:
+        """Profile a single execution run, identifying the bottleneck node.
+
+        Returns None when no logs exist for execution_id (triggers 404 in API).
+        """
+        entries = execution_log_store.get(execution_id)
+        if not entries:
+            return None
+
+        node_entries: list[dict] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("event") not in ("node_success", "node_completed"):
+                continue
+            nid = entry.get("node_id")
+            dur = entry.get("duration_ms")
+            if nid and dur is not None:
+                try:
+                    node_entries.append(
+                        {"node_id": nid, "duration_ms": float(dur), "is_bottleneck": False}
+                    )
+                except (TypeError, ValueError) as exc:
+                    logger.warning(
+                        "Profiler: invalid duration_ms for execution %s node %s: %s",
+                        execution_id,
+                        nid,
+                        exc,
+                    )
+
+        if not node_entries:
+            return {
+                "execution_id": execution_id,
+                "nodes": [],
+                "total_duration_ms": 0.0,
+                "bottleneck_node_id": None,
+            }
+
+        total_duration_ms = sum(e["duration_ms"] for e in node_entries)
+        max_dur = max(e["duration_ms"] for e in node_entries)
+        bottleneck_node_id: str | None = None
+        for entry in node_entries:
+            if entry["duration_ms"] == max_dur:
+                entry["is_bottleneck"] = True
+                bottleneck_node_id = entry["node_id"]
+                break
+
+        return {
+            "execution_id": execution_id,
+            "nodes": node_entries,
+            "total_duration_ms": total_duration_ms,
+            "bottleneck_node_id": bottleneck_node_id,
+        }
+
+
+workflow_profiler = WorkflowProfilerService()
+
+
+@v1.get("/workflows/{flow_id}/profile", tags=["Node Profiler"])
+async def workflow_profile(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    """Return aggregated node performance statistics for a workflow."""
+    return workflow_profiler.profile_workflow(flow_id)
+
+
+@v1.get("/executions/{execution_id}/profile", tags=["Node Profiler"])
+async def execution_profile(
+    execution_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    """Return per-node performance profile for a single execution run."""
+    result = workflow_profiler.profile_execution(execution_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Execution not found or no logs available")
+    return result
+
+
+# ---------------------------------------------------------------------------
 # N-39: Workflow AI Assist — Auto-Suggest Next Node
 # ---------------------------------------------------------------------------
 
@@ -17109,24 +17797,130 @@ _NODE_TRANSITION_WEIGHTS: dict[str, dict[str, float]] = {
 
 # Keyword → node-type mapping for autocomplete.
 _KEYWORD_NODE_MAP: list[tuple[list[str], str]] = [
-    (["gpt", "openai", "claude", "anthropic", "llm", "text", "generate", "summarize",
-      "classify", "analyze", "chat", "completion", "ai", "model"], "llm"),
-    (["image", "picture", "stable diffusion", "dall-e", "art", "photo", "visual", "draw"], "imagegen"),
-    (["http", "rest", "api", "fetch", "request", "get", "post", "webhook", "call",
-      "endpoint", "external", "url", "curl"], "http"),
-    (["code", "python", "javascript", "script", "execute", "run", "compute", "calculate",
-      "custom", "logic", "function"], "code"),
-    (["transform", "map", "reshape", "convert", "format", "parse", "extract",
-      "jinja", "template", "filter", "select"], "transform"),
-    (["memory", "store", "save", "remember", "retrieve", "search", "vector", "chroma",
-      "context", "recall", "lookup"], "memory"),
-    (["if", "else", "condition", "branch", "route", "check", "decision", "compare",
-      "switch", "when"], "ifelse"),
+    (
+        [
+            "gpt",
+            "openai",
+            "claude",
+            "anthropic",
+            "llm",
+            "text",
+            "generate",
+            "summarize",
+            "classify",
+            "analyze",
+            "chat",
+            "completion",
+            "ai",
+            "model",
+        ],
+        "llm",
+    ),
+    (
+        ["image", "picture", "stable diffusion", "dall-e", "art", "photo", "visual", "draw"],
+        "imagegen",
+    ),
+    (
+        [
+            "http",
+            "rest",
+            "api",
+            "fetch",
+            "request",
+            "get",
+            "post",
+            "webhook",
+            "call",
+            "endpoint",
+            "external",
+            "url",
+            "curl",
+        ],
+        "http",
+    ),
+    (
+        [
+            "code",
+            "python",
+            "javascript",
+            "script",
+            "execute",
+            "run",
+            "compute",
+            "calculate",
+            "custom",
+            "logic",
+            "function",
+        ],
+        "code",
+    ),
+    (
+        [
+            "transform",
+            "map",
+            "reshape",
+            "convert",
+            "format",
+            "parse",
+            "extract",
+            "jinja",
+            "template",
+            "filter",
+            "select",
+        ],
+        "transform",
+    ),
+    (
+        [
+            "memory",
+            "store",
+            "save",
+            "remember",
+            "retrieve",
+            "search",
+            "vector",
+            "chroma",
+            "context",
+            "recall",
+            "lookup",
+        ],
+        "memory",
+    ),
+    (
+        [
+            "if",
+            "else",
+            "condition",
+            "branch",
+            "route",
+            "check",
+            "decision",
+            "compare",
+            "switch",
+            "when",
+        ],
+        "ifelse",
+    ),
     (["merge", "join", "combine", "collect", "aggregate", "fan-in", "gather"], "merge"),
     (["loop", "foreach", "iterate", "each", "list", "array", "repeat", "batch"], "foreach"),
-    (["schedule", "cron", "timer", "interval", "recurring", "periodic", "daily",
-      "hourly", "trigger"], "scheduler"),
-    (["webhook", "inbound", "receive", "listen", "incoming", "event", "trigger"], "webhook_trigger"),
+    (
+        [
+            "schedule",
+            "cron",
+            "timer",
+            "interval",
+            "recurring",
+            "periodic",
+            "daily",
+            "hourly",
+            "trigger",
+        ],
+        "scheduler",
+    ),
+    (
+        ["webhook", "inbound", "receive", "listen", "incoming", "event", "trigger"],
+        "webhook_trigger",
+    ),
     (["subflow", "reuse", "embed", "nested", "component", "workflow"], "subflow"),
     (["end", "finish", "done", "output", "result", "complete", "final"], "end"),
 ]
@@ -17277,7 +18071,11 @@ def _score_node_suggestions(
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [
-        {"node_type": nt, "score": round(score, 3), "config_template": _NODE_CONFIG_TEMPLATES.get(nt, {})}
+        {
+            "node_type": nt,
+            "score": round(score, 3),
+            "config_template": _NODE_CONFIG_TEMPLATES.get(nt, {}),
+        }
         for score, nt in scored
         if score > 0
     ]
@@ -17368,6 +18166,7 @@ async def ai_assist_patterns(
 # ---------------------------------------------------------------------------
 # N-40: Workflow Debugging — Step-Through Execution
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DebugSession:
@@ -17468,11 +18267,7 @@ class DebugSessionStore:
     def list_active(self) -> "list[DebugSession]":
         """Return all sessions that are not yet completed or aborted."""
         with self._lock:
-            return [
-                s
-                for s in self._sessions.values()
-                if s.status not in ("completed", "aborted")
-            ]
+            return [s for s in self._sessions.values() if s.status not in ("completed", "aborted")]
 
     def delete(self, session_id: str) -> None:
         """Remove the session from the registry.
@@ -17557,9 +18352,7 @@ async def _run_flow_debug(
 
     # Build adjacency structures for topological sort
     nodes_by_id: dict[str, dict[str, Any]] = {
-        n["id"]: n
-        for n in flow_nodes
-        if isinstance(n, dict) and isinstance(n.get("id"), str)
+        n["id"]: n for n in flow_nodes if isinstance(n, dict) and isinstance(n.get("id"), str)
     }
     edges_by_source: dict[str, list[dict[str, Any]]] = {}
     incoming_sources_by_target: dict[str, list[str]] = {}
@@ -17576,7 +18369,9 @@ async def _run_flow_debug(
             srcs.append(src)
 
     # Produce a flat linear order via topological layers
-    layers = Orchestrator._topological_layers(nodes_by_id, edges_by_source, incoming_sources_by_target)
+    layers = Orchestrator._topological_layers(
+        nodes_by_id, edges_by_source, incoming_sources_by_target
+    )
     ordered_node_ids: list[str] = [nid for layer in layers for nid in layer]
 
     stub_status["total_steps"] = len(ordered_node_ids)
@@ -17609,9 +18404,7 @@ async def _run_flow_debug(
             session._resume_event.clear()
             session._skip_flag = False
 
-            logger.info(
-                "Debug session %s paused at node %s (breakpoint)", session_id, node_id
-            )
+            logger.info("Debug session %s paused at node %s (breakpoint)", session_id, node_id)
 
             try:
                 await asyncio.wait_for(
@@ -17737,7 +18530,9 @@ class StartDebugRequest(BaseModel):
 class UpdateBreakpointsRequest(BaseModel):
     """Body for POST /debug/{session_id}/breakpoints."""
 
-    breakpoints: list[str] = Field(..., description="New breakpoint node IDs (replaces current set).")
+    breakpoints: list[str] = Field(
+        ..., description="New breakpoint node IDs (replaces current set)."
+    )
 
 
 # ---- Debug endpoints ----
@@ -17884,7 +18679,9 @@ async def debug_skip(
         session._skip_flag = True
         session.status = "running"
         session._resume_event.set()
-        logger.info("Debug session %s resumed with skip at node %s", session_id, session.current_node_id)
+        logger.info(
+            "Debug session %s resumed with skip at node %s", session_id, session.current_node_id
+        )
 
     return session.to_dict()
 
@@ -18359,6 +19156,7 @@ async def websocket_endpoint(websocket: WebSocket):
             f"WebSocket session {session_id} cleaned up. "
             f"Remaining clients: {len(ws_manager.connected_websockets)}"
         )
+
 
 # For direct execution
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from synapps_cli.main import cli  # noqa: E402
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_response(json_data, status_code=200):
     """Build a mock httpx.Response-like object."""
     mock_resp = MagicMock()
@@ -29,6 +30,7 @@ def _mock_response(json_data, status_code=200):
     mock_resp.text = json.dumps(json_data)
     if status_code >= 400:
         from httpx import HTTPStatusError, Request, Response
+
         # Create a real HTTPStatusError so raise_for_status raises it
         request = MagicMock(spec=Request)
         response = MagicMock(spec=Response)
@@ -47,6 +49,7 @@ def _mock_response(json_data, status_code=200):
 # ---------------------------------------------------------------------------
 # TestCLIConfig
 # ---------------------------------------------------------------------------
+
 
 class TestCLIConfig:
     def test_default_url(self, monkeypatch):
@@ -79,6 +82,7 @@ class TestCLIConfig:
 # ---------------------------------------------------------------------------
 # TestListCommand
 # ---------------------------------------------------------------------------
+
 
 class TestListCommand:
     def test_list_shows_table(self):
@@ -135,6 +139,7 @@ class TestListCommand:
         """Network RequestError → 'Connection error' message, exit code 1."""
         runner = CliRunner()
         import httpx as _httpx
+
         with patch("httpx.get", side_effect=_httpx.ConnectError("refused")):
             result = runner.invoke(cli, ["list"])
         assert result.exit_code == 1
@@ -144,6 +149,7 @@ class TestListCommand:
 # ---------------------------------------------------------------------------
 # TestRunCommand
 # ---------------------------------------------------------------------------
+
 
 class TestRunCommand:
     def test_run_success(self):
@@ -196,6 +202,7 @@ class TestRunCommand:
 # TestLogsCommand
 # ---------------------------------------------------------------------------
 
+
 class TestLogsCommand:
     def test_logs_shows_entries(self):
         """Mock returns log list — node IDs and events must appear in output."""
@@ -247,6 +254,7 @@ class TestLogsCommand:
 # ---------------------------------------------------------------------------
 # TestMarketplaceSearch
 # ---------------------------------------------------------------------------
+
 
 class TestMarketplaceSearch:
     def test_search_shows_results(self):

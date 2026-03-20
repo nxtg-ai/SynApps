@@ -108,7 +108,7 @@ SynApps follows a microkernel architecture:
 
 ## Initiatives
 
-All 40 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
+All 44 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 
 | # | Initiative | Pillar | Description |
 |---|-----------|--------|-------------|
@@ -152,6 +152,10 @@ All 40 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-38 | Workflow Subflows — Reusable Components | EXECUTION | Embed one workflow inside another with input_mapping, depth-limited recursion (max 3), circular reference detection, inline BFS execution — `GET /subflows`, `POST /subflows/validate` |
 | N-39 | Workflow AI Assist — Auto-Suggest Next Node | PLATFORM | Weighted next-node suggestions from transition table, keyword-to-node autocomplete from text descriptions, 8-pattern library — `POST /ai-assist/suggest-next`, `POST /ai-assist/autocomplete`, `GET /ai-assist/patterns` |
 | N-40 | Workflow Debugging — Step-Through Execution | EXECUTION | Node-by-node debug execution with asyncio breakpoints, pause/resume/skip, full execution history capture — `POST /workflows/:id/debug`, `GET /debug/:id`, `POST /debug/:id/continue`, `POST /debug/:id/skip` |
+| N-41 | Workflow Cost Tracker | PLATFORM | Per-execution token + USD cost breakdown by node, aggregate cost-summary across runs — `GET /executions/:id/cost`, `GET /workflows/:id/cost-summary` |
+| N-42 | Execution Replay | EXECUTION | Re-run any past execution with original inputs; full replay chain tracking — `POST /executions/:id/replay`, `GET /executions/:id/replay-history` |
+| N-43 | Workflow Diff — Version Compare | PLATFORM | Compare two workflow snapshots: added/removed/modified nodes + edges, version history store — `POST /workflows/:id/diff`, `GET /workflows/:id/version-history` |
+| N-44 | Node Performance Profiler | PLATFORM | Per-node avg/p50/p95/p99 timing across all runs, bottleneck detection per execution — `GET /workflows/:id/profile`, `GET /executions/:id/profile` |
 
 ## Tech Stack
 
@@ -197,7 +201,7 @@ See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
-**2,372 tests** (2,263 backend + 109 frontend unit) — all passing.
+**2,438 tests** (2,329 backend + 109 frontend unit) — all passing.
 
 ### Backend
 
