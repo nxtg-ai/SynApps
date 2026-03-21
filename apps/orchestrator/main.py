@@ -9055,8 +9055,8 @@ class NodeCommentStore:
             "author": author,
             "content": content,
             "parent_id": parent_id,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         with self._lock:
             self._comments.setdefault(key, []).append(comment)
@@ -9117,7 +9117,7 @@ class ActivityFeedStore:
             "actor": actor,
             "action": action,
             "detail": detail,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         with self._lock:
             self._events.setdefault(flow_id, []).append(event)
@@ -9235,7 +9235,7 @@ class AuditLogStore:
     ) -> dict[str, Any]:
         entry: dict[str, Any] = {
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "actor": actor,
             "action": action,
             "resource_type": resource_type,
@@ -9281,7 +9281,7 @@ class AuditLogStore:
     def purge_old(self, retention_days: int | None = None) -> int:
         """Delete entries older than retention_days. Returns count deleted."""
         days = retention_days if retention_days is not None else self._retention_days
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
         with self._lock:
             before = len(self._entries)
             self._entries = [e for e in self._entries if e["timestamp"] >= cutoff]
@@ -21192,7 +21192,7 @@ class NodeLockStore:
             flow_locks[node_id] = {
                 "user_id": user_id,
                 "username": username,
-                "acquired_at": datetime.utcnow().isoformat(),
+                "acquired_at": datetime.now(UTC).isoformat(),
             }
             return True
 
@@ -21259,7 +21259,7 @@ class CollaborationActivityStore:
             "username": username,
             "action": action,
             "detail": detail,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         with self._lock:
             events = self._events.setdefault(flow_id, [])

@@ -160,6 +160,11 @@ All 44 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-45–N-114 | Frontend Coverage Sprint | PLATFORM | 70+ React pages covering every backend endpoint: marketplace, SLA, OAuth2, audit trail, collaboration, monitoring, cost tracking, replay, subflows, plugins, and more — full UI surface for all 212 API routes |
 | N-115 | Flaky Test Stabilization II | STACK | Full conftest store-reset: 23 missing singletons added, WebhookTriggerRegistry.reset() added, _run_flow_debug hardened (CancelledError + early-abort on closed DB) |
 | N-116–N-118 | Analytics Detail + Marketplace Discovery + Flow Test Detail | PLATFORM | Per-flow/node analytics, featured listings + autocomplete + issue reporting, single test-case inspector |
+| N-119–N-121 | Frontend Coverage Sprint IV | PLATFORM | `UsageDetailPage` (per-key bandwidth/error-rate/by-endpoint), `FlowExportImportPage` (JSON export+import with download), `RunsPage` (paginated runs list + detail with progress) |
+| N-122–N-123 | Frontend Coverage Sprint V | PLATFORM | `WorkflowSnapshotsPage` (save/browse/inspect/diff snapshots), `ListingAnalyticsDetailPage` (ratings, credits, 30-day trend, reviews) |
+| N-124 | Flaky Test Root Cause Fix | STACK | `except asyncio.CancelledError` in `_execute_flow_async` post-completion path — absorbs TestClient teardown cancellation; all 5 formerly-flaky E2E tests now pass |
+| N-125–N-127 | Frontend Coverage Sprint VI + Endpoint Completion | PLATFORM | `ExecutionHistoryPage` (`GET /history` filtered list + trace detail), `PluginSchemaPage` (schema properties table), `MarketplacePublishPage` (`POST /marketplace/publish`) — **all 212 backend routes now have frontend pages** |
+| N-128 | Security: npm Vulnerability Fix | SECURITY | `dompurify ^3.3.3` override in package.json resolves GHSA-v2wj-7wpq-c8vv (XSS); 0 npm vulnerabilities (was 4) |
 
 ## Tech Stack
 
