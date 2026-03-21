@@ -9919,6 +9919,50 @@ flow_metadata_store = FlowMetadataStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowPriorityStore — N-147 Flow Priority
+# ---------------------------------------------------------------------------
+
+FLOW_PRIORITY_VALUES = ("critical", "high", "medium", "low")
+
+
+class FlowPriorityStore:
+    """Store priority level per flow. Default is None (unset)."""
+
+    def __init__(self) -> None:
+        self._priorities: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, priority: str) -> str:
+        if priority not in FLOW_PRIORITY_VALUES:
+            raise ValueError(f"Invalid priority '{priority}'; must be one of {FLOW_PRIORITY_VALUES}")
+        with self._lock:
+            self._priorities[flow_id] = priority
+            return priority
+
+    def get(self, flow_id: str) -> str | None:
+        with self._lock:
+            return self._priorities.get(flow_id)
+
+    def clear(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._priorities:
+                return False
+            del self._priorities[flow_id]
+            return True
+
+    def flows_with_priority(self, priority: str) -> list[str]:
+        with self._lock:
+            return [fid for fid, p in self._priorities.items() if p == priority]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._priorities.clear()
+
+
+flow_priority_store = FlowPriorityStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15104,6 +15148,7 @@ async def list_flows(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     archived: bool = Query(False, description="If true, return only archived flows. Default returns only non-archived flows."),
     group: str | None = Query(None, description="Filter by group name (case-insensitive). Omit to return all groups."),
+    priority: str | None = Query(None, description="Filter by priority (critical/high/medium/low)."),
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
     """List flows with pagination.
@@ -15111,10 +15156,12 @@ async def list_flows(
     - Default (archived=false): only non-archived flows.
     - archived=true: only archived flows.
     - group=<name>: only flows in the given group.
+    - priority=<level>: only flows with the given priority level.
     """
     flows = await FlowRepository.get_all()
     migrated_flows: list[dict[str, Any]] = []
     group_norm = group.lower().strip() if group else None
+    priority_norm = priority.lower().strip() if priority else None
     for flow in flows:
         migrated_flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
         if isinstance(migrated_flow, dict):
@@ -15123,6 +15170,8 @@ async def list_flows(
             if is_archived != archived:
                 continue
             if group_norm is not None and flow_group_store.get(fid) != group_norm:
+                continue
+            if priority_norm is not None and flow_priority_store.get(fid) != priority_norm:
                 continue
             migrated_flows.append(migrated_flow)
     return paginate(migrated_flows, page, page_size)
@@ -16200,6 +16249,56 @@ async def delete_flow_metadata_key(
     if not removed:
         raise HTTPException(status_code=404, detail=f"Metadata key '{key}' not found")
     return {"flow_id": flow_id, "deleted_key": key, "metadata": flow_metadata_store.get(flow_id)}
+
+
+# ---------------------------------------------------------------------------
+# N-147 Flow Priority — GET/PUT/DELETE /flows/{id}/priority
+# ---------------------------------------------------------------------------
+
+
+class FlowPriorityRequest(BaseModel):
+    priority: str = Field(..., pattern=r"^(critical|high|medium|low)$")
+
+
+@v1.get("/flows/{flow_id}/priority", tags=["Flows"])
+async def get_flow_priority(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the priority of a flow (null if not set)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"flow_id": flow_id, "priority": flow_priority_store.get(flow_id)}
+
+
+@v1.put("/flows/{flow_id}/priority", tags=["Flows"])
+async def set_flow_priority(
+    flow_id: str,
+    body: FlowPriorityRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set the priority of a flow (critical/high/medium/low)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    priority = flow_priority_store.set(flow_id, body.priority)
+    return {"flow_id": flow_id, "priority": priority}
+
+
+@v1.delete("/flows/{flow_id}/priority", tags=["Flows"])
+async def clear_flow_priority(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the priority from a flow. Returns 404 if no priority was set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_priority_store.clear(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No priority set for this flow")
+    return {"flow_id": flow_id, "priority": None}
 
 
 # ---------------------------------------------------------------------------

@@ -155,6 +155,7 @@
 | N-144 | Flow Watch — POST/DELETE /flows/{id}/watch + GET /flows/{id}/watchers + GET /flows/watched (per-user) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-145 | Flow Edit Lock — POST/DELETE/GET /flows/{id}/lock; PUT blocked (423) while locked | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-146 | Flow Metadata — GET/PUT/PATCH /flows/{id}/metadata + DELETE /flows/{id}/metadata/{key} | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-147 | Flow Priority — GET/PUT/DELETE /flows/{id}/priority (critical/high/medium/low) + ?priority= filter | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
