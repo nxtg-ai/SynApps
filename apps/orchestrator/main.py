@@ -49,6 +49,7 @@ from croniter import croniter as CronIter
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     FastAPI,
     Form,
@@ -2656,6 +2657,12 @@ class RunFlowRequest(StrictRequestModel):
     """Strictly validated request body for running a flow."""
 
     input: dict[str, Any] = Field(default_factory=dict, description="Input data for the workflow")
+
+
+class FlowCloneRequest(BaseModel):
+    """Optional body for cloning a flow.  All fields are optional."""
+
+    name: str | None = Field(None, max_length=200, description="Name for the cloned flow. Defaults to 'Copy of {original_name}'.")
 
 
 class RerunFlowRequest(StrictRequestModel):
@@ -14787,6 +14794,75 @@ async def import_flow(
 
     await FlowRepository.save(flow_data)
     return {"message": "Flow imported", "id": new_id}
+
+
+@v1.post("/flows/{flow_id}/clone", status_code=201, tags=["Flows"])
+async def clone_flow(
+    flow_id: str,
+    body: FlowCloneRequest = Body(default_factory=FlowCloneRequest),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Clone a flow — deep copy with new IDs for flow, nodes, and edges.
+
+    Returns the new flow ID and name. The caller can use GET /flows/{new_id}
+    to retrieve the full cloned flow.
+    """
+    original = await FlowRepository.get_by_id(flow_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Build node ID remapping: old_node_id → new_node_id
+    node_id_map: dict[str, str] = {
+        n["id"]: str(uuid.uuid4()) for n in original.get("nodes", [])
+    }
+
+    new_nodes = [
+        {**n, "id": node_id_map[n["id"]]}
+        for n in original.get("nodes", [])
+    ]
+
+    new_edges = [
+        {
+            **e,
+            "id": str(uuid.uuid4()),
+            "source": node_id_map.get(e.get("source", ""), e.get("source", "")),
+            "target": node_id_map.get(e.get("target", ""), e.get("target", "")),
+        }
+        for e in original.get("edges", [])
+    ]
+
+    new_id = str(uuid.uuid4())
+    new_name = (body.name or f"Copy of {original['name']}").strip() or f"Copy of {original['name']}"
+
+    clone_data: dict[str, Any] = {
+        "id": new_id,
+        "name": new_name,
+        "nodes": new_nodes,
+        "edges": new_edges,
+    }
+
+    await FlowRepository.save(clone_data)
+
+    user_email = current_user.get("email", "")
+    if user_email and user_email != "anonymous@local":
+        workflow_permission_store.set_owner(new_id, user_email)
+
+    audit_log_store.record(
+        user_email or "anonymous",
+        "workflow_created",
+        "flow",
+        new_id,
+        detail=f"Flow '{new_name}' cloned from flow '{flow_id}'.",
+    )
+
+    return {
+        "message": "Flow cloned",
+        "id": new_id,
+        "name": new_name,
+        "node_count": len(new_nodes),
+        "edge_count": len(new_edges),
+        "cloned_from": flow_id,
+    }
 
 
 async def _run_flow_impl(

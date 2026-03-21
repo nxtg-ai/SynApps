@@ -137,6 +137,8 @@
 | N-126 | Plugin Schema Viewer — GET /plugins/{plugin_id}/schema (properties table + raw JSON) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-127 | Marketplace Publish — POST /marketplace/publish (flow_id + name + category + tags + author form) | MARKETPLACE | SHIPPED | P1 | 2026-03-21 |
 | N-128 | Security: npm dependency vulnerability fix — dompurify GHSA-v2wj-7wpq-c8vv (0 vulnerabilities) | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-129 | datetime.utcnow() → datetime.now(UTC) — eliminate 730 deprecation warnings per test run | STACK | SHIPPED | P1 | 2026-03-21 |
+| N-130 | Flow Clone — POST /api/v1/flows/{flow_id}/clone (deep copy, remapped node/edge IDs) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
