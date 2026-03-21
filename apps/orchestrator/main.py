@@ -12439,6 +12439,50 @@ class FlowGeoRestrictionStore:
 
 flow_geo_restriction_store = FlowGeoRestrictionStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowIpAllowlistStore — N-188 Flow IP Allowlist
+# ---------------------------------------------------------------------------
+
+
+class FlowIpAllowlistStore:
+    """Store IP allowlist for a flow (CIDR notation supported)."""
+
+    _MAX_ENTRIES: int = 100
+
+    def __init__(self) -> None:
+        self._lists: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, enabled: bool, cidrs: list[str]) -> dict[str, Any]:
+        if len(cidrs) > self._MAX_ENTRIES:
+            raise ValueError(f"cidrs exceeds maximum of {self._MAX_ENTRIES}")
+        with self._lock:
+            self._lists[flow_id] = {
+                "enabled": enabled,
+                "cidrs": list(dict.fromkeys(cidrs)),  # deduplicate preserving order
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._lists[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._lists.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._lists.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._lists.clear()
+
+
+flow_ip_allowlist_store = FlowIpAllowlistStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -21686,6 +21730,60 @@ async def delete_flow_geo_restrictions(
     deleted = flow_geo_restriction_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No geo restrictions for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-188 Flow IP Allowlist — PUT/GET/DELETE /flows/{id}/ip-allowlist
+# ---------------------------------------------------------------------------
+
+
+class FlowIpAllowlistBody(BaseModel):
+    enabled: bool = Field(default=True)
+    cidrs: list[str] = Field(default_factory=list)
+
+
+@v1.put("/flows/{flow_id}/ip-allowlist", tags=["Flows"])
+async def set_flow_ip_allowlist(
+    flow_id: str,
+    body: FlowIpAllowlistBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_ip_allowlist_store.set(flow_id, body.enabled, body.cidrs)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/ip-allowlist", tags=["Flows"])
+async def get_flow_ip_allowlist(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_ip_allowlist_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No IP allowlist for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/ip-allowlist", tags=["Flows"])
+async def delete_flow_ip_allowlist(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_ip_allowlist_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No IP allowlist for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 

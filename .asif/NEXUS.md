@@ -196,6 +196,7 @@
 | N-185 | Flow Observability Configuration — PUT/GET/DELETE /flows/{id}/observability-config (traces/metrics/logs enable, sample_rate 0-1) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-186 | Flow Maintenance Window — PUT/GET/DELETE /flows/{id}/maintenance-window (start/end ISO timestamps, reason, active flag) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-187 | Flow Geographic Restrictions — PUT/GET/DELETE /flows/{id}/geo-restrictions (allowlist/blocklist/none, regions list, max 50) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-188 | Flow IP Allowlist — PUT/GET/DELETE /flows/{id}/ip-allowlist (enabled, cidrs CIDR list, max 100, deduplicated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
