@@ -10629,6 +10629,73 @@ flow_snapshot_store = FlowSnapshotStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowReactionStore — N-158 Flow Reactions
+# ---------------------------------------------------------------------------
+
+_ALLOWED_REACTIONS: frozenset[str] = frozenset(
+    ["👍", "👎", "❤️", "🔥", "🎉", "🚀", "⚠️", "✅", "❌", "🤔"]
+)
+
+
+class FlowReactionStore:
+    """Tracks emoji reactions per flow, scoped to the reacting user.
+
+    Each user can add at most one reaction of each emoji type per flow.
+    The store exposes aggregate counts (all users) and per-user reactions.
+    """
+
+    def __init__(self) -> None:
+        # (flow_id, emoji) → set of usernames
+        self._reactions: dict[tuple[str, str], set[str]] = {}
+        self._lock = threading.Lock()
+
+    def add(self, flow_id: str, emoji: str, user: str) -> None:
+        """Add user's reaction.  No-op if already reacted with this emoji."""
+        if emoji not in _ALLOWED_REACTIONS:
+            raise ValueError(f"Unsupported reaction: {emoji}")
+        with self._lock:
+            self._reactions.setdefault((flow_id, emoji), set()).add(user)
+
+    def remove(self, flow_id: str, emoji: str, user: str) -> bool:
+        """Remove user's reaction.  Returns True if it existed."""
+        if emoji not in _ALLOWED_REACTIONS:
+            raise ValueError(f"Unsupported reaction: {emoji}")
+        with self._lock:
+            users = self._reactions.get((flow_id, emoji), set())
+            if user not in users:
+                return False
+            users.discard(user)
+            return True
+
+    def summary(self, flow_id: str) -> list[dict[str, Any]]:
+        """Return aggregate counts for all reactions on a flow."""
+        with self._lock:
+            result = []
+            for emoji in _ALLOWED_REACTIONS:
+                users = self._reactions.get((flow_id, emoji), set())
+                if users:
+                    result.append({"emoji": emoji, "count": len(users)})
+            result.sort(key=lambda r: -r["count"])
+            return result
+
+    def user_reactions(self, flow_id: str, user: str) -> list[str]:
+        """Return the list of emojis the given user has reacted with."""
+        with self._lock:
+            return [
+                emoji
+                for emoji in _ALLOWED_REACTIONS
+                if user in self._reactions.get((flow_id, emoji), set())
+            ]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._reactions.clear()
+
+
+flow_reaction_store = FlowReactionStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -17955,6 +18022,75 @@ async def restore_flow_snapshot(
     }
     await FlowRepository.save(flow_data)
     return {"restored": True, "snapshot_id": snapshot_id, "label": snap["label"]}
+
+
+# ---------------------------------------------------------------------------
+# N-158 Flow Reactions — POST /flows/{id}/reactions
+#                        DELETE /flows/{id}/reactions/{emoji}
+#                        GET    /flows/{id}/reactions
+# ---------------------------------------------------------------------------
+
+
+class FlowReactionRequest(BaseModel):
+    emoji: str = Field(..., min_length=1, max_length=10, description="Emoji character to react with")
+
+
+@v1.post("/flows/{flow_id}/reactions", status_code=201, tags=["Flows"])
+async def add_flow_reaction(
+    flow_id: str,
+    body: FlowReactionRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Add an emoji reaction to a flow.  Allowed emojis: 👍 👎 ❤️ 🔥 🎉 🚀 ⚠️ ✅ ❌ 🤔"""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    try:
+        flow_reaction_store.add(flow_id, body.emoji, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"flow_id": flow_id, "emoji": body.emoji, "user": user}
+
+
+@v1.delete("/flows/{flow_id}/reactions/{emoji}", tags=["Flows"])
+async def remove_flow_reaction(
+    flow_id: str,
+    emoji: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the current user's reaction of the given emoji type."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    try:
+        removed = flow_reaction_store.remove(flow_id, emoji, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="Reaction not found")
+    return {"deleted": True, "emoji": emoji}
+
+
+@v1.get("/flows/{flow_id}/reactions", tags=["Flows"])
+async def get_flow_reactions(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get aggregate reaction counts plus the current user's reactions."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    summary = flow_reaction_store.summary(flow_id)
+    mine = flow_reaction_store.user_reactions(flow_id, user)
+    return {
+        "flow_id": flow_id,
+        "reactions": summary,
+        "user_reactions": mine,
+        "allowed": sorted(_ALLOWED_REACTIONS),
+    }
 
 
 # ---------------------------------------------------------------------------
