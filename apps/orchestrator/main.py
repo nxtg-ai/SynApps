@@ -9354,6 +9354,51 @@ flow_tag_store = FlowTagStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowFavoriteStore — N-133 Flow Favorites
+# ---------------------------------------------------------------------------
+
+
+class FlowFavoriteStore:
+    """Tracks which flows each user has favorited.
+
+    Keyed by user email → set of flow_ids.  Per-user so favorites are
+    personal; one user favoriting a flow does not affect other users.
+    """
+
+    def __init__(self) -> None:
+        self._favorites: dict[str, set[str]] = {}
+        self._lock = threading.Lock()
+
+    def add(self, user_email: str, flow_id: str) -> None:
+        with self._lock:
+            self._favorites.setdefault(user_email, set()).add(flow_id)
+
+    def remove(self, user_email: str, flow_id: str) -> bool:
+        """Returns True if the entry existed and was removed."""
+        with self._lock:
+            favs = self._favorites.get(user_email, set())
+            if flow_id in favs:
+                favs.discard(flow_id)
+                return True
+            return False
+
+    def get(self, user_email: str) -> set[str]:
+        with self._lock:
+            return set(self._favorites.get(user_email, set()))
+
+    def is_favorite(self, user_email: str, flow_id: str) -> bool:
+        with self._lock:
+            return flow_id in self._favorites.get(user_email, set())
+
+    def reset(self) -> None:
+        with self._lock:
+            self._favorites.clear()
+
+
+flow_favorite_store = FlowFavoriteStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -14578,6 +14623,22 @@ async def search_flows(
     return paginate(results, page, page_size)
 
 
+@v1.get("/flows/favorites", tags=["Flows"])
+async def list_favorite_flows(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return all flows the current user has favorited, sorted by name."""
+    user_email = current_user.get("email", "anonymous@local")
+    fav_ids = flow_favorite_store.get(user_email)
+    flows: list[dict[str, Any]] = []
+    for fid in fav_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if flow:
+            flows.append(flow)
+    flows.sort(key=lambda f: f.get("name", "").lower())
+    return {"items": flows, "total": len(flows)}
+
+
 @v1.get("/flows/{flow_id}", tags=["Flows"])
 async def get_flow(
     flow_id: str,
@@ -14986,6 +15047,43 @@ async def remove_flow_tag(
     if not removed:
         raise HTTPException(status_code=404, detail="Tag not found")
     return {"flow_id": flow_id, "tags": flow_tag_store.get(flow_id)}
+
+
+# ---------------------------------------------------------------------------
+# N-133 Flow Favorites — POST/DELETE /flows/{id}/favorite
+# (GET /flows/favorites is registered before GET /flows/{flow_id} to avoid
+#  path conflict — see search_flows pattern above)
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/favorite", status_code=201, tags=["Flows"])
+async def add_flow_favorite(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Mark a flow as a favorite for the current user. Idempotent."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user_email = current_user.get("email", "anonymous@local")
+    flow_favorite_store.add(user_email, flow_id)
+    return {"flow_id": flow_id, "favorited": True}
+
+
+@v1.delete("/flows/{flow_id}/favorite", tags=["Flows"])
+async def remove_flow_favorite(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a flow from the current user's favorites. Returns 404 if not favorited."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user_email = current_user.get("email", "anonymous@local")
+    removed = flow_favorite_store.remove(user_email, flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Flow is not in favorites")
+    return {"flow_id": flow_id, "favorited": False}
 
 
 async def _run_flow_impl(

@@ -18,6 +18,7 @@ from apps.orchestrator.main import (
     execution_log_store,
     execution_quota_store,
     featured_store,
+    flow_favorite_store,
     flow_tag_store,
     issue_store,
     marketplace_registry,
@@ -136,8 +137,9 @@ def _reset_all_stores() -> None:
     plugin_registry.reset()
     # Suites
     test_suite_store.reset()
-    # Flow tags
+    # Flow tags / favorites
     flow_tag_store.reset()
+    flow_favorite_store.reset()
 
 
 @pytest.fixture(autouse=True)
