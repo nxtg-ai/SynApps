@@ -10985,6 +10985,68 @@ flow_custom_field_store = FlowCustomFieldStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowCollaboratorStore — N-162 Flow Collaborators
+# ---------------------------------------------------------------------------
+
+_COLLABORATOR_ROLES: frozenset[str] = frozenset(["owner", "editor", "viewer", "commenter"])
+
+
+class FlowCollaboratorStore:
+    """Manages named collaborator roles per flow.
+
+    Each flow has a collaborator list: user (email) → role.
+    The owner role is informational — there is no access enforcement here
+    (that is the responsibility of workflow_permission_store).
+    Multiple users per flow, max 100. A user can only have one role per flow.
+    """
+
+    MAX_COLLABORATORS = 100
+
+    def __init__(self) -> None:
+        self._store: dict[str, dict[str, str]] = {}  # flow_id → {user: role}
+        self._lock = threading.Lock()
+
+    def add(self, flow_id: str, user: str, role: str) -> dict[str, Any]:
+        if role not in _COLLABORATOR_ROLES:
+            raise ValueError(f"Invalid role: {role!r}")
+        with self._lock:
+            collab = self._store.setdefault(flow_id, {})
+            if user not in collab and len(collab) >= self.MAX_COLLABORATORS:
+                raise ValueError(f"Maximum of {self.MAX_COLLABORATORS} collaborators per flow exceeded")
+            collab[user] = role
+            return {"flow_id": flow_id, "user": user, "role": role}
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                {"user": u, "role": r}
+                for u, r in sorted(self._store.get(flow_id, {}).items())
+            ]
+
+    def get(self, flow_id: str, user: str) -> dict[str, Any] | None:
+        with self._lock:
+            role = self._store.get(flow_id, {}).get(user)
+            if role is None:
+                return None
+            return {"flow_id": flow_id, "user": user, "role": role}
+
+    def remove(self, flow_id: str, user: str) -> bool:
+        with self._lock:
+            collab = self._store.get(flow_id, {})
+            if user not in collab:
+                return False
+            del collab[user]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+flow_collaborator_store = FlowCollaboratorStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -18679,6 +18741,84 @@ async def delete_flow_custom_field(
     if not removed:
         raise HTTPException(status_code=404, detail="Custom field not defined")
     return {"deleted": True, "name": name}
+
+
+# ---------------------------------------------------------------------------
+# N-162 Flow Collaborators — PUT/GET/DELETE /flows/{id}/collaborators/{user}
+#                             GET             /flows/{id}/collaborators
+# ---------------------------------------------------------------------------
+
+
+class FlowCollaboratorRequest(BaseModel):
+    role: str = Field(..., description="One of: owner, editor, viewer, commenter")
+
+
+@v1.put("/flows/{flow_id}/collaborators/{user}", tags=["Flows"])
+async def set_flow_collaborator(
+    flow_id: str,
+    user: str,
+    body: FlowCollaboratorRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Add or update a collaborator's role on a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_collaborator_store.add(flow_id, user, body.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/collaborators", tags=["Flows"])
+async def list_flow_collaborators(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all collaborators and their roles for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    items = flow_collaborator_store.list(flow_id)
+    return {
+        "flow_id": flow_id,
+        "total": len(items),
+        "collaborators": items,
+        "allowed_roles": sorted(_COLLABORATOR_ROLES),
+    }
+
+
+@v1.get("/flows/{flow_id}/collaborators/{user}", tags=["Flows"])
+async def get_flow_collaborator(
+    flow_id: str,
+    user: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get a specific collaborator's role."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    collab = flow_collaborator_store.get(flow_id, user)
+    if collab is None:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+    return collab
+
+
+@v1.delete("/flows/{flow_id}/collaborators/{user}", tags=["Flows"])
+async def remove_flow_collaborator(
+    flow_id: str,
+    user: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a collaborator from a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_collaborator_store.remove(flow_id, user)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+    return {"deleted": True, "user": user}
 
 
 # ---------------------------------------------------------------------------
