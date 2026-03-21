@@ -12288,6 +12288,57 @@ class FlowCircuitBreakerStore:
 
 flow_circuit_breaker_store = FlowCircuitBreakerStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowObservabilityConfigStore — N-185 Flow Observability Configuration
+# ---------------------------------------------------------------------------
+
+
+class FlowObservabilityConfigStore:
+    """Store observability configuration for a flow (traces, metrics, logs)."""
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        traces_enabled: bool,
+        metrics_enabled: bool,
+        logs_enabled: bool,
+        sample_rate: float,
+    ) -> dict[str, Any]:
+        if not (0.0 <= sample_rate <= 1.0):
+            raise ValueError("sample_rate must be between 0.0 and 1.0")
+        with self._lock:
+            self._configs[flow_id] = {
+                "traces_enabled": traces_enabled,
+                "metrics_enabled": metrics_enabled,
+                "logs_enabled": logs_enabled,
+                "sample_rate": sample_rate,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._configs[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._configs.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._configs.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_observability_config_store = FlowObservabilityConfigStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -21364,6 +21415,68 @@ async def delete_flow_circuit_breaker(
     deleted = flow_circuit_breaker_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No circuit breaker for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-185 Flow Observability Config — PUT/GET/DELETE /flows/{id}/observability-config
+# ---------------------------------------------------------------------------
+
+
+class FlowObservabilityConfigBody(BaseModel):
+    traces_enabled: bool = Field(default=True)
+    metrics_enabled: bool = Field(default=True)
+    logs_enabled: bool = Field(default=True)
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+@v1.put("/flows/{flow_id}/observability-config", tags=["Flows"])
+async def set_flow_observability_config(
+    flow_id: str,
+    body: FlowObservabilityConfigBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_observability_config_store.set(
+            flow_id,
+            body.traces_enabled,
+            body.metrics_enabled,
+            body.logs_enabled,
+            body.sample_rate,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/observability-config", tags=["Flows"])
+async def get_flow_observability_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_observability_config_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No observability config for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/observability-config", tags=["Flows"])
+async def delete_flow_observability_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_observability_config_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No observability config for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 

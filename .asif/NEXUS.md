@@ -193,6 +193,7 @@
 | N-182 | Flow Input Validation Rules — PUT/GET/DELETE /flows/{id}/input-validation (rules list, strict mode, max 50 rules) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-183 | Flow Caching Configuration — PUT/GET/DELETE /flows/{id}/caching-config (enabled, ttl_seconds 0-86400, key_fields) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-184 | Flow Circuit Breaker — PUT/GET/DELETE /flows/{id}/circuit-breaker (failure_threshold 1-100, recovery_timeout_s 1-3600, state) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-185 | Flow Observability Configuration — PUT/GET/DELETE /flows/{id}/observability-config (traces/metrics/logs enable, sample_rate 0-1) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
