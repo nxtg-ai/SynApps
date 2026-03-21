@@ -9532,6 +9532,44 @@ flow_archive_store = FlowArchiveStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowLabelStore — N-138 Flow Labels
+# ---------------------------------------------------------------------------
+
+
+class FlowLabelStore:
+    """Stores a visual label (color + optional icon) per flow_id.
+
+    - color: CSS hex color string, e.g. "#ff5733" (7 chars: # + 6 hex digits)
+    - icon: optional emoji or short text, max 2 characters
+    """
+
+    _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+    def __init__(self) -> None:
+        self._labels: dict[str, dict[str, str]] = {}  # flow_id → {color, icon}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, color: str, icon: str = "") -> None:
+        with self._lock:
+            self._labels[flow_id] = {"color": color, "icon": icon}
+
+    def get(self, flow_id: str) -> dict[str, str] | None:
+        with self._lock:
+            return dict(self._labels[flow_id]) if flow_id in self._labels else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._labels.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._labels.clear()
+
+
+flow_label_store = FlowLabelStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15280,6 +15318,58 @@ async def unpin_flow(
     if not removed:
         raise HTTPException(status_code=404, detail="Flow is not pinned")
     return {"flow_id": flow_id, "pinned": False}
+
+
+# ---------------------------------------------------------------------------
+# N-138 Flow Labels — GET/PUT/DELETE /flows/{id}/label
+# ---------------------------------------------------------------------------
+
+
+class FlowLabelRequest(BaseModel):
+    color: str = Field(..., pattern=r"^#[0-9a-fA-F]{6}$", description="CSS hex color, e.g. #ff5733")
+    icon: str = Field("", max_length=2, description="Optional emoji/icon (max 2 chars)")
+
+
+@v1.get("/flows/{flow_id}/label", tags=["Flows"])
+async def get_flow_label(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the label for a flow. Returns null if no label is set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    label = flow_label_store.get(flow_id)
+    return {"flow_id": flow_id, "label": label}
+
+
+@v1.put("/flows/{flow_id}/label", tags=["Flows"])
+async def set_flow_label(
+    flow_id: str,
+    body: FlowLabelRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set or replace the label (color + optional icon) for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    flow_label_store.set(flow_id, body.color, body.icon)
+    return {"flow_id": flow_id, "label": flow_label_store.get(flow_id)}
+
+
+@v1.delete("/flows/{flow_id}/label", tags=["Flows"])
+async def delete_flow_label(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the label from a flow. Returns 404 if no label is set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_label_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Flow has no label")
+    return {"flow_id": flow_id, "label": None}
 
 
 # ---------------------------------------------------------------------------
