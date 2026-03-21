@@ -219,6 +219,12 @@ const FlowExportImportPage = React.lazy(
   () => import('./pages/FlowExportImportPage/FlowExportImportPage'),
 );
 const RunsPage = React.lazy(() => import('./pages/RunsPage/RunsPage'));
+const ExecutionHistoryPage = React.lazy(
+  () => import('./pages/ExecutionHistoryPage/ExecutionHistoryPage'),
+);
+const PluginSchemaPage = React.lazy(
+  () => import('./pages/PluginSchemaPage/PluginSchemaPage'),
+);
 const WorkflowSnapshotsPage = React.lazy(
   () => import('./pages/WorkflowSnapshotsPage/WorkflowSnapshotsPage'),
 );
@@ -932,6 +938,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ListingAnalyticsDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/execution-history"
+            element={
+              <ProtectedRoute>
+                <ExecutionHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/plugin-schema"
+            element={
+              <ProtectedRoute>
+                <PluginSchemaPage />
               </ProtectedRoute>
             }
           />
