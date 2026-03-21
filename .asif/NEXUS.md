@@ -127,6 +127,9 @@
 | N-116 | Analytics Detail — Per-flow + per-node execution stats with flow_id filter | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-117 | Marketplace Discovery — Featured listings + autocomplete + issue reporting | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-118 | Flow Test Detail — Single test-case inspector (GET /flows/{id}/tests/{test_id}) | EXECUTION | SHIPPED | P1 | 2026-03-21 |
+| N-119 | Usage Detail — Per-key bandwidth + error rate + by-endpoint/hour breakdown | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-120 | Flow Export/Import — GET /flows/{id}/export + POST /flows/import (JSON roundtrip) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-121 | Runs Page — Paginated GET /runs + GET /runs/{id} detail with progress + applets | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
