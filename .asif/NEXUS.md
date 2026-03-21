@@ -123,6 +123,7 @@
 | N-112 | Workflow Test Runner — Run test assertions + test history + test suite CRUD | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 | N-113 | OAuth Inspector — Introspect + Authorize + Token + per-workflow monitoring detail | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-114 | Collab Locks & Bulk Cost — Lock/unlock nodes + bulk arbitrary-node cost estimate | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-115 | Flaky Test Stabilization II — Full store reset in conftest (23 missing stores) | STACK | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2670,6 +2671,57 @@ Still uncovered (candidates for N-82+):
 
 ---
 
+## Team Feedback — Cycle 84 (2026-03-21)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Tests |
+|---|---|---|
+| N-115 | **Flaky Test Stabilization II**: Added `WebhookTriggerRegistry.reset()`. Expanded conftest `_reset_shared_stores` from 17 → 40+ stores. Root cause: 23 singleton stores had `reset()` methods but were not in conftest — state bled between tests under full-suite load. Backend suite now passes 3× consecutive runs. | 0 new, 2697 now stable |
+| docs | README test count updated to 3,633. N-45–N-114 frontend sprint row added. CHANGELOG entries for N-112–N-115. | — |
+
+Commits: `2a87fe0`
+
+---
+
+### 2. What surprised me?
+
+**23 stores missing from conftest.** The investigation revealed a systematic gap: `_reset_shared_stores` was last updated when ~17 stores existed. The codebase grew to 40+ singleton stores, but conftest was never updated to track them. The stores most responsible for flakiness:
+- `debug_session_store`: sessions from debug test leaked into HMAC smoke test, causing event-loop-closed errors in the next TestClient
+- `webhook_trigger_registry`: no `reset()` at all — triggers accumulated infinitely across the suite
+- `execution_log_store`: SSE event bus and execution logs from one test polluted others
+
+**Pattern**: when adding a new singleton store with state, always add its `reset()` call to conftest. The current conftest now serves as documentation of ALL resetable stores.
+
+---
+
+### 3. Cross-project signals
+
+**Full store reset pattern for async test suites.** Any FastAPI project with multiple in-memory singleton stores needs a `conftest.py` that resets ALL of them. The common mistake is to only reset the stores that you KNOW cause 429s (quota store), and miss the rest. The right pattern is: for each `ClassName()` singleton in `main.py` that has a `reset()` method, add it to conftest. Our `_reset_all_stores()` helper function (called both pre- and post-test) is now the canonical pattern for SynApps.
+
+**`WebhookTriggerRegistry` was the only store without `reset()`**. All other stores had it — this was an oversight when N-19 was shipped. Lesson: when shipping a new Store/Registry, always add `reset()` in the same PR.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **CRUCIBLE audit** — 3,633 tests. Gate 2-7 quality pass at this scale would surface hollow assertions, uncovered paths, and silent exception swallows.
+2. **N-68: Merge master → main** — still 120+ commits behind. Need explicit CoS authorization.
+3. **Backend feature work** — frontend coverage is now ~98%. Next natural work is either new backend features or performance work.
+4. **Dependabot alerts** — GitHub flagged 1 high + 1 moderate vulnerability on master. Worth investigating and patching.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`origin/main` divergence**: 120+ commits. Awaiting directive.
+
+**GitHub Dependabot vulnerabilities**: 1 high + 1 moderate on master branch. Should I investigate and patch? Or is this tracked elsewhere?
+
+**Automated trigger**: 13th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
+
+---
+
 ## Team Feedback — Cycle 83 (2026-03-21)
 
 ### 1. What did I ship since last check-in?
@@ -2770,5 +2822,5 @@ The second is subtle: Python asyncio doesn't guarantee that `create_task` won't 
 
 **Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
 
-> Last updated: 2026-03-21 (cycle 83) — N-112 through N-114 shipped
+> Last updated: 2026-03-21 (cycle 84) — N-115 shipped
 
