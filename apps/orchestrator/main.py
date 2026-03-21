@@ -12339,6 +12339,58 @@ class FlowObservabilityConfigStore:
 
 flow_observability_config_store = FlowObservabilityConfigStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowMaintenanceWindowStore — N-186 Flow Maintenance Window
+# ---------------------------------------------------------------------------
+
+
+class FlowMaintenanceWindowStore:
+    """Store maintenance window configuration for a flow."""
+
+    _MAX_REASON_LEN: int = 500
+
+    def __init__(self) -> None:
+        self._windows: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        start_iso: str,
+        end_iso: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        if len(reason) > self._MAX_REASON_LEN:
+            raise ValueError(f"reason exceeds {self._MAX_REASON_LEN} characters")
+        with self._lock:
+            self._windows[flow_id] = {
+                "start": start_iso,
+                "end": end_iso,
+                "reason": reason,
+                "active": True,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._windows[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._windows.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._windows.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._windows.clear()
+
+
+flow_maintenance_window_store = FlowMaintenanceWindowStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -21477,6 +21529,61 @@ async def delete_flow_observability_config(
     deleted = flow_observability_config_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No observability config for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-186 Flow Maintenance Window — PUT/GET/DELETE /flows/{id}/maintenance-window
+# ---------------------------------------------------------------------------
+
+
+class FlowMaintenanceWindowBody(BaseModel):
+    start: str = Field(..., description="ISO 8601 start datetime")
+    end: str = Field(..., description="ISO 8601 end datetime")
+    reason: str = Field(default="", max_length=500)
+
+
+@v1.put("/flows/{flow_id}/maintenance-window", tags=["Flows"])
+async def set_flow_maintenance_window(
+    flow_id: str,
+    body: FlowMaintenanceWindowBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_maintenance_window_store.set(flow_id, body.start, body.end, body.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/maintenance-window", tags=["Flows"])
+async def get_flow_maintenance_window(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_maintenance_window_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No maintenance window for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/maintenance-window", tags=["Flows"])
+async def delete_flow_maintenance_window(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_maintenance_window_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No maintenance window for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
