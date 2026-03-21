@@ -132,6 +132,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/workflow-test-runner', icon: '🧪', label: 'WF Test Runner' },
     { path: '/oauth-inspector', icon: '🔍', label: 'OAuth Inspector' },
     { path: '/collab-locks', icon: '🔒', label: 'Collab Locks' },
+    { path: '/analytics-detail', icon: '📊', label: 'Analytics Detail' },
+    { path: '/marketplace-discovery', icon: '🔭', label: 'Mkt Discovery' },
+    { path: '/flow-test-detail', icon: '🔬', label: 'Test Detail' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

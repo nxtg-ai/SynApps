@@ -203,6 +203,15 @@ const OAuthInspectorPage = React.lazy(
 const CollabLocksPage = React.lazy(
   () => import('./pages/CollabLocksPage/CollabLocksPage'),
 );
+const AnalyticsDetailPage = React.lazy(
+  () => import('./pages/AnalyticsDetailPage/AnalyticsDetailPage'),
+);
+const MarketplaceDiscoveryPage = React.lazy(
+  () => import('./pages/MarketplaceDiscoveryPage/MarketplaceDiscoveryPage'),
+);
+const FlowTestDetailPage = React.lazy(
+  () => import('./pages/FlowTestDetailPage/FlowTestDetailPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -846,6 +855,30 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <CollabLocksPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics-detail"
+            element={
+              <ProtectedRoute>
+                <AnalyticsDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/marketplace-discovery"
+            element={
+              <ProtectedRoute>
+                <MarketplaceDiscoveryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flow-test-detail"
+            element={
+              <ProtectedRoute>
+                <FlowTestDetailPage />
               </ProtectedRoute>
             }
           />
