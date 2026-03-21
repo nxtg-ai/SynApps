@@ -86,6 +86,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/plugins', icon: '🔌', label: 'Plugins' },
     { path: '/import-wizard', icon: '📥', label: 'Import' },
     { path: '/node-config', icon: '🛠', label: 'Node Config' },
+    { path: '/api-keys', icon: '🔑', label: 'API Keys' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
