@@ -16453,6 +16453,56 @@ async def bulk_tag_flows(
     return _bulk_result(succeeded, failed, "tag")
 
 
+class BulkMoveRequest(BaseModel):
+    flow_ids: list[str] = Field(..., min_length=1, max_length=100)
+    group: str = Field(..., min_length=1, max_length=100)
+
+
+class BulkPriorityRequest(BaseModel):
+    flow_ids: list[str] = Field(..., min_length=1, max_length=100)
+    priority: str = Field(..., pattern=r"^(critical|high|medium|low)$")
+
+
+@v1.post("/flows/bulk/move", tags=["Flows"])
+async def bulk_move_flows(
+    body: BulkMoveRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Move multiple flows to a group in one request.
+
+    Group name is lowercased. Not-found flows are reported as failures.
+    """
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    group_norm = body.group.lower().strip()
+    for fid in body.flow_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if not flow:
+            failed.append({"flow_id": fid, "reason": "not_found"})
+            continue
+        flow_group_store.set(fid, group_norm)
+        succeeded.append(fid)
+    return _bulk_result(succeeded, failed, "move")
+
+
+@v1.post("/flows/bulk/priority", tags=["Flows"])
+async def bulk_set_priority(
+    body: BulkPriorityRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set the priority of multiple flows in one request."""
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    for fid in body.flow_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if not flow:
+            failed.append({"flow_id": fid, "reason": "not_found"})
+            continue
+        flow_priority_store.set(fid, body.priority)
+        succeeded.append(fid)
+    return _bulk_result(succeeded, failed, "priority")
+
+
 # ---------------------------------------------------------------------------
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
