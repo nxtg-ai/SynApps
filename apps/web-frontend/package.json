@@ -30,6 +30,9 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
   },
+  "overrides": {
+    "dompurify": "^3.3.3"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.58.2",
