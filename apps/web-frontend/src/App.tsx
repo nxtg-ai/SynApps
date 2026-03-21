@@ -184,6 +184,10 @@ const PortfolioDashboardPage = React.lazy(
 );
 const FlowTestingPage = React.lazy(() => import('./pages/FlowTestingPage/FlowTestingPage'));
 const DebugSessionPage = React.lazy(() => import('./pages/DebugSessionPage/DebugSessionPage'));
+const SystemConfigPage = React.lazy(() => import('./pages/SystemConfigPage/SystemConfigPage'));
+const MonitoringAlertsPage = React.lazy(
+  () => import('./pages/MonitoringAlertsPage/MonitoringAlertsPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -771,6 +775,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <DebugSessionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/system-config"
+            element={
+              <ProtectedRoute>
+                <SystemConfigPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoring-alerts"
+            element={
+              <ProtectedRoute>
+                <MonitoringAlertsPage />
               </ProtectedRoute>
             }
           />
