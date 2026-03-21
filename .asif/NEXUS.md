@@ -124,6 +124,9 @@
 | N-113 | OAuth Inspector — Introspect + Authorize + Token + per-workflow monitoring detail | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-114 | Collab Locks & Bulk Cost — Lock/unlock nodes + bulk arbitrary-node cost estimate | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-115 | Flaky Test Stabilization II — Full store reset in conftest (23 missing stores) | STACK | SHIPPED | P1 | 2026-03-21 |
+| N-116 | Analytics Detail — Per-flow + per-node execution stats with flow_id filter | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-117 | Marketplace Discovery — Featured listings + autocomplete + issue reporting | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-118 | Flow Test Detail — Single test-case inspector (GET /flows/{id}/tests/{test_id}) | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2822,5 +2825,5 @@ The second is subtle: Python asyncio doesn't guarantee that `create_task` won't 
 
 **Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
 
-> Last updated: 2026-03-21 (cycle 84) — N-115 shipped
+> Last updated: 2026-03-21 (cycle 85) — N-115 fix + N-116/N-117/N-118 shipped
 

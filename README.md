@@ -158,6 +158,8 @@ All 44 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-43 | Workflow Diff — Version Compare | PLATFORM | Compare two workflow snapshots: added/removed/modified nodes + edges, version history store — `POST /workflows/:id/diff`, `GET /workflows/:id/version-history` |
 | N-44 | Node Performance Profiler | PLATFORM | Per-node avg/p50/p95/p99 timing across all runs, bottleneck detection per execution — `GET /workflows/:id/profile`, `GET /executions/:id/profile` |
 | N-45–N-114 | Frontend Coverage Sprint | PLATFORM | 70+ React pages covering every backend endpoint: marketplace, SLA, OAuth2, audit trail, collaboration, monitoring, cost tracking, replay, subflows, plugins, and more — full UI surface for all 212 API routes |
+| N-115 | Flaky Test Stabilization II | STACK | Full conftest store-reset: 23 missing singletons added, WebhookTriggerRegistry.reset() added, _run_flow_debug hardened (CancelledError + early-abort on closed DB) |
+| N-116–N-118 | Analytics Detail + Marketplace Discovery + Flow Test Detail | PLATFORM | Per-flow/node analytics, featured listings + autocomplete + issue reporting, single test-case inspector |
 
 ## Tech Stack
 
@@ -203,7 +205,7 @@ See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
-**3,633 tests** (2,697 backend + 936 frontend unit) — all passing.
+**3,673 tests** (2,697 backend + 976 frontend unit) — all passing.
 
 ### Backend
 
