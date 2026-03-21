@@ -11750,6 +11750,13 @@ class Orchestrator:
                     },
                 )
 
+        except asyncio.CancelledError:
+            # Task cancelled during post-completion broadcast (e.g. TestClient teardown).
+            # Status is already saved to DB — safe to absorb.
+            logger.debug(
+                "_execute_flow_async %s: cancelled during post-completion broadcast",
+                run_id,
+            )
         except Exception as e:
             logger.error(f"Error executing workflow: {e}")
             end_time = time.time()

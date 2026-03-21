@@ -132,6 +132,7 @@
 | N-121 | Runs Page — Paginated GET /runs + GET /runs/{id} detail with progress + applets | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 | N-122 | Workflow Snapshots — Save/list/inspect/diff workflow snapshots (POST+GET /workflows/{id}/versions, POST /workflows/{id}/diff) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-123 | Listing Analytics Detail — GET /marketplace/publisher/analytics/{listing_id} (ratings, credits, 30-day trend, reviews) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-124 | Flaky Test Root Cause Fix — `except asyncio.CancelledError` in `_execute_flow_async` post-completion path | STACK | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2830,5 +2831,5 @@ The second is subtle: Python asyncio doesn't guarantee that `create_task` won't 
 
 **Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
 
-> Last updated: 2026-03-21 (cycle 85) — N-115 fix + N-116/N-117/N-118 shipped
+> Last updated: 2026-03-21 (cycle 86) — N-124 root cause flaky test fix (`asyncio.CancelledError` in `_execute_flow_async`), N-122/N-123 shipped
 
