@@ -11047,6 +11047,83 @@ flow_collaborator_store = FlowCollaboratorStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowEnvironmentStore — N-163 Flow Environments
+# ---------------------------------------------------------------------------
+
+_ENV_NAMES: frozenset[str] = frozenset(["development", "staging", "production"])
+
+
+class FlowEnvironmentStore:
+    """Stores per-environment configuration overrides for a flow.
+
+    Each flow can have up to 3 named environments (development, staging,
+    production). Each environment stores a flat key-value config dict and
+    tracks which is "active". Only one environment can be active at a time.
+    """
+
+    MAX_KEYS = 50
+
+    def __init__(self) -> None:
+        self._envs: dict[str, dict[str, Any]] = {}   # flow_id → {env_name: {config, active, updated_at}}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, env_name: str, config: dict[str, str]) -> dict[str, Any]:
+        if env_name not in _ENV_NAMES:
+            raise ValueError(f"Invalid environment name: {env_name!r}")
+        if len(config) > self.MAX_KEYS:
+            raise ValueError(f"Environment config exceeds maximum of {self.MAX_KEYS} keys")
+        with self._lock:
+            envs = self._envs.setdefault(flow_id, {})
+            existing = envs.get(env_name, {})
+            envs[env_name] = {
+                "name": env_name,
+                "config": dict(config),
+                "active": existing.get("active", False),
+                "created_at": existing.get("created_at", datetime.now(UTC).isoformat()),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **envs[env_name]}
+
+    def get(self, flow_id: str, env_name: str) -> dict[str, Any] | None:
+        with self._lock:
+            env = self._envs.get(flow_id, {}).get(env_name)
+            if env is None:
+                return None
+            return {"flow_id": flow_id, **env}
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                {"flow_id": flow_id, **v}
+                for v in sorted(self._envs.get(flow_id, {}).values(), key=lambda e: e["name"])
+            ]
+
+    def activate(self, flow_id: str, env_name: str) -> dict[str, Any] | None:
+        with self._lock:
+            envs = self._envs.get(flow_id, {})
+            if env_name not in envs:
+                return None
+            for name, env in envs.items():
+                env["active"] = name == env_name
+            return {"flow_id": flow_id, **envs[env_name]}
+
+    def delete(self, flow_id: str, env_name: str) -> bool:
+        with self._lock:
+            envs = self._envs.get(flow_id, {})
+            if env_name not in envs:
+                return False
+            del envs[env_name]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._envs.clear()
+
+
+flow_environment_store = FlowEnvironmentStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -18819,6 +18896,103 @@ async def remove_flow_collaborator(
     if not removed:
         raise HTTPException(status_code=404, detail="Collaborator not found")
     return {"deleted": True, "user": user}
+
+
+# ---------------------------------------------------------------------------
+# N-163 Flow Environments — PUT/GET/DELETE /flows/{id}/environments/{env}
+#                           GET             /flows/{id}/environments
+#                           POST            /flows/{id}/environments/{env}/activate
+# ---------------------------------------------------------------------------
+
+
+class FlowEnvironmentSetRequest(BaseModel):
+    config: dict[str, str] = Field(default_factory=dict, description="Key-value config overrides")
+
+
+@v1.put("/flows/{flow_id}/environments/{env_name}", tags=["Flows"])
+async def set_flow_environment(
+    flow_id: str,
+    env_name: str,
+    body: FlowEnvironmentSetRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Create or replace a named environment config for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_environment_store.set(flow_id, env_name, body.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/environments", tags=["Flows"])
+async def list_flow_environments(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all environments configured for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    envs = flow_environment_store.list(flow_id)
+    return {
+        "flow_id": flow_id,
+        "total": len(envs),
+        "environments": envs,
+        "allowed_names": sorted(_ENV_NAMES),
+    }
+
+
+@v1.get("/flows/{flow_id}/environments/{env_name}", tags=["Flows"])
+async def get_flow_environment(
+    flow_id: str,
+    env_name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get a specific environment config."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    env = flow_environment_store.get(flow_id, env_name)
+    if env is None:
+        raise HTTPException(status_code=404, detail="Environment not configured")
+    return env
+
+
+@v1.post("/flows/{flow_id}/environments/{env_name}/activate", tags=["Flows"])
+async def activate_flow_environment(
+    flow_id: str,
+    env_name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set an environment as the active one (deactivates all others)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    result = flow_environment_store.activate(flow_id, env_name)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Environment not configured")
+    return result
+
+
+@v1.delete("/flows/{flow_id}/environments/{env_name}", tags=["Flows"])
+async def delete_flow_environment(
+    flow_id: str,
+    env_name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove an environment config."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if env_name not in _ENV_NAMES:
+        raise HTTPException(status_code=422, detail=f"Invalid environment name: {env_name!r}")
+    removed = flow_environment_store.delete(flow_id, env_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Environment not configured")
+    return {"deleted": True, "env_name": env_name}
 
 
 # ---------------------------------------------------------------------------
