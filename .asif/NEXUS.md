@@ -152,6 +152,7 @@
 | N-141 | Flow Save-as-Template — POST /flows/{id}/save-as-template (versioned, semver, tags, metadata) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-142 | Flow Access Log — GET /flows/{id}/access-log (per-flow read audit trail, newest-first, paginated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-143 | Flow Statistics — GET /flows/{id}/stats (total_runs, success/failure counts, avg_duration_ms, last_run_at) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-144 | Flow Watch — POST/DELETE /flows/{id}/watch + GET /flows/{id}/watchers + GET /flows/watched (per-user) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

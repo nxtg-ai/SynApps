@@ -9741,6 +9741,64 @@ flow_access_log_store = FlowAccessLogStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowWatchStore — N-144 Flow Watch
+# ---------------------------------------------------------------------------
+
+
+class FlowWatchStore:
+    """Track per-user watch subscriptions for flows.
+
+    Users can watch flows to receive notifications when they run or fail.
+    Stored as {user_email: set[flow_id]} and the inverse {flow_id: set[user_email]}.
+    """
+
+    def __init__(self) -> None:
+        self._by_user: dict[str, set[str]] = {}
+        self._by_flow: dict[str, set[str]] = {}
+        self._lock = threading.Lock()
+
+    def watch(self, flow_id: str, user: str) -> bool:
+        """Subscribe user to flow. Returns True if newly added, False if already watching."""
+        with self._lock:
+            if user in self._by_flow.get(flow_id, set()):
+                return False
+            self._by_user.setdefault(user, set()).add(flow_id)
+            self._by_flow.setdefault(flow_id, set()).add(user)
+            return True
+
+    def unwatch(self, flow_id: str, user: str) -> bool:
+        """Unsubscribe user from flow. Returns True if removed, False if not watching."""
+        with self._lock:
+            if user not in self._by_flow.get(flow_id, set()):
+                return False
+            self._by_flow[flow_id].discard(user)
+            self._by_user.get(user, set()).discard(flow_id)
+            return True
+
+    def is_watching(self, flow_id: str, user: str) -> bool:
+        with self._lock:
+            return user in self._by_flow.get(flow_id, set())
+
+    def watched_by_user(self, user: str) -> list[str]:
+        """Return list of flow_ids watched by a user (insertion-stable via set iteration)."""
+        with self._lock:
+            return sorted(self._by_user.get(user, set()))
+
+    def watchers_for_flow(self, flow_id: str) -> list[str]:
+        """Return list of user emails watching a flow."""
+        with self._lock:
+            return sorted(self._by_flow.get(flow_id, set()))
+
+    def reset(self) -> None:
+        with self._lock:
+            self._by_user.clear()
+            self._by_flow.clear()
+
+
+flow_watch_store = FlowWatchStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15025,6 +15083,19 @@ async def list_flow_groups(
     }
 
 
+@v1.get("/flows/watched", tags=["Flows"])
+async def list_watched_flows(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the list of flows the authenticated user is watching.
+
+    Registered before /flows/{flow_id} to prevent path shadowing.
+    """
+    user = current_user.get("email", "anonymous@local")
+    flow_ids = flow_watch_store.watched_by_user(user)
+    return {"flow_ids": flow_ids, "total": len(flow_ids)}
+
+
 @v1.get("/flows/shared/{token}", tags=["Flows"])
 async def get_shared_flow_early(token: str):
     """Fetch a flow via a share token. No authentication required.
@@ -15806,6 +15877,63 @@ async def get_flow_stats(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     return execution_dashboard_store.stats_for_flow(flow_id)
+
+
+# ---------------------------------------------------------------------------
+# N-144 Flow Watch — POST/DELETE /flows/{id}/watch + GET /flows/{id}/watchers
+# (GET /flows/watched is registered early, before {flow_id})
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/watch", status_code=201, tags=["Flows"])
+async def watch_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Subscribe the authenticated user to this flow.
+
+    Returns 201 on success, 409 if already watching.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    added = flow_watch_store.watch(flow_id, user)
+    if not added:
+        raise HTTPException(status_code=409, detail="Already watching this flow")
+    return {"flow_id": flow_id, "watching": True, "watcher": user}
+
+
+@v1.delete("/flows/{flow_id}/watch", tags=["Flows"])
+async def unwatch_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Unsubscribe the authenticated user from this flow.
+
+    Returns 200 on success, 404 if not watching.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    removed = flow_watch_store.unwatch(flow_id, user)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Not watching this flow")
+    return {"flow_id": flow_id, "watching": False, "watcher": user}
+
+
+@v1.get("/flows/{flow_id}/watchers", tags=["Flows"])
+async def list_flow_watchers(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the list of users watching this flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    watchers = flow_watch_store.watchers_for_flow(flow_id)
+    return {"flow_id": flow_id, "watchers": watchers, "total": len(watchers)}
 
 
 # ---------------------------------------------------------------------------
