@@ -195,6 +195,7 @@
 | N-184 | Flow Circuit Breaker — PUT/GET/DELETE /flows/{id}/circuit-breaker (failure_threshold 1-100, recovery_timeout_s 1-3600, state) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-185 | Flow Observability Configuration — PUT/GET/DELETE /flows/{id}/observability-config (traces/metrics/logs enable, sample_rate 0-1) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-186 | Flow Maintenance Window — PUT/GET/DELETE /flows/{id}/maintenance-window (start/end ISO timestamps, reason, active flag) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-187 | Flow Geographic Restrictions — PUT/GET/DELETE /flows/{id}/geo-restrictions (allowlist/blocklist/none, regions list, max 50) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
