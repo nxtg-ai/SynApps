@@ -25,6 +25,7 @@ import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
@@ -10075,6 +10076,80 @@ flow_alias_store = FlowAliasStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowRateLimitStore — N-151 Flow Rate Limiting
+# ---------------------------------------------------------------------------
+
+
+class FlowRateLimitStore:
+    """Per-flow execution rate limiting via a sliding-window counter.
+
+    Stores a config (max_runs, window_seconds) per flow and tracks
+    recent run timestamps to enforce the limit at run time.
+    """
+
+    def __init__(self) -> None:
+        self._limits: dict[str, dict[str, int]] = {}  # flow_id → config
+        self._timestamps: dict[str, deque] = {}  # flow_id → deque[float]
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, max_runs: int, window_seconds: int) -> dict[str, Any]:
+        with self._lock:
+            self._limits[flow_id] = {"max_runs": max_runs, "window_seconds": window_seconds}
+            return self._limits[flow_id].copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            cfg = self._limits.get(flow_id)
+            return cfg.copy() if cfg else None
+
+    def clear(self, flow_id: str) -> bool:
+        with self._lock:
+            existed = flow_id in self._limits
+            self._limits.pop(flow_id, None)
+            self._timestamps.pop(flow_id, None)
+            return existed
+
+    def check_and_record(self, flow_id: str) -> None:
+        """Record a run attempt; raises ``ValueError`` if the limit is exceeded."""
+        with self._lock:
+            cfg = self._limits.get(flow_id)
+            if cfg is None:
+                return  # No limit configured — allow freely.
+            max_runs = cfg["max_runs"]
+            window = cfg["window_seconds"]
+            now = time.time()
+            q = self._timestamps.setdefault(flow_id, deque())
+            cutoff = now - window
+            while q and q[0] <= cutoff:
+                q.popleft()
+            if len(q) >= max_runs:
+                raise ValueError(
+                    f"Rate limit exceeded: max {max_runs} runs per {window}s"
+                )
+            q.append(now)
+
+    def current_count(self, flow_id: str) -> int:
+        """Number of runs recorded in the current window."""
+        with self._lock:
+            cfg = self._limits.get(flow_id)
+            if cfg is None:
+                return 0
+            window = cfg["window_seconds"]
+            now = time.time()
+            q = self._timestamps.get(flow_id, deque())
+            cutoff = now - window
+            return sum(1 for t in q if t > cutoff)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._limits.clear()
+            self._timestamps.clear()
+
+
+flow_rate_limit_store = FlowRateLimitStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -16788,6 +16863,74 @@ async def delete_flow_alias(
 
 
 # ---------------------------------------------------------------------------
+# N-151 Flow Rate Limiting — GET/PUT/DELETE /flows/{id}/rate-limit
+# ---------------------------------------------------------------------------
+
+
+class FlowRateLimitRequest(BaseModel):
+    max_runs: int = Field(..., ge=1, le=10000, description="Maximum runs allowed in the window.")
+    window_seconds: int = Field(..., ge=1, le=86400, description="Sliding window duration in seconds (1s–24h).")
+
+
+def _rate_limit_response(flow_id: str) -> dict[str, Any]:
+    cfg = flow_rate_limit_store.get(flow_id)
+    return {
+        "flow_id": flow_id,
+        "max_runs": cfg["max_runs"] if cfg else None,
+        "window_seconds": cfg["window_seconds"] if cfg else None,
+        "current_count": flow_rate_limit_store.current_count(flow_id),
+    }
+
+
+@v1.get("/flows/{flow_id}/rate-limit", tags=["Flows"])
+async def get_flow_rate_limit(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the rate-limit config for *flow_id*, or ``null`` fields if not set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return _rate_limit_response(flow_id)
+
+
+@v1.put("/flows/{flow_id}/rate-limit", tags=["Flows"])
+async def set_flow_rate_limit(
+    flow_id: str,
+    body: FlowRateLimitRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set or replace the execution rate limit for *flow_id*.
+
+    Once set, ``POST /flows/{id}/runs`` will return **429** when the limit is
+    exceeded within the sliding window.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    flow_rate_limit_store.set(flow_id, body.max_runs, body.window_seconds)
+    return _rate_limit_response(flow_id)
+
+
+@v1.delete("/flows/{flow_id}/rate-limit", tags=["Flows"])
+async def delete_flow_rate_limit(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the rate limit for *flow_id*.
+
+    Returns 404 if no limit was configured.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_rate_limit_store.clear(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No rate limit set for this flow")
+    return _rate_limit_response(flow_id)
+
+
+# ---------------------------------------------------------------------------
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
 
@@ -16837,6 +16980,10 @@ async def _run_flow_impl(
     _check_flow_permission(flow_id, current_user.get("email", "") if current_user else "", "editor")
     if current_user:
         execution_quota_store.check_and_record(current_user.get("email", "anonymous"))
+    try:
+        flow_rate_limit_store.check_and_record(flow_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     flow = await FlowRepository.get_by_id(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")

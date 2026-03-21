@@ -30,6 +30,7 @@ from apps.orchestrator.main import (
     flow_metadata_store,
     flow_pin_store,
     flow_priority_store,
+    flow_rate_limit_store,
     flow_share_store,
     flow_tag_store,
     flow_watch_store,
@@ -164,6 +165,7 @@ def _reset_all_stores() -> None:
     flow_edit_lock_store.reset()
     flow_expiry_store.reset()
     flow_alias_store.reset()
+    flow_rate_limit_store.reset()
     flow_metadata_store.reset()
     flow_priority_store.reset()
 
