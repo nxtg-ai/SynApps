@@ -188,6 +188,12 @@ const SystemConfigPage = React.lazy(() => import('./pages/SystemConfigPage/Syste
 const MonitoringAlertsPage = React.lazy(
   () => import('./pages/MonitoringAlertsPage/MonitoringAlertsPage'),
 );
+const WorkflowSecretsPage = React.lazy(
+  () => import('./pages/WorkflowSecretsPage/WorkflowSecretsPage'),
+);
+const ConnectorProbePage = React.lazy(
+  () => import('./pages/ConnectorProbePage/ConnectorProbePage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -791,6 +797,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <MonitoringAlertsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflow-secrets"
+            element={
+              <ProtectedRoute>
+                <WorkflowSecretsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/connector-probe"
+            element={
+              <ProtectedRoute>
+                <ConnectorProbePage />
               </ProtectedRoute>
             }
           />

@@ -127,6 +127,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/debug-session', icon: '🔍', label: 'Debug Session' },
     { path: '/system-config', icon: '⚙️', label: 'System Config' },
     { path: '/monitoring-alerts', icon: '🔔', label: 'Alert Rules' },
+    { path: '/workflow-secrets', icon: '🔐', label: 'Workflow Secrets' },
+    { path: '/connector-probe', icon: '🔌', label: 'Connector Probe' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
