@@ -90,6 +90,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/node-profiler', icon: '📊', label: 'Node Profiler' },
     { path: '/monitoring', icon: '🔔', label: 'Monitoring' },
     { path: '/ai-assist', icon: '🤖', label: 'AI Assist' },
+    { path: '/workflow-debug', icon: '🐛', label: 'Step Debugger' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
