@@ -98,6 +98,8 @@
 | N-87 | Quota Manager — API Key Quota Administration UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-88 | Failed Request Debugger — Inspect & Replay Failed Requests | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-89 | Webhook Triggers Manager — Register/List/Delete Triggers | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-90 | Execution Replay — Replay & Chain Inspector UI | EXECUTION | SHIPPED | P1 | 2026-03-20 |
+| N-91 | Provider Status Dashboard — LLM + Image Provider Registry | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 

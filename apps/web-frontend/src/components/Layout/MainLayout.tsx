@@ -109,6 +109,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/webhook-triggers', icon: '🎣', label: 'Webhook Triggers' },
     { path: '/execution-replay', icon: '🔁', label: 'Exec Replay' },
     { path: '/providers', icon: '🤖', label: 'Providers' },
+    { path: '/task-monitor', icon: '⚙️', label: 'Task Monitor' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
