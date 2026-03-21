@@ -17,17 +17,17 @@ Tests for the clone endpoint:
   - Audit log records the clone
   - Blank custom name falls back to default
 """
+
 import uuid
 
-import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import app, audit_log_store
-
+from apps.orchestrator.main import app
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _register(client: TestClient) -> str:
     uid = uuid.uuid4().hex[:8]
@@ -51,7 +51,12 @@ def _create_flow(client: TestClient, token: str, name: str = "Original Flow") ->
             "name": name,
             "nodes": [
                 {"id": f"n1-{uid}", "type": "start", "position": {"x": 0, "y": 0}, "data": {}},
-                {"id": f"n2-{uid}", "type": "llm", "position": {"x": 200, "y": 0}, "data": {"model": "gpt-4o"}},
+                {
+                    "id": f"n2-{uid}",
+                    "type": "llm",
+                    "position": {"x": 200, "y": 0},
+                    "data": {"model": "gpt-4o"},
+                },
                 {"id": f"n3-{uid}", "type": "end", "position": {"x": 400, "y": 0}, "data": {}},
             ],
             "edges": [
@@ -133,7 +138,9 @@ class TestFlowCloneNodeEdgeRemapping:
             token = _register(client)
             flow_id = _create_flow(client, token)
             original = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token)).json()
-            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             clone = client.get(f"/api/v1/flows/{clone_id}", headers=_auth(token)).json()
 
         orig_node_ids = {n["id"] for n in original["nodes"]}
@@ -145,7 +152,9 @@ class TestFlowCloneNodeEdgeRemapping:
             token = _register(client)
             flow_id = _create_flow(client, token)
             original = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token)).json()
-            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             clone = client.get(f"/api/v1/flows/{clone_id}", headers=_auth(token)).json()
 
         orig_edge_ids = {e["id"] for e in original["edges"]}
@@ -157,20 +166,28 @@ class TestFlowCloneNodeEdgeRemapping:
         with TestClient(app) as client:
             token = _register(client)
             flow_id = _create_flow(client, token)
-            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             clone = client.get(f"/api/v1/flows/{clone_id}", headers=_auth(token)).json()
 
         clone_node_ids = {n["id"] for n in clone["nodes"]}
         for edge in clone["edges"]:
-            assert edge["source"] in clone_node_ids, f"Edge source {edge['source']} not in cloned node IDs"
-            assert edge["target"] in clone_node_ids, f"Edge target {edge['target']} not in cloned node IDs"
+            assert edge["source"] in clone_node_ids, (
+                f"Edge source {edge['source']} not in cloned node IDs"
+            )
+            assert edge["target"] in clone_node_ids, (
+                f"Edge target {edge['target']} not in cloned node IDs"
+            )
 
     def test_cloned_node_data_preserved(self):
         """Node type and data dict are copied into the clone."""
         with TestClient(app) as client:
             token = _register(client)
             flow_id = _create_flow(client, token)
-            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             clone = client.get(f"/api/v1/flows/{clone_id}", headers=_auth(token)).json()
 
         node_types = {n["type"] for n in clone["nodes"]}
@@ -184,7 +201,9 @@ class TestFlowCloneIndependence:
         with TestClient(app) as client:
             token = _register(client)
             flow_id = _create_flow(client, token)
-            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             # Delete original
             del_resp = client.delete(f"/api/v1/flows/{flow_id}", headers=_auth(token))
             assert del_resp.status_code == 200
@@ -196,7 +215,9 @@ class TestFlowCloneIndependence:
         with TestClient(app) as client:
             token = _register(client)
             flow_id = _create_flow(client, token)
-            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             flows_resp = client.get("/api/v1/flows", headers=_auth(token))
 
         assert flows_resp.status_code == 200
@@ -208,7 +229,9 @@ class TestFlowCloneIndependence:
         with TestClient(app) as client:
             token = _register(client)
             flow_id = _create_flow(client, token)
-            clone1_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()["id"]
+            clone1_id = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token)).json()[
+                "id"
+            ]
             resp = client.post(f"/api/v1/flows/{clone1_id}/clone", headers=_auth(token))
         assert resp.status_code == 201
         assert resp.json()["id"] not in (flow_id, clone1_id)
@@ -234,7 +257,7 @@ class TestFlowCloneEdgeCases:
     def test_clone_404_for_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
-            resp = client.post(f"/api/v1/flows/nonexistent-flow-id/clone", headers=_auth(token))
+            resp = client.post("/api/v1/flows/nonexistent-flow-id/clone", headers=_auth(token))
         assert resp.status_code == 404
 
     def test_clone_requires_auth(self):
