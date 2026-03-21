@@ -65,6 +65,9 @@ const CollaborationPage = React.lazy(
 const PluginManagerPage = React.lazy(
   () => import('./pages/PluginManagerPage/PluginManagerPage'),
 );
+const NodeConfigPage = React.lazy(
+  () => import('./pages/NodeConfigPage/NodeConfigPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -324,6 +327,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <PluginManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/node-config"
+            element={
+              <ProtectedRoute>
+                <NodeConfigPage />
               </ProtectedRoute>
             }
           />

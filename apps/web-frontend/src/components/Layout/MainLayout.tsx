@@ -84,6 +84,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/admin/executions', icon: '🖥', label: 'Exec Monitor' },
     { path: '/collaboration', icon: '👥', label: 'Collaboration' },
     { path: '/plugins', icon: '🔌', label: 'Plugins' },
+    { path: '/node-config', icon: '🛠', label: 'Node Config' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
