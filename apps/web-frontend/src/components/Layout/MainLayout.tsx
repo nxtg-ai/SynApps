@@ -98,6 +98,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/workflow-notifications', icon: '🔔', label: 'Notifications' },
     { path: '/execution-logs', icon: '📋', label: 'Execution Logs' },
     { path: '/usage', icon: '📊', label: 'Usage & Quota' },
+    { path: '/cost-tracker', icon: '💵', label: 'Cost Tracker' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

@@ -107,6 +107,9 @@ const ExecutionLogsPage = React.lazy(
 const UsagePage = React.lazy(
   () => import('./pages/UsagePage/UsagePage'),
 );
+const CostTrackerPage = React.lazy(
+  () => import('./pages/CostTrackerPage/CostTrackerPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -478,6 +481,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <UsagePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cost-tracker"
+            element={
+              <ProtectedRoute>
+                <CostTrackerPage />
               </ProtectedRoute>
             }
           />
