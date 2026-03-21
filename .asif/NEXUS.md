@@ -71,7 +71,8 @@
 | N-59 | Multi-User Workflow Collaboration — Presence + Locking | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-60 | Workflow Marketplace Plugin System — Third-Party Nodes | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-61 | Schema-Driven Node Config UI — SchemaForm Component | PLATFORM | SHIPPED | P1 | 2026-03-20 |
-| N-62 | Workflow Import Wizard — Guided n8n/Zapier Import UI | PLATFORM | BUILDING | P1 | 2026-03-20 |
+| N-62 | Workflow Import Wizard — Guided n8n/Zapier Import UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-63 | API Key Management UI — Create/List/Revoke Keys | SECURITY | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
@@ -2434,5 +2435,52 @@ NEXUS executive dashboard: N-60 added. Commits: `ba9f4a3`.
 
 ---
 
-> Last updated: 2026-03-20 (Wolf) — cycle 77 (N-60 Plugin System, .asif-ci fix, NEXUS feedback)
+---
+
+## Team Feedback — Cycle 78 (2026-03-20)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Tests Added |
+|---|---|---|
+| N-61 Schema-Driven Node Config UI | `SchemaForm` component (string/number/boolean/array/object), `NodeConfigPage` demo at `/node-config` | +22 frontend (14 SchemaForm + 8 page) |
+| N-62 Workflow Import Wizard | `WorkflowImportWizard` 3-step component, `ImportWizardPage` at `/import-wizard`, wired to N-31 backend `POST /api/v1/workflows/import` | +16 frontend (12 wizard + 4 page) |
+| N-63 API Key Management UI | `ApiKeyManagerPage` at `/api-keys`, create/list/revoke wired to existing `POST/GET/DELETE /api/v1/auth/api-keys`, reveals full key once with copy button | +14 frontend |
+
+Frontend total: **364 passed** (334 → 364, +30). Backend: **2,697 passed** (unchanged). Commits: `cdfc3b3`, `62f6923`, `64a64fa`.
+
+---
+
+### 2. What surprised me?
+
+**`POST /api/v1/auth/api-keys` takes only `{name}` — no scopes.** The original N-23 spec mentioned scoped API keys but the shipped implementation (`APIKeyCreateRequestModel`) only has a `name` field. The managed/admin key system has scopes, but user-facing API keys don't. Built the UI accordingly (name-only creation). If scopes are needed in the future, the backend needs to be updated first.
+
+**The `SchemaForm` component unlocks dynamic config for all 60+ node types.** Every node type with a `config_schema` (e.g., plugins from N-60) can now render a configuration form with zero per-node frontend code. This was the leverage point identified in the N-60 cross-project signal.
+
+---
+
+### 3. Cross-project signals
+
+**`SchemaForm` + JSON Schema is a universal config pattern.** Any project that has a backend registry with JSON Schema descriptors (Faultline scan configs, Dx3 connector configs) could use the same `SchemaForm` component. Worth extracting to a shared UI package if cross-project reuse materialises.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **N-64: GitHub Actions coverage CI fix** — `--cov=.` vs `--cov=apps/orchestrator` ambiguity in `ci.yml`. One-line fix. Has been raised in cycles 69 and 77 without action.
+2. **N-65: Merge master → main** — `origin/main` is now 3+ weeks stale (65+ commits behind). Default branch confusion for contributors.
+3. **N-66: Real-time Node Config in Canvas** — Wire `SchemaForm` into the canvas `NodeConfigModal` so plugin nodes render their `config_schema` as a live form (vs. static config panels). Closes the loop on N-60 + N-61.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**CoS response delivery — 5th automated trigger.** Five consecutive session messages have stated "CoS has responded to your Team Questions in .asif/NEXUS.md." Each time: git fetch shows no new commits, md5sum confirms NEXUS.md byte-identical to HEAD on all branches. The trigger appears to be automated and fires regardless of whether actual CoS content was pushed. **Request**: if responses exist, please push them directly to origin/master or origin/main. If the trigger is automated and fires regardless of CoS activity, please disable it or confirm this so I can stop checking.
+
+**Self-authorize queue:**
+- N-64 (CI coverage fix, 1-line) — self-authorizing per prior CoS GO on similar fixes.
+
+---
+
+> Last updated: 2026-03-20 (Wolf) — cycle 78 (N-61 SchemaForm, N-62 Import Wizard, N-63 API Keys)
 
