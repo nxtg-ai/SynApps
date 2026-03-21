@@ -10013,6 +10013,68 @@ flow_expiry_store = FlowExpiryStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowAliasStore — N-150 Flow Aliases
+# ---------------------------------------------------------------------------
+
+
+class FlowAliasStore:
+    """Bidirectional alias ↔ flow_id mapping.
+
+    Aliases are unique slugs (lowercase alphanumeric + hyphens) that
+    provide a human-readable shorthand for looking up a flow.
+    Each flow may have at most one alias; each alias maps to exactly one flow.
+    """
+
+    def __init__(self) -> None:
+        self._alias_to_flow: dict[str, str] = {}
+        self._flow_to_alias: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, alias: str) -> None:
+        """Set or update the alias for *flow_id*.
+
+        Raises ``ValueError`` if *alias* is already owned by a different flow.
+        """
+        with self._lock:
+            owner = self._alias_to_flow.get(alias)
+            if owner and owner != flow_id:
+                raise ValueError(f"Alias '{alias}' is already in use by another flow")
+            # Remove previous alias for this flow (if any)
+            old = self._flow_to_alias.pop(flow_id, None)
+            if old:
+                self._alias_to_flow.pop(old, None)
+            self._alias_to_flow[alias] = flow_id
+            self._flow_to_alias[flow_id] = alias
+
+    def get(self, flow_id: str) -> str | None:
+        """Return the alias for *flow_id*, or ``None`` if not set."""
+        with self._lock:
+            return self._flow_to_alias.get(flow_id)
+
+    def resolve(self, alias: str) -> str | None:
+        """Return the flow_id for *alias*, or ``None`` if not found."""
+        with self._lock:
+            return self._alias_to_flow.get(alias)
+
+    def clear(self, flow_id: str) -> bool:
+        """Remove the alias for *flow_id*.  Returns ``True`` if one existed."""
+        with self._lock:
+            alias = self._flow_to_alias.pop(flow_id, None)
+            if alias:
+                self._alias_to_flow.pop(alias, None)
+                return True
+            return False
+
+    def reset(self) -> None:
+        with self._lock:
+            self._alias_to_flow.clear()
+            self._flow_to_alias.clear()
+
+
+flow_alias_store = FlowAliasStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -16628,6 +16690,101 @@ async def clear_flow_expiry(
     if not removed:
         raise HTTPException(status_code=404, detail="No expiry set for this flow")
     return _expiry_response(flow_id, None)
+
+
+# ---------------------------------------------------------------------------
+# N-150 Flow Aliases — GET/PUT/DELETE /flows/{id}/alias
+#                      GET /flows/by-alias/{alias}
+# ---------------------------------------------------------------------------
+
+_ALIAS_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$")
+
+
+class FlowAliasRequest(BaseModel):
+    alias: str = Field(..., min_length=2, max_length=63, description="Lowercase slug (a-z, 0-9, hyphens).")
+
+    @field_validator("alias")
+    @classmethod
+    def _validate_alias(cls, v: str) -> str:
+        if not _ALIAS_PATTERN.match(v):
+            raise ValueError(
+                "alias must be 2–63 chars, lowercase alphanumeric and hyphens, "
+                "starting and ending with alphanumeric"
+            )
+        return v
+
+
+def _alias_response(flow_id: str) -> dict[str, Any]:
+    return {"flow_id": flow_id, "alias": flow_alias_store.get(flow_id)}
+
+
+@v1.get("/flows/by-alias/{alias}", tags=["Flows"])
+async def get_flow_by_alias(
+    alias: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Look up a flow by its human-readable alias.
+
+    Returns the full flow object (same shape as GET /flows/{id}).
+    """
+    flow_id = flow_alias_store.resolve(alias)
+    if flow_id is None:
+        raise HTTPException(status_code=404, detail="Alias not found")
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow
+
+
+@v1.get("/flows/{flow_id}/alias", tags=["Flows"])
+async def get_flow_alias(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the alias for *flow_id*, or ``null`` if none is set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return _alias_response(flow_id)
+
+
+@v1.put("/flows/{flow_id}/alias", tags=["Flows"])
+async def set_flow_alias(
+    flow_id: str,
+    body: FlowAliasRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set or update the alias for *flow_id*.
+
+    - Alias must be a lowercase slug (a-z, 0-9, hyphens), 2–63 chars.
+    - Returns 409 if the alias is already owned by a different flow.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        flow_alias_store.set(flow_id, body.alias)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _alias_response(flow_id)
+
+
+@v1.delete("/flows/{flow_id}/alias", tags=["Flows"])
+async def delete_flow_alias(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the alias for *flow_id*.
+
+    Returns 404 if no alias is currently set.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_alias_store.clear(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No alias set for this flow")
+    return _alias_response(flow_id)
 
 
 # ---------------------------------------------------------------------------

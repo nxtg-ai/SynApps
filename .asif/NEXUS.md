@@ -157,6 +157,7 @@
 | N-146 | Flow Metadata — GET/PUT/PATCH /flows/{id}/metadata + DELETE /flows/{id}/metadata/{key} | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-147 | Flow Priority — GET/PUT/DELETE /flows/{id}/priority (critical/high/medium/low) + ?priority= filter | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-148 | Flow Bulk Extended — POST /flows/bulk/move + POST /flows/bulk/priority (group + priority in one op) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-149 | Flow Expiry — GET/PUT/DELETE /flows/{id}/expiry; GET /flows/{id} returns 410 when expired | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
