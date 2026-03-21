@@ -130,7 +130,10 @@ def test_metrics_template_runs_after_flow_execution(client):
     # metrics. execute_flow() fires asyncio.create_task() and returns immediately;
     # without this poll the TestClient teardown closes the DB while the task is
     # still writing its final status update, causing a SQLAlchemy teardown ERROR.
-    deadline = time.time() + 5.0
+    # Poll at 1-second intervals to stay within the rate-limit burst (10 tokens
+    # per-key). Polling at 50 ms exhausted the burst after 500 ms in full-suite
+    # runs where the event loop is contended — causing spurious 429s.
+    deadline = time.time() + 8.0
     while time.time() < deadline:
         status_resp = client.get(f"/api/v1/history/{run_id}")
         if (
@@ -138,7 +141,7 @@ def test_metrics_template_runs_after_flow_execution(client):
             and status_resp.json().get("status") in _TERMINAL_STATUSES
         ):
             break
-        time.sleep(0.05)
+        time.sleep(1.0)
 
     data = client.get("/api/v1/metrics").json()
     assert "Test Metrics Flow" in data["template_runs"]
