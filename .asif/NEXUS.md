@@ -100,6 +100,8 @@
 | N-89 | Webhook Triggers Manager — Register/List/Delete Triggers | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-90 | Execution Replay — Replay & Chain Inspector UI | EXECUTION | SHIPPED | P1 | 2026-03-20 |
 | N-91 | Provider Status Dashboard — LLM + Image Provider Registry | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-92 | Task Monitor — Async Task Queue UI | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-93 | Cost Estimator — Pre-Run Workflow Cost Estimation UI | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
