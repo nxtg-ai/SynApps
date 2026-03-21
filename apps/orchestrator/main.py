@@ -10293,6 +10293,95 @@ flow_run_preset_store = FlowRunPresetStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowAnnotationStore — N-154 Flow Annotations
+# ---------------------------------------------------------------------------
+
+
+class FlowAnnotationStore:
+    """Per-flow sticky-note annotations with canvas position and optional color.
+
+    Each annotation has: id, flow_id, content, x, y, color, author, created_at, updated_at.
+    Capacity: 200 annotations per flow.
+    """
+
+    MAX_ANNOTATIONS = 200
+
+    def __init__(self) -> None:
+        self._store: dict[str, list[dict[str, Any]]] = {}  # flow_id → [annotation, ...]
+        self._lock = threading.Lock()
+
+    def add(
+        self,
+        flow_id: str,
+        content: str,
+        x: float,
+        y: float,
+        color: str,
+        author: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            annotations = self._store.setdefault(flow_id, [])
+            if len(annotations) >= self.MAX_ANNOTATIONS:
+                raise ValueError(
+                    f"Annotation capacity ({self.MAX_ANNOTATIONS}) reached for this flow"
+                )
+            now = time.time()
+            ann: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "flow_id": flow_id,
+                "content": content,
+                "x": x,
+                "y": y,
+                "color": color,
+                "author": author,
+                "created_at": now,
+                "updated_at": now,
+            }
+            annotations.append(ann)
+            return ann.copy()
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [a.copy() for a in self._store.get(flow_id, [])]
+
+    def get(self, flow_id: str, ann_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            for a in self._store.get(flow_id, []):
+                if a["id"] == ann_id:
+                    return a.copy()
+            return None
+
+    def patch(
+        self,
+        flow_id: str,
+        ann_id: str,
+        updates: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            for a in self._store.get(flow_id, []):
+                if a["id"] == ann_id:
+                    for k, v in updates.items():
+                        a[k] = v
+                    a["updated_at"] = time.time()
+                    return a.copy()
+            return None
+
+    def delete(self, flow_id: str, ann_id: str) -> bool:
+        with self._lock:
+            annotations = self._store.get(flow_id, [])
+            before = len(annotations)
+            self._store[flow_id] = [a for a in annotations if a["id"] != ann_id]
+            return len(self._store[flow_id]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+flow_annotation_store = FlowAnnotationStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -17241,6 +17330,118 @@ async def delete_run_preset(
     if not removed:
         raise HTTPException(status_code=404, detail="Preset not found")
     return {"deleted": True, "preset_id": preset_id}
+
+
+# ---------------------------------------------------------------------------
+# N-154 Flow Annotations — POST/GET /flows/{id}/annotations
+#                          PATCH/DELETE /flows/{id}/annotations/{ann_id}
+# ---------------------------------------------------------------------------
+
+_ANN_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_DEFAULT_ANN_COLOR = "#FFFF99"
+
+
+class FlowAnnotationCreateRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+    x: float = Field(..., description="Canvas x coordinate.")
+    y: float = Field(..., description="Canvas y coordinate.")
+    color: str = Field(_DEFAULT_ANN_COLOR, description="Hex color code, e.g. #FFFF99.")
+
+    @field_validator("color")
+    @classmethod
+    def _validate_color(cls, v: str) -> str:
+        if not _ANN_COLOR_RE.match(v):
+            raise ValueError("color must be a 6-digit hex color, e.g. #FFFF99")
+        return v.upper()
+
+
+class FlowAnnotationPatchRequest(BaseModel):
+    content: str | None = Field(None, min_length=1, max_length=2000)
+    x: float | None = None
+    y: float | None = None
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _validate_color(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _ANN_COLOR_RE.match(v):
+            raise ValueError("color must be a 6-digit hex color, e.g. #FFFF99")
+        return v.upper()
+
+
+def _fmt_ann(a: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **a,
+        "created_at": datetime.fromtimestamp(a["created_at"], tz=UTC).isoformat(),
+        "updated_at": datetime.fromtimestamp(a["updated_at"], tz=UTC).isoformat(),
+    }
+
+
+@v1.post("/flows/{flow_id}/annotations", status_code=201, tags=["Flows"])
+async def create_annotation(
+    flow_id: str,
+    body: FlowAnnotationCreateRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Add a sticky-note annotation to the flow canvas."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    author = current_user.get("email", "anonymous@local")
+    try:
+        ann = flow_annotation_store.add(flow_id, body.content, body.x, body.y, body.color, author)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _fmt_ann(ann)
+
+
+@v1.get("/flows/{flow_id}/annotations", tags=["Flows"])
+async def list_annotations(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all annotations for *flow_id*."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    annotations = flow_annotation_store.list(flow_id)
+    return {"flow_id": flow_id, "items": [_fmt_ann(a) for a in annotations]}
+
+
+@v1.patch("/flows/{flow_id}/annotations/{ann_id}", tags=["Flows"])
+async def patch_annotation(
+    flow_id: str,
+    ann_id: str,
+    body: FlowAnnotationPatchRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Partially update an annotation (content, position, or color)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updated = flow_annotation_store.patch(flow_id, ann_id, updates)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    return _fmt_ann(updated)
+
+
+@v1.delete("/flows/{flow_id}/annotations/{ann_id}", tags=["Flows"])
+async def delete_annotation(
+    flow_id: str,
+    ann_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete an annotation."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_annotation_store.delete(flow_id, ann_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    return {"deleted": True, "annotation_id": ann_id}
 
 
 # ---------------------------------------------------------------------------

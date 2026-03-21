@@ -20,6 +20,7 @@ from apps.orchestrator.main import (
     featured_store,
     flow_access_log_store,
     flow_alias_store,
+    flow_annotation_store,
     flow_archive_store,
     flow_changelog_store,
     flow_description_store,
@@ -167,6 +168,7 @@ def _reset_all_stores() -> None:
     flow_edit_lock_store.reset()
     flow_expiry_store.reset()
     flow_alias_store.reset()
+    flow_annotation_store.reset()
     flow_changelog_store.reset()
     flow_rate_limit_store.reset()
     flow_run_preset_store.reset()
