@@ -33,6 +33,7 @@ from apps.orchestrator.main import (
     flow_contact_store,
     flow_cost_config_store,
     flow_custom_field_store,
+    flow_data_classification_store,
     flow_dependency_store,
     flow_description_store,
     flow_edit_lock_store,
@@ -230,6 +231,7 @@ def _reset_all_stores() -> None:
     flow_caching_config_store.reset()
     flow_circuit_breaker_store.reset()
     flow_geo_restriction_store.reset()
+    flow_data_classification_store.reset()
     flow_ip_allowlist_store.reset()
     flow_maintenance_window_store.reset()
     flow_observability_config_store.reset()

@@ -12484,6 +12484,56 @@ class FlowIpAllowlistStore:
 flow_ip_allowlist_store = FlowIpAllowlistStore()
 
 # ---------------------------------------------------------------------------
+
+
+
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# FlowDataClassificationStore — N-189 Flow Data Classification
+# ---------------------------------------------------------------------------
+
+_DATA_CLASSIFICATION_LEVELS: frozenset[str] = frozenset(
+    ["public", "internal", "confidential", "restricted"]
+)
+
+
+class FlowDataClassificationStore:
+    def __init__(self) -> None:
+        self._records: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, level: str, pii_flag: bool) -> dict[str, Any]:
+        if level not in _DATA_CLASSIFICATION_LEVELS:
+            raise ValueError(f"level must be one of {sorted(_DATA_CLASSIFICATION_LEVELS)}")
+        with self._lock:
+            self._records[flow_id] = {
+                "level": level,
+                "pii_flag": pii_flag,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._records[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._records.get(flow_id)
+            return {"flow_id": flow_id, **rec} if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._records:
+                return False
+            del self._records[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._records.clear()
+
+
+flow_data_classification_store = FlowDataClassificationStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -21788,6 +21838,64 @@ async def delete_flow_ip_allowlist(
 
 
 # ---------------------------------------------------------------------------
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# N-189 Flow Data Classification — PUT/GET/DELETE /flows/{id}/data-classification
+# ---------------------------------------------------------------------------
+
+
+class FlowDataClassificationBody(BaseModel):
+    level: str = Field(..., description="public | internal | confidential | restricted")
+    pii_flag: bool = False
+
+
+@v1.put("/flows/{flow_id}/data-classification", tags=["Flows"])
+async def set_flow_data_classification(
+    flow_id: str,
+    body: FlowDataClassificationBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_data_classification_store.set(flow_id, body.level, body.pii_flag)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/data-classification", tags=["Flows"])
+async def get_flow_data_classification(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_data_classification_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No data classification for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/data-classification", tags=["Flows"])
+async def delete_flow_data_classification(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_data_classification_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No data classification for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
 
