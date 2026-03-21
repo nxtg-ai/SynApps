@@ -70,6 +70,8 @@
 | N-58 | Onboarding Wizard — 5-Step Guided Setup | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 | N-59 | Multi-User Workflow Collaboration — Presence + Locking | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-60 | Workflow Marketplace Plugin System — Third-Party Nodes | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-61 | Schema-Driven Node Config UI — SchemaForm Component | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-62 | Workflow Import Wizard — Guided n8n/Zapier Import UI | PLATFORM | BUILDING | P1 | 2026-03-20 |
 
 ---
 

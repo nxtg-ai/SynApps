@@ -68,6 +68,9 @@ const PluginManagerPage = React.lazy(
 const NodeConfigPage = React.lazy(
   () => import('./pages/NodeConfigPage/NodeConfigPage'),
 );
+const ImportWizardPage = React.lazy(
+  () => import('./pages/ImportWizardPage/ImportWizardPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -335,6 +338,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <NodeConfigPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/import-wizard"
+            element={
+              <ProtectedRoute>
+                <ImportWizardPage />
               </ProtectedRoute>
             }
           />
