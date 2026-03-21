@@ -27,6 +27,7 @@ from apps.orchestrator.main import (
     flow_bookmark_store,
     flow_caching_config_store,
     flow_changelog_store,
+    flow_circuit_breaker_store,
     flow_collaborator_store,
     flow_concurrency_store,
     flow_contact_store,
@@ -223,6 +224,7 @@ def _reset_all_stores() -> None:
     flow_approval_store.reset()
     flow_acl_store.reset()
     flow_caching_config_store.reset()
+    flow_circuit_breaker_store.reset()
     flow_execution_mode_store.reset()
     flow_input_validation_store.reset()
     flow_error_alert_store.reset()

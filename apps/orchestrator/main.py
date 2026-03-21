@@ -12231,6 +12231,63 @@ class FlowCachingConfigStore:
 
 flow_caching_config_store = FlowCachingConfigStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowCircuitBreakerStore — N-184 Flow Circuit Breaker Config
+# ---------------------------------------------------------------------------
+
+_CB_STATES: frozenset[str] = frozenset(["closed", "open", "half_open"])
+
+
+class FlowCircuitBreakerStore:
+    """Store circuit breaker configuration for a flow."""
+
+    _MAX_THRESHOLD: int = 100
+    _MAX_RECOVERY_S: int = 3600
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        enabled: bool,
+        failure_threshold: int,
+        recovery_timeout_s: int,
+    ) -> dict[str, Any]:
+        if not (1 <= failure_threshold <= self._MAX_THRESHOLD):
+            raise ValueError(f"failure_threshold must be between 1 and {self._MAX_THRESHOLD}")
+        if not (1 <= recovery_timeout_s <= self._MAX_RECOVERY_S):
+            raise ValueError(f"recovery_timeout_s must be between 1 and {self._MAX_RECOVERY_S}")
+        with self._lock:
+            self._configs[flow_id] = {
+                "enabled": enabled,
+                "failure_threshold": failure_threshold,
+                "recovery_timeout_s": recovery_timeout_s,
+                "state": "closed",
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._configs[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._configs.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._configs.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_circuit_breaker_store = FlowCircuitBreakerStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -21250,6 +21307,63 @@ async def delete_flow_caching_config(
     deleted = flow_caching_config_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No caching config for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-184 Flow Circuit Breaker — PUT/GET/DELETE /flows/{id}/circuit-breaker
+# ---------------------------------------------------------------------------
+
+
+class FlowCircuitBreakerBody(BaseModel):
+    enabled: bool = Field(default=True)
+    failure_threshold: int = Field(default=5, ge=1, le=100)
+    recovery_timeout_s: int = Field(default=60, ge=1, le=3600)
+
+
+@v1.put("/flows/{flow_id}/circuit-breaker", tags=["Flows"])
+async def set_flow_circuit_breaker(
+    flow_id: str,
+    body: FlowCircuitBreakerBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_circuit_breaker_store.set(
+            flow_id, body.enabled, body.failure_threshold, body.recovery_timeout_s
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/circuit-breaker", tags=["Flows"])
+async def get_flow_circuit_breaker(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_circuit_breaker_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No circuit breaker for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/circuit-breaker", tags=["Flows"])
+async def delete_flow_circuit_breaker(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_circuit_breaker_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No circuit breaker for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
