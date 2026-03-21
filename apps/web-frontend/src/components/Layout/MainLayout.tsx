@@ -105,6 +105,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/workflow-activity', icon: '💬', label: 'Activity' },
     { path: '/run-trace', icon: '🔬', label: 'Run Trace' },
     { path: '/quota-manager', icon: '📊', label: 'Quota Manager' },
+    { path: '/failed-requests', icon: '🚨', label: 'Failed Requests' },
+    { path: '/webhook-triggers', icon: '🎣', label: 'Webhook Triggers' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

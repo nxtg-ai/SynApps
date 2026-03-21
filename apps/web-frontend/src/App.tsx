@@ -128,6 +128,12 @@ const RunTracePage = React.lazy(
 const QuotaManagerPage = React.lazy(
   () => import('./pages/QuotaManagerPage/QuotaManagerPage'),
 );
+const FailedRequestsPage = React.lazy(
+  () => import('./pages/FailedRequestsPage/FailedRequestsPage'),
+);
+const WebhookTriggersPage = React.lazy(
+  () => import('./pages/WebhookTriggersPage/WebhookTriggersPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -555,6 +561,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <QuotaManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/failed-requests"
+            element={
+              <ProtectedRoute>
+                <FailedRequestsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/webhook-triggers"
+            element={
+              <ProtectedRoute>
+                <WebhookTriggersPage />
               </ProtectedRoute>
             }
           />
