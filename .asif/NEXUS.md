@@ -167,6 +167,7 @@
 | N-156 | Flow Bookmarks — POST/GET /flows/{id}/bookmarks + DELETE /flows/{id}/bookmarks/{bm_id} (user-scoped) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-157 | Flow Snapshots — POST/GET /flows/{id}/snapshots + GET/DELETE/{snap_id} + POST/{snap_id}/restore | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-158 | Flow Reactions — POST/DELETE /flows/{id}/reactions + GET aggregate (10 allowed emojis, per-user scoped) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-159 | Flow Scheduled Runs — PUT/GET/PATCH/DELETE /flows/{id}/schedule (5-field cron, enable/disable) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

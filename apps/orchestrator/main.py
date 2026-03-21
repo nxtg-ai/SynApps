@@ -10696,6 +10696,84 @@ flow_reaction_store = FlowReactionStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowScheduleStore — N-159 Flow Scheduled Runs
+# ---------------------------------------------------------------------------
+
+_CRON_FIELD = r"(\*(?:/[0-9]+)?|[0-9,\-/]+)"
+_CRON_PATTERN = re.compile(
+    rf"^{_CRON_FIELD}\s+{_CRON_FIELD}\s+{_CRON_FIELD}\s+{_CRON_FIELD}\s+{_CRON_FIELD}$"
+)
+
+
+class FlowScheduleStore:
+    """Stores a cron schedule per flow.
+
+    One schedule per flow.  A schedule can be enabled or disabled without
+    removing it.  The cron expression is validated against a basic 5-field
+    pattern (minute hour dom month dow) but is not executed by the store —
+    the actual scheduling is the responsibility of an external worker.
+    """
+
+    def __init__(self) -> None:
+        self._schedules: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def _validate_cron(self, expr: str) -> None:
+        if not _CRON_PATTERN.match(expr.strip()):
+            raise ValueError(f"Invalid cron expression: {expr!r}")
+
+    def set(self, flow_id: str, cron: str, enabled: bool = True, label: str = "") -> dict[str, Any]:
+        self._validate_cron(cron)
+        with self._lock:
+            existing = self._schedules.get(flow_id)
+            schedule: dict[str, Any] = {
+                "flow_id": flow_id,
+                "cron": cron.strip(),
+                "enabled": enabled,
+                "label": label,
+                "created_at": existing["created_at"] if existing else datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._schedules[flow_id] = schedule
+            return schedule.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            s = self._schedules.get(flow_id)
+            return s.copy() if s else None
+
+    def patch(self, flow_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+        """Partial update: only 'enabled', 'cron', 'label' are patchable."""
+        with self._lock:
+            s = self._schedules.get(flow_id)
+            if s is None:
+                return None
+            if "cron" in updates:
+                self._validate_cron(updates["cron"])
+                s["cron"] = updates["cron"].strip()
+            if "enabled" in updates:
+                s["enabled"] = bool(updates["enabled"])
+            if "label" in updates:
+                s["label"] = updates["label"]
+            s["updated_at"] = datetime.now(UTC).isoformat()
+            return s.copy()
+
+    def clear(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._schedules:
+                return False
+            del self._schedules[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._schedules.clear()
+
+
+flow_schedule_store = FlowScheduleStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -18091,6 +18169,91 @@ async def get_flow_reactions(
         "user_reactions": mine,
         "allowed": sorted(_ALLOWED_REACTIONS),
     }
+
+
+# ---------------------------------------------------------------------------
+# N-159 Flow Scheduled Runs — PUT/GET/DELETE /flows/{id}/schedule
+#                              PATCH /flows/{id}/schedule
+# ---------------------------------------------------------------------------
+
+
+class FlowScheduleUpsertRequest(BaseModel):
+    cron: str = Field(..., min_length=1, max_length=100, description="5-field cron expression")
+    enabled: bool = Field(default=True)
+    label: str = Field(default="", max_length=200)
+
+
+class FlowSchedulePatchRequest(BaseModel):
+    cron: str | None = Field(default=None, max_length=100)
+    enabled: bool | None = Field(default=None)
+    label: str | None = Field(default=None, max_length=200)
+
+
+@v1.put("/flows/{flow_id}/schedule", tags=["Flows"])
+async def set_flow_schedule(
+    flow_id: str,
+    body: FlowScheduleUpsertRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Create or replace the cron schedule for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        schedule = flow_schedule_store.set(flow_id, body.cron, body.enabled, body.label)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return schedule
+
+
+@v1.get("/flows/{flow_id}/schedule", tags=["Flows"])
+async def get_flow_schedule(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get the current schedule for a flow.  Returns 404 if none set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    schedule = flow_schedule_store.get(flow_id)
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="No schedule set for this flow")
+    return schedule
+
+
+@v1.patch("/flows/{flow_id}/schedule", tags=["Flows"])
+async def patch_flow_schedule(
+    flow_id: str,
+    body: FlowSchedulePatchRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Partially update a flow's schedule (enabled flag, cron, or label)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    updates: dict[str, Any] = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        updated = flow_schedule_store.patch(flow_id, updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="No schedule set for this flow")
+    return updated
+
+
+@v1.delete("/flows/{flow_id}/schedule", tags=["Flows"])
+async def delete_flow_schedule(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the cron schedule from a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_schedule_store.clear(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No schedule set for this flow")
+    return {"deleted": True}
 
 
 # ---------------------------------------------------------------------------
