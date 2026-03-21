@@ -107,6 +107,9 @@
 | N-96 | Template Manager — Browse/Import/Export/Rollback/Instantiate | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-97 | Flow Version History — Version Browser, Rollback & Audit | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 | N-98 | Server Info — API Version, Config & Runtime Metrics | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-99 | Managed Keys — Fernet-Encrypted Admin API Key Manager | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-100 | Admin Keys — Master-Key-Protected Admin API Key Registry | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-101 | Marketplace Reviews & Ratings UI — Rate, Review, Reply, Report | MARKETPLACE | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
