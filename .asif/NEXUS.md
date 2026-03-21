@@ -191,6 +191,7 @@
 | N-180 | Flow Access Control List — POST/GET/DELETE /flows/{id}/acl/{user} (read/write/execute/admin permissions per user) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-181 | Flow Execution Mode — PUT/GET/DELETE /flows/{id}/execution-mode (async/sync/dry_run + debug flag) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-182 | Flow Input Validation Rules — PUT/GET/DELETE /flows/{id}/input-validation (rules list, strict mode, max 50 rules) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-183 | Flow Caching Configuration — PUT/GET/DELETE /flows/{id}/caching-config (enabled, ttl_seconds 0-86400, key_fields) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

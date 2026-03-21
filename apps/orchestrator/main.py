@@ -12183,6 +12183,54 @@ class FlowInputValidationStore:
 
 flow_input_validation_store = FlowInputValidationStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowCachingConfigStore — N-183 Flow Caching Configuration
+# ---------------------------------------------------------------------------
+
+
+class FlowCachingConfigStore:
+    """Store caching configuration for a flow."""
+
+    _MAX_TTL: int = 86400  # 24 hours
+    _MAX_KEY_FIELDS: int = 10
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, enabled: bool, ttl_seconds: int, key_fields: list[str]) -> dict[str, Any]:
+        if not (0 <= ttl_seconds <= self._MAX_TTL):
+            raise ValueError(f"ttl_seconds must be between 0 and {self._MAX_TTL}")
+        if len(key_fields) > self._MAX_KEY_FIELDS:
+            raise ValueError(f"key_fields exceeds maximum of {self._MAX_KEY_FIELDS}")
+        with self._lock:
+            self._configs[flow_id] = {
+                "enabled": enabled,
+                "ttl_seconds": ttl_seconds,
+                "key_fields": list(key_fields),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._configs[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._configs.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._configs.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_caching_config_store = FlowCachingConfigStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -21145,6 +21193,63 @@ async def delete_flow_input_validation(
     deleted = flow_input_validation_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No input validation for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-183 Flow Caching Configuration — PUT/GET/DELETE /flows/{id}/caching-config
+# ---------------------------------------------------------------------------
+
+
+class FlowCachingConfigBody(BaseModel):
+    enabled: bool = Field(default=False)
+    ttl_seconds: int = Field(default=300, ge=0, le=86400)
+    key_fields: list[str] = Field(default_factory=list)
+
+
+@v1.put("/flows/{flow_id}/caching-config", tags=["Flows"])
+async def set_flow_caching_config(
+    flow_id: str,
+    body: FlowCachingConfigBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_caching_config_store.set(
+            flow_id, body.enabled, body.ttl_seconds, body.key_fields
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/caching-config", tags=["Flows"])
+async def get_flow_caching_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_caching_config_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No caching config for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/caching-config", tags=["Flows"])
+async def delete_flow_caching_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_caching_config_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No caching config for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
