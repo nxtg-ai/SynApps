@@ -137,6 +137,9 @@ const WebhookTriggersPage = React.lazy(
 const ExecutionReplayPage = React.lazy(
   () => import('./pages/ExecutionReplayPage/ExecutionReplayPage'),
 );
+const ProviderStatusPage = React.lazy(
+  () => import('./pages/ProviderStatusPage/ProviderStatusPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -588,6 +591,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ExecutionReplayPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/providers"
+            element={
+              <ProtectedRoute>
+                <ProviderStatusPage />
               </ProtectedRoute>
             }
           />
