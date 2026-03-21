@@ -102,6 +102,11 @@
 | N-91 | Provider Status Dashboard — LLM + Image Provider Registry | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-92 | Task Monitor — Async Task Queue UI | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-93 | Cost Estimator — Pre-Run Workflow Cost Estimation UI | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-94 | Applets Registry — Applet Type Browser with Schema Viewer | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-95 | OAuth2 Clients Manager — Register/List/Revoke OAuth2 Apps | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-96 | Template Manager — Browse/Import/Export/Rollback/Instantiate | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-97 | Flow Version History — Version Browser, Rollback & Audit | EXECUTION | SHIPPED | P1 | 2026-03-21 |
+| N-98 | Server Info — API Version, Config & Runtime Metrics | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
