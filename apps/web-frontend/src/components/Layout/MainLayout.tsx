@@ -89,6 +89,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/api-keys', icon: '🔑', label: 'API Keys' },
     { path: '/node-profiler', icon: '📊', label: 'Node Profiler' },
     { path: '/monitoring', icon: '🔔', label: 'Monitoring' },
+    { path: '/ai-assist', icon: '🤖', label: 'AI Assist' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

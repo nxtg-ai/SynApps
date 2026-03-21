@@ -80,6 +80,7 @@
 | N-69 | Frontend E2E Tests — Import Wizard + API Keys + Node Config | STACK | SHIPPED | P1 | 2026-03-20 |
 | N-70 | Node Performance Profiler UI — Heatmap + Bottleneck View | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-71 | Workflow Monitoring Dashboard — Health Status + Alert Rules | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-72 | AI Assist UI — Suggest Next Node + Autocomplete + Patterns | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 

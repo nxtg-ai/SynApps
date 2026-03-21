@@ -80,6 +80,9 @@ const NodeProfilerPage = React.lazy(
 const MonitoringPage = React.lazy(
   () => import('./pages/MonitoringPage/MonitoringPage'),
 );
+const AiAssistPage = React.lazy(
+  () => import('./pages/AiAssistPage/AiAssistPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -379,6 +382,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <MonitoringPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-assist"
+            element={
+              <ProtectedRoute>
+                <AiAssistPage />
               </ProtectedRoute>
             }
           />
