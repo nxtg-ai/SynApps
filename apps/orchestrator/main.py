@@ -10880,6 +10880,111 @@ flow_webhook_store = FlowWebhookStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowCustomFieldStore — N-161 Flow Custom Fields
+# ---------------------------------------------------------------------------
+
+_CUSTOM_FIELD_TYPES: frozenset[str] = frozenset(["string", "number", "boolean", "date"])
+
+
+class FlowCustomFieldStore:
+    """Schema-enforced custom fields per flow.
+
+    Each flow can have a set of named custom fields with a declared type.
+    The store validates that values match the declared type on write.
+    Field names must be slug-safe (alphanumeric + underscore, 1-64 chars).
+    """
+
+    MAX_FIELDS = 30
+    _NAME_RE = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
+
+    def __init__(self) -> None:
+        self._schemas: dict[str, dict[str, str]] = {}    # flow_id → {name: type}
+        self._values: dict[str, dict[str, Any]] = {}     # flow_id → {name: value}
+        self._lock = threading.Lock()
+
+    def _validate_value(self, field_type: str, value: Any) -> Any:
+        if field_type == "string":
+            if not isinstance(value, str):
+                raise ValueError(f"Expected string, got {type(value).__name__}")
+            return value
+        elif field_type == "number":
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise ValueError(f"Expected number, got {type(value).__name__}")
+            return value
+        elif field_type == "boolean":
+            if not isinstance(value, bool):
+                raise ValueError(f"Expected boolean, got {type(value).__name__}")
+            return value
+        elif field_type == "date":
+            if not isinstance(value, str):
+                raise ValueError("date must be a string in ISO format")
+            # Basic ISO date check
+            try:
+                datetime.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError(f"Invalid date: {value!r}") from exc
+            return value
+        raise ValueError(f"Unknown type: {field_type}")
+
+    def define(self, flow_id: str, name: str, field_type: str) -> dict[str, Any]:
+        """Create or update a field schema (does not affect existing value)."""
+        if not self._NAME_RE.match(name):
+            raise ValueError(f"Invalid field name: {name!r}")
+        if field_type not in _CUSTOM_FIELD_TYPES:
+            raise ValueError(f"Unknown field type: {field_type!r}")
+        with self._lock:
+            schemas = self._schemas.setdefault(flow_id, {})
+            if name not in schemas and len(schemas) >= self.MAX_FIELDS:
+                raise ValueError(f"Maximum of {self.MAX_FIELDS} custom fields exceeded")
+            schemas[name] = field_type
+            return {"flow_id": flow_id, "name": name, "type": field_type}
+
+    def set_value(self, flow_id: str, name: str, value: Any) -> dict[str, Any]:
+        with self._lock:
+            field_type = self._schemas.get(flow_id, {}).get(name)
+            if field_type is None:
+                raise KeyError(f"Field {name!r} is not defined")
+        coerced = self._validate_value(field_type, value)
+        with self._lock:
+            self._values.setdefault(flow_id, {})[name] = coerced
+            return {"flow_id": flow_id, "name": name, "type": field_type, "value": coerced}
+
+    def get_all(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            schemas = self._schemas.get(flow_id, {})
+            values = self._values.get(flow_id, {})
+            return [
+                {"name": n, "type": t, "value": values.get(n)}
+                for n, t in sorted(schemas.items())
+            ]
+
+    def get_field(self, flow_id: str, name: str) -> dict[str, Any] | None:
+        with self._lock:
+            field_type = self._schemas.get(flow_id, {}).get(name)
+            if field_type is None:
+                return None
+            value = self._values.get(flow_id, {}).get(name)
+            return {"flow_id": flow_id, "name": name, "type": field_type, "value": value}
+
+    def delete_field(self, flow_id: str, name: str) -> bool:
+        with self._lock:
+            schemas = self._schemas.get(flow_id, {})
+            if name not in schemas:
+                return False
+            del schemas[name]
+            self._values.get(flow_id, {}).pop(name, None)
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._schemas.clear()
+            self._values.clear()
+
+
+flow_custom_field_store = FlowCustomFieldStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -18469,6 +18574,111 @@ async def delete_flow_webhook(
     if not removed:
         raise HTTPException(status_code=404, detail="Webhook not found")
     return {"deleted": True, "webhook_id": hook_id}
+
+
+# ---------------------------------------------------------------------------
+# N-161 Flow Custom Fields — POST  /flows/{id}/custom-fields (define schema)
+#                            GET   /flows/{id}/custom-fields
+#                            PUT   /flows/{id}/custom-fields/{name} (set value)
+#                            GET   /flows/{id}/custom-fields/{name}
+#                            DELETE /flows/{id}/custom-fields/{name}
+# ---------------------------------------------------------------------------
+
+
+class FlowCustomFieldDefineRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    type: str = Field(..., description="One of: string, number, boolean, date")
+
+
+class FlowCustomFieldValueRequest(BaseModel):
+    value: Any = Field(..., description="Value matching the field's declared type")
+
+
+@v1.post("/flows/{flow_id}/custom-fields", status_code=201, tags=["Flows"])
+async def define_flow_custom_field(
+    flow_id: str,
+    body: FlowCustomFieldDefineRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Define a typed custom field schema for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        field = flow_custom_field_store.define(flow_id, body.name, body.type)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return field
+
+
+@v1.get("/flows/{flow_id}/custom-fields", tags=["Flows"])
+async def list_flow_custom_fields(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all custom field schemas and their current values for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    fields = flow_custom_field_store.get_all(flow_id)
+    return {
+        "flow_id": flow_id,
+        "total": len(fields),
+        "fields": fields,
+        "allowed_types": sorted(_CUSTOM_FIELD_TYPES),
+    }
+
+
+@v1.put("/flows/{flow_id}/custom-fields/{name}", tags=["Flows"])
+async def set_flow_custom_field_value(
+    flow_id: str,
+    name: str,
+    body: FlowCustomFieldValueRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set the value of a custom field (field must already be defined)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_custom_field_store.set_value(flow_id, name, body.value)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/custom-fields/{name}", tags=["Flows"])
+async def get_flow_custom_field(
+    flow_id: str,
+    name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Get a single custom field and its current value."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    field = flow_custom_field_store.get_field(flow_id, name)
+    if field is None:
+        raise HTTPException(status_code=404, detail="Custom field not defined")
+    return field
+
+
+@v1.delete("/flows/{flow_id}/custom-fields/{name}", tags=["Flows"])
+async def delete_flow_custom_field(
+    flow_id: str,
+    name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a custom field schema and its stored value."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_custom_field_store.delete_field(flow_id, name)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Custom field not defined")
+    return {"deleted": True, "name": name}
 
 
 # ---------------------------------------------------------------------------

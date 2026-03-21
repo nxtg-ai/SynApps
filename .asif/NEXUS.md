@@ -169,6 +169,7 @@
 | N-158 | Flow Reactions — POST/DELETE /flows/{id}/reactions + GET aggregate (10 allowed emojis, per-user scoped) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-159 | Flow Scheduled Runs — PUT/GET/PATCH/DELETE /flows/{id}/schedule (5-field cron, enable/disable) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-160 | Flow Outbound Webhooks — POST/GET /flows/{id}/webhooks + GET/PATCH/DELETE/{hook_id} (5 events) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-161 | Flow Custom Fields — POST/GET /flows/{id}/custom-fields + PUT/GET/DELETE/{name} (typed: string/number/boolean/date) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
