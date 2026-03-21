@@ -212,6 +212,13 @@ const MarketplaceDiscoveryPage = React.lazy(
 const FlowTestDetailPage = React.lazy(
   () => import('./pages/FlowTestDetailPage/FlowTestDetailPage'),
 );
+const UsageDetailPage = React.lazy(
+  () => import('./pages/UsageDetailPage/UsageDetailPage'),
+);
+const FlowExportImportPage = React.lazy(
+  () => import('./pages/FlowExportImportPage/FlowExportImportPage'),
+);
+const RunsPage = React.lazy(() => import('./pages/RunsPage/RunsPage'));
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -879,6 +886,30 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <FlowTestDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/usage-detail"
+            element={
+              <ProtectedRoute>
+                <UsageDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flow-export-import"
+            element={
+              <ProtectedRoute>
+                <FlowExportImportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/runs"
+            element={
+              <ProtectedRoute>
+                <RunsPage />
               </ProtectedRoute>
             }
           />
