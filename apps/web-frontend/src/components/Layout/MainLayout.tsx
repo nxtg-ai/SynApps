@@ -103,6 +103,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/connectors', icon: '🔌', label: 'Connectors' },
     { path: '/subflows', icon: '🔀', label: 'Subflows' },
     { path: '/workflow-activity', icon: '💬', label: 'Activity' },
+    { path: '/run-trace', icon: '🔬', label: 'Run Trace' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

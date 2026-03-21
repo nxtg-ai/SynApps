@@ -122,6 +122,9 @@ const SubflowsPage = React.lazy(
 const WorkflowActivityPage = React.lazy(
   () => import('./pages/WorkflowActivityPage/WorkflowActivityPage'),
 );
+const RunTracePage = React.lazy(
+  () => import('./pages/RunTracePage/RunTracePage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -533,6 +536,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <WorkflowActivityPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/run-trace"
+            element={
+              <ProtectedRoute>
+                <RunTracePage />
               </ProtectedRoute>
             }
           />
