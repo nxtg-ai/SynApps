@@ -165,14 +165,16 @@ const ServerInfoPage: React.FC = () => {
                       className="mb-1 text-xs text-slate-400"
                       data-testid="deprecated-item"
                     >
-                      <span className="font-mono">
-                        {String(ep.path ?? ep.endpoint ?? JSON.stringify(ep))}
-                      </span>
-                      {ep.sunset_date && (
-                        <span className="ml-2 text-yellow-500">
-                          sunset: {String(ep.sunset_date)}
+                      <>
+                        <span className="font-mono">
+                          {String(ep.path ?? ep.endpoint ?? JSON.stringify(ep))}
                         </span>
-                      )}
+                        {ep.sunset_date && (
+                          <span className="ml-2 text-yellow-500">
+                            sunset: {String(ep.sunset_date)}
+                          </span>
+                        )}
+                      </>
                     </div>
                   ))}
                 </dd>
@@ -185,32 +187,34 @@ const ServerInfoPage: React.FC = () => {
       {/* Config tab */}
       {activeTab === 'config' && !loading && !error && data && (
         <div data-testid="config-panel">
-          {data._validation_errors &&
-            Array.isArray(data._validation_errors) &&
-            (data._validation_errors as unknown[]).length > 0 && (
-              <div className="mb-4 rounded border border-red-700/50 bg-red-900/20 p-3">
-                <p className="mb-1 text-xs font-semibold text-red-400">Validation Errors</p>
-                {(data._validation_errors as string[]).map((err, i) => (
-                  <p key={i} className="text-xs text-red-300" data-testid="config-validation-error">
-                    {err}
-                  </p>
-                ))}
-              </div>
+          <>
+            {data._validation_errors &&
+              Array.isArray(data._validation_errors) &&
+              (data._validation_errors as unknown[]).length > 0 && (
+                <div className="mb-4 rounded border border-red-700/50 bg-red-900/20 p-3">
+                  <p className="mb-1 text-xs font-semibold text-red-400">Validation Errors</p>
+                  {(data._validation_errors as string[]).map((err, i) => (
+                    <p key={i} className="text-xs text-red-300" data-testid="config-validation-error">
+                      {err}
+                    </p>
+                  ))}
+                </div>
+              )}
+            {data._env_file_loaded && (
+              <p className="mb-4 text-xs text-slate-500" data-testid="env-file-loaded">
+                Env file:{' '}
+                <span className="font-mono">{String(data._env_file_loaded)}</span>
+              </p>
             )}
-          {data._env_file_loaded && (
-            <p className="mb-4 text-xs text-slate-500" data-testid="env-file-loaded">
-              Env file:{' '}
-              <span className="font-mono">{String(data._env_file_loaded)}</span>
-            </p>
-          )}
-          <div
-            className="rounded border border-slate-700 bg-slate-900 p-4"
-            data-testid="config-json"
-          >
-            <pre className="overflow-auto text-xs text-slate-300">
-              {JSON.stringify(data, null, 2)}
-            </pre>
-          </div>
+            <div
+              className="rounded border border-slate-700 bg-slate-900 p-4"
+              data-testid="config-json"
+            >
+              <pre className="overflow-auto text-xs text-slate-300">
+                {JSON.stringify(data, null, 2)}
+              </pre>
+            </div>
+          </>
         </div>
       )}
 

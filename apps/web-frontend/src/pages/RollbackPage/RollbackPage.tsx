@@ -79,7 +79,7 @@ const RollbackPage: React.FC = () => {
   };
 
   return (
-    <MainLayout>
+    <MainLayout title="Workflow Rollback">
       <div data-testid="rollback-page" className="mx-auto max-w-5xl p-6 text-slate-100">
         <h1 className="mb-6 text-2xl font-bold">Workflow Rollback</h1>
 

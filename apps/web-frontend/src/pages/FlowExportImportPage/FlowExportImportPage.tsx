@@ -211,15 +211,17 @@ const FlowExportImportPage: React.FC = () => {
                 </button>
               </div>
               <div className="flex gap-6 text-xs text-slate-400" data-testid="export-meta">
-                {exportData.name && (
-                  <span>Name: <strong className="text-slate-300" data-testid="export-name">{String(exportData.name)}</strong></span>
-                )}
-                {Array.isArray(exportData.nodes) && (
-                  <span data-testid="export-node-count">Nodes: {(exportData.nodes as unknown[]).length}</span>
-                )}
-                {Array.isArray(exportData.edges) && (
-                  <span data-testid="export-edge-count">Edges: {(exportData.edges as unknown[]).length}</span>
-                )}
+                <>
+                  {exportData.name && (
+                    <span>Name: <strong className="text-slate-300" data-testid="export-name">{String(exportData.name)}</strong></span>
+                  )}
+                  {Array.isArray(exportData.nodes) && (
+                    <span data-testid="export-node-count">Nodes: {(exportData.nodes as unknown[]).length}</span>
+                  )}
+                  {Array.isArray(exportData.edges) && (
+                    <span data-testid="export-edge-count">Edges: {(exportData.edges as unknown[]).length}</span>
+                  )}
+                </>
               </div>
               <pre
                 className="max-h-64 overflow-auto rounded bg-slate-900 p-3 font-mono text-xs text-slate-300"

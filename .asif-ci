@@ -1,1 +1,1 @@
-PYTHONPATH=. python3 -m pytest apps/orchestrator/tests/ --tb=short -q
+cd apps/web-frontend && npx tsc --noEmit -p tsconfig.typecheck.json && cd ../.. && cd apps/orchestrator && python -m pytest tests/ --tb=short -q

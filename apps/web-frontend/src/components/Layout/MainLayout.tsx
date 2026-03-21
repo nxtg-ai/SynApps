@@ -140,6 +140,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/runs', icon: '▶️', label: 'Runs' },
     { path: '/workflow-snapshots', icon: '📸', label: 'Snapshots' },
     { path: '/listing-analytics', icon: '📊', label: 'Listing Analytics' },
+    { path: '/marketplace-publish', icon: '📤', label: 'Publish Flow' },
     { path: '/execution-history', icon: '🕒', label: 'Exec History' },
     { path: '/plugin-schema', icon: '🔍', label: 'Plugin Schema' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },

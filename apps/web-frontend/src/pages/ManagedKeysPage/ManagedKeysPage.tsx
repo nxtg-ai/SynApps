@@ -399,21 +399,23 @@ const ManagedKeysPage: React.FC = () => {
             className="mt-3 rounded border border-emerald-700/50 bg-emerald-900/20 p-3 text-xs"
             data-testid="create-success"
           >
-            <p className="mb-1 font-semibold text-emerald-400">Key created!</p>
-            <p className="text-slate-300">
-              ID:{' '}
-              <span className="font-mono" data-testid="new-key-id">
-                {newKey.id}
-              </span>
-            </p>
-            {(newKey as Record<string, unknown>).key_value && (
-              <p className="mt-1 text-slate-300">
-                Key:{' '}
-                <span className="font-mono text-yellow-300" data-testid="new-key-value">
-                  {String((newKey as Record<string, unknown>).key_value)}
+            <>
+              <p className="mb-1 font-semibold text-emerald-400">Key created!</p>
+              <p className="text-slate-300">
+                ID:{' '}
+                <span className="font-mono" data-testid="new-key-id">
+                  {newKey.id}
                 </span>
               </p>
-            )}
+              {(newKey as Record<string, unknown>).key_value && (
+                <p className="mt-1 text-slate-300">
+                  Key:{' '}
+                  <span className="font-mono text-yellow-300" data-testid="new-key-value">
+                    {String((newKey as Record<string, unknown>).key_value)}
+                  </span>
+                </p>
+              )}
+            </>
           </div>
         )}
       </section>

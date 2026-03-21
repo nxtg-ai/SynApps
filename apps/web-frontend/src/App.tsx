@@ -219,6 +219,9 @@ const FlowExportImportPage = React.lazy(
   () => import('./pages/FlowExportImportPage/FlowExportImportPage'),
 );
 const RunsPage = React.lazy(() => import('./pages/RunsPage/RunsPage'));
+const MarketplacePublishPage = React.lazy(
+  () => import('./pages/MarketplacePublishPage/MarketplacePublishPage'),
+);
 const ExecutionHistoryPage = React.lazy(
   () => import('./pages/ExecutionHistoryPage/ExecutionHistoryPage'),
 );
@@ -938,6 +941,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ListingAnalyticsDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/marketplace-publish"
+            element={
+              <ProtectedRoute>
+                <MarketplacePublishPage />
               </ProtectedRoute>
             }
           />

@@ -135,6 +135,7 @@
 | N-124 | Flaky Test Root Cause Fix — `except asyncio.CancelledError` in `_execute_flow_async` post-completion path | STACK | SHIPPED | P1 | 2026-03-21 |
 | N-125 | Execution History Explorer — GET /history (filtered list) + GET /history/{run_id} (trace detail) | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 | N-126 | Plugin Schema Viewer — GET /plugins/{plugin_id}/schema (properties table + raw JSON) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-127 | Marketplace Publish — POST /marketplace/publish (flow_id + name + category + tags + author form) | MARKETPLACE | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2833,5 +2834,5 @@ The second is subtle: Python asyncio doesn't guarantee that `create_task` won't 
 
 **Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
 
-> Last updated: 2026-03-21 (cycle 87) — N-125/N-126 shipped (ExecutionHistoryPage, PluginSchemaPage); 1,075 frontend tests
+> Last updated: 2026-03-21 (cycle 88) — N-127 shipped (MarketplacePublishPage, last uncovered endpoint); 1,090 frontend tests; backend endpoint coverage complete
 

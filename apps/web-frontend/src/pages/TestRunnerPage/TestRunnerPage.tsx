@@ -172,7 +172,7 @@ const TestRunnerPage: React.FC = () => {
 
   if (loading) {
     return (
-      <MainLayout>
+      <MainLayout title="Workflow Test Runner">
         <div data-testid="test-runner-page" className="p-6 text-slate-300" aria-label="Loading test runner">
           Loading test runner...
         </div>
@@ -182,7 +182,7 @@ const TestRunnerPage: React.FC = () => {
 
   if (error && tests.length === 0 && !runResults.length) {
     return (
-      <MainLayout>
+      <MainLayout title="Workflow Test Runner">
         <div data-testid="test-runner-page" className="p-6">
           <div data-testid="error-banner" className="rounded bg-red-900/30 p-4 text-red-300">
             {error}
@@ -193,7 +193,7 @@ const TestRunnerPage: React.FC = () => {
   }
 
   return (
-    <MainLayout>
+    <MainLayout title="Workflow Test Runner">
       <div data-testid="test-runner-page" className="mx-auto max-w-5xl space-y-6 p-6 text-slate-100">
         <h1 className="text-2xl font-bold">Workflow Test Runner</h1>
 
