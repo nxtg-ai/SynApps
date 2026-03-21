@@ -21083,6 +21083,204 @@ class ReportIssueRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Multi-User Workflow Collaboration (N-59)
+# ---------------------------------------------------------------------------
+
+COLLAB_COLORS = [
+    "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4",
+    "#FFEAA7", "#DDA0DD", "#98D8C8", "#F7DC6F",
+]
+
+
+def _user_color(user_id: str) -> str:
+    """Deterministically assign a color to a user based on their ID hash."""
+    idx = int(hashlib.md5(user_id.encode()).hexdigest(), 16) % len(COLLAB_COLORS)
+    return COLLAB_COLORS[idx]
+
+
+class PresenceStore:
+    """Thread-safe in-memory store tracking who is viewing/editing each flow."""
+
+    _EXPIRY_SECONDS = 30
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # flow_id -> {user_id -> {user_id, username, color, last_seen}}
+        self._presence: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def join(self, flow_id: str, user_id: str, username: str, color: str) -> None:
+        """Register a user as present on a flow."""
+        with self._lock:
+            self._presence.setdefault(flow_id, {})[user_id] = {
+                "user_id": user_id,
+                "username": username,
+                "color": color,
+                "last_seen": time.time(),
+            }
+
+    def heartbeat(self, flow_id: str, user_id: str) -> None:
+        """Update last_seen timestamp for a user on a flow."""
+        with self._lock:
+            flow_users = self._presence.get(flow_id, {})
+            if user_id in flow_users:
+                flow_users[user_id]["last_seen"] = time.time()
+
+    def leave(self, flow_id: str, user_id: str) -> None:
+        """Remove a user from a flow's presence list."""
+        with self._lock:
+            flow_users = self._presence.get(flow_id, {})
+            flow_users.pop(user_id, None)
+
+    def get_presence(self, flow_id: str) -> list[dict[str, Any]]:
+        """Return active users (seen within the last 30 seconds)."""
+        cutoff = time.time() - self._EXPIRY_SECONDS
+        with self._lock:
+            flow_users = self._presence.get(flow_id, {})
+            return [
+                dict(entry) for entry in flow_users.values()
+                if entry["last_seen"] >= cutoff
+            ]
+
+    def reset(self) -> None:
+        """Clear all presence state."""
+        with self._lock:
+            self._presence.clear()
+
+
+class NodeLockStore:
+    """Thread-safe in-memory optimistic locking for workflow nodes."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # flow_id -> {node_id -> {user_id, username, acquired_at}}
+        self._locks: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def acquire(self, flow_id: str, node_id: str, user_id: str, username: str) -> bool:
+        """Acquire a lock on a node. Returns False if already locked by another user."""
+        with self._lock:
+            flow_locks = self._locks.setdefault(flow_id, {})
+            existing = flow_locks.get(node_id)
+            if existing and existing["user_id"] != user_id:
+                return False
+            flow_locks[node_id] = {
+                "user_id": user_id,
+                "username": username,
+                "acquired_at": datetime.utcnow().isoformat(),
+            }
+            return True
+
+    def release(self, flow_id: str, node_id: str, user_id: str) -> bool:
+        """Release a node lock. Only the lock owner can release it."""
+        with self._lock:
+            flow_locks = self._locks.get(flow_id, {})
+            existing = flow_locks.get(node_id)
+            if existing and existing["user_id"] == user_id:
+                del flow_locks[node_id]
+                return True
+            return False
+
+    def release_all_for_user(self, flow_id: str, user_id: str) -> int:
+        """Release all locks held by a user on a flow. Returns count released."""
+        released = 0
+        with self._lock:
+            flow_locks = self._locks.get(flow_id, {})
+            to_remove = [
+                nid for nid, info in flow_locks.items()
+                if info["user_id"] == user_id
+            ]
+            for nid in to_remove:
+                del flow_locks[nid]
+                released += 1
+        return released
+
+    def get_locks(self, flow_id: str) -> dict[str, dict[str, Any]]:
+        """Return all active locks for a flow."""
+        with self._lock:
+            return {
+                nid: dict(info)
+                for nid, info in self._locks.get(flow_id, {}).items()
+            }
+
+    def reset(self) -> None:
+        """Clear all lock state."""
+        with self._lock:
+            self._locks.clear()
+
+
+class CollaborationActivityStore:
+    """Thread-safe in-memory per-flow activity feed (last 50 events per flow)."""
+
+    _MAX_EVENTS = 50
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._events: dict[str, list[dict[str, Any]]] = {}
+
+    def record(
+        self,
+        flow_id: str,
+        user_id: str,
+        username: str,
+        action: str,
+        detail: str = "",
+    ) -> dict[str, Any]:
+        """Append an activity event to the flow's feed."""
+        event: dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "flow_id": flow_id,
+            "user_id": user_id,
+            "username": username,
+            "action": action,
+            "detail": detail,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        with self._lock:
+            events = self._events.setdefault(flow_id, [])
+            events.append(event)
+            # Trim to most recent _MAX_EVENTS
+            if len(events) > self._MAX_EVENTS:
+                self._events[flow_id] = events[-self._MAX_EVENTS:]
+        return event
+
+    def get_activity(self, flow_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Return most recent events for a flow, newest first."""
+        with self._lock:
+            events = list(self._events.get(flow_id, []))
+        events.sort(key=lambda e: e["timestamp"], reverse=True)
+        return events[:limit]
+
+    def reset(self) -> None:
+        """Clear all activity state."""
+        with self._lock:
+            self._events.clear()
+
+
+presence_store = PresenceStore()
+node_lock_store = NodeLockStore()
+collaboration_activity_store = CollaborationActivityStore()
+
+
+class JoinPresenceRequest(BaseModel):
+    """Request body for joining a flow's collaboration session."""
+
+    model_config = ConfigDict(extra="forbid")
+    flow_id: str = ""  # optional; path param is authoritative
+
+
+class HeartbeatRequest(BaseModel):
+    """Request body for a collaboration heartbeat (empty — just needs auth)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AcquireNodeLockRequest(BaseModel):
+    """Request body for acquiring a node lock."""
+
+    model_config = ConfigDict(extra="forbid")
+    node_id: str
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics endpoints (N-45)
 # MUST be registered before app.include_router(v1) so FastAPI sees them.
 # Static segments (/trending, /publisher/dashboard) come before parametric
@@ -21713,6 +21911,130 @@ async def delete_flow_test_case(
         raise HTTPException(status_code=404, detail="Test case not found")
     test_suite_store.delete_test(test_id)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Multi-User Workflow Collaboration endpoints (N-59)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/collaboration/join", tags=["Collaboration"])
+async def collaboration_join(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Join a flow's collaboration session.
+
+    Registers the current user's presence and records a 'joined' activity event.
+    Returns the user's assigned color and the current list of collaborators.
+    """
+    user_id = current_user["id"]
+    username = current_user.get("email", user_id)
+    color = _user_color(user_id)
+    presence_store.join(flow_id, user_id, username, color)
+    collaboration_activity_store.record(flow_id, user_id, username, "joined")
+    collaborators = presence_store.get_presence(flow_id)
+    return {"user_id": user_id, "color": color, "collaborators": collaborators}
+
+
+@v1.delete("/flows/{flow_id}/collaboration/leave", tags=["Collaboration"])
+async def collaboration_leave(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, str]:
+    """Leave a flow's collaboration session.
+
+    Removes the user's presence, releases all held node locks,
+    and records a 'left' activity event.
+    """
+    user_id = current_user["id"]
+    username = current_user.get("email", user_id)
+    presence_store.leave(flow_id, user_id)
+    node_lock_store.release_all_for_user(flow_id, user_id)
+    collaboration_activity_store.record(flow_id, user_id, username, "left")
+    return {"status": "left"}
+
+
+@v1.post("/flows/{flow_id}/collaboration/heartbeat", tags=["Collaboration"])
+async def collaboration_heartbeat(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, str]:
+    """Update the authenticated user's last-seen timestamp for presence."""
+    presence_store.heartbeat(flow_id, current_user["id"])
+    return {"status": "ok"}
+
+
+@v1.get("/flows/{flow_id}/collaboration/presence", tags=["Collaboration"])
+async def collaboration_presence(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return the list of collaborators currently active on a flow."""
+    collaborators = presence_store.get_presence(flow_id)
+    return {"collaborators": collaborators}
+
+
+@v1.post("/flows/{flow_id}/collaboration/lock/{node_id}", tags=["Collaboration"])
+async def collaboration_lock_acquire(
+    flow_id: str,
+    node_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Acquire an optimistic lock on a workflow node.
+
+    Returns 200 if the lock was acquired, 409 if already locked by another user.
+    """
+    user_id = current_user["id"]
+    username = current_user.get("email", user_id)
+    acquired = node_lock_store.acquire(flow_id, node_id, user_id, username)
+    if not acquired:
+        raise HTTPException(
+            status_code=409,
+            detail="Node is already locked by another user",
+        )
+    collaboration_activity_store.record(
+        flow_id, user_id, username, "locked_node", node_id,
+    )
+    return {"locked": True, "node_id": node_id, "user_id": user_id}
+
+
+@v1.delete("/flows/{flow_id}/collaboration/lock/{node_id}", tags=["Collaboration"])
+async def collaboration_lock_release(
+    flow_id: str,
+    node_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Release an optimistic lock on a workflow node."""
+    user_id = current_user["id"]
+    username = current_user.get("email", user_id)
+    released = node_lock_store.release(flow_id, node_id, user_id)
+    if released:
+        collaboration_activity_store.record(
+            flow_id, user_id, username, "released_node", node_id,
+        )
+    return {"released": released, "node_id": node_id}
+
+
+@v1.get("/flows/{flow_id}/collaboration/locks", tags=["Collaboration"])
+async def collaboration_locks(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return all active node locks for a flow."""
+    locks = node_lock_store.get_locks(flow_id)
+    return {"locks": locks}
+
+
+@v1.get("/flows/{flow_id}/collaboration/activity", tags=["Collaboration"])
+async def collaboration_activity(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Return the most recent 20 activity events for a flow."""
+    activity = collaboration_activity_store.get_activity(flow_id, limit=20)
+    return {"activity": activity}
 
 
 # Include versioned router

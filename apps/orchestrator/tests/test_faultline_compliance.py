@@ -12,6 +12,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
@@ -517,12 +519,12 @@ class TestFaultlineTemplateDocs:
 
     def test_docs_file_exists(self):
         """The markdown docs file for the Faultline template must exist."""
-        doc_path = Path("docs/templates/ai-compliance-pipeline.md")
+        doc_path = _REPO_ROOT / "docs/templates/ai-compliance-pipeline.md"
         assert doc_path.exists(), f"Expected docs file not found at: {doc_path.resolve()}"
 
     def test_docs_contains_required_sections(self):
         """The docs file must contain 'Prerequisites', 'FAULTLINE_API_URL', and 'trust score'."""
-        doc_path = Path("docs/templates/ai-compliance-pipeline.md")
+        doc_path = _REPO_ROOT / "docs/templates/ai-compliance-pipeline.md"
         assert doc_path.exists(), f"Docs file missing: {doc_path.resolve()}"
         content = doc_path.read_text(encoding="utf-8")
         required_strings = ["Prerequisites", "FAULTLINE_API_URL", "trust score"]
@@ -531,5 +533,5 @@ class TestFaultlineTemplateDocs:
 
     def test_yaml_template_exists(self):
         """The YAML template definition for Faultline compliance must exist."""
-        yaml_path = Path("apps/web-frontend/src/templates/faultline_compliance.yaml")
+        yaml_path = _REPO_ROOT / "apps/web-frontend/src/templates/faultline_compliance.yaml"
         assert yaml_path.exists(), f"Expected YAML template not found at: {yaml_path.resolve()}"

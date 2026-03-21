@@ -82,6 +82,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/webhooks/debug', icon: '🔗', label: 'Webhooks' },
     { path: '/admin/featured', icon: '⭐', label: 'Featured' },
     { path: '/admin/executions', icon: '🖥', label: 'Exec Monitor' },
+    { path: '/collaboration', icon: '👥', label: 'Collaboration' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

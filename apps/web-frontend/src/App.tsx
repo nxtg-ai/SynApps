@@ -59,6 +59,9 @@ const TestRunnerPage = React.lazy(
 const OnboardingPage = React.lazy(
   () => import('./pages/OnboardingPage/OnboardingPage'),
 );
+const CollaborationPage = React.lazy(
+  () => import('./pages/CollaborationPage/CollaborationPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -302,6 +305,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <SearchPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/collaboration"
+            element={
+              <ProtectedRoute>
+                <CollaborationPage />
               </ProtectedRoute>
             }
           />
