@@ -179,6 +179,9 @@ const TemplateToolsPage = React.lazy(
 const NodeCommentsPage = React.lazy(
   () => import('./pages/NodeCommentsPage/NodeCommentsPage'),
 );
+const PortfolioDashboardPage = React.lazy(
+  () => import('./pages/PortfolioDashboardPage/PortfolioDashboardPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -742,6 +745,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <NodeCommentsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/portfolio"
+            element={
+              <ProtectedRoute>
+                <PortfolioDashboardPage />
               </ProtectedRoute>
             }
           />

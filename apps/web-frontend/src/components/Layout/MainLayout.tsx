@@ -122,6 +122,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/webhook-registry', icon: '📡', label: 'Webhook Registry' },
     { path: '/template-tools', icon: '🔧', label: 'Template Tools' },
     { path: '/node-comments', icon: '💬', label: 'Node Comments' },
+    { path: '/portfolio', icon: '🗂️', label: 'Portfolio' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
