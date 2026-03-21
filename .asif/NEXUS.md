@@ -190,6 +190,7 @@
 | N-179 | Flow Resource Limits — PUT/GET/DELETE /flows/{id}/resource-limits (memory_mb, cpu_millicores, timeout_s with validation) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-180 | Flow Access Control List — POST/GET/DELETE /flows/{id}/acl/{user} (read/write/execute/admin permissions per user) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-181 | Flow Execution Mode — PUT/GET/DELETE /flows/{id}/execution-mode (async/sync/dry_run + debug flag) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-182 | Flow Input Validation Rules — PUT/GET/DELETE /flows/{id}/input-validation (rules list, strict mode, max 50 rules) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

@@ -12138,6 +12138,51 @@ class FlowExecutionModeStore:
 
 flow_execution_mode_store = FlowExecutionModeStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowInputValidationStore — N-182 Flow Input Validation Rules
+# ---------------------------------------------------------------------------
+
+
+class FlowInputValidationStore:
+    """Store input validation rules for a flow."""
+
+    _MAX_RULES: int = 50
+
+    def __init__(self) -> None:
+        self._rules: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, rules: list[dict[str, Any]], strict: bool) -> dict[str, Any]:
+        if len(rules) > self._MAX_RULES:
+            raise ValueError(f"rules exceeds maximum of {self._MAX_RULES}")
+        with self._lock:
+            self._rules[flow_id] = {
+                "rules": rules,
+                "strict": strict,
+                "rule_count": len(rules),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._rules[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._rules.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._rules.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._rules.clear()
+
+
+flow_input_validation_store = FlowInputValidationStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -21046,6 +21091,60 @@ async def delete_flow_execution_mode(
     deleted = flow_execution_mode_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No execution mode for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-182 Flow Input Validation Rules — PUT/GET/DELETE /flows/{id}/input-validation
+# ---------------------------------------------------------------------------
+
+
+class FlowInputValidationBody(BaseModel):
+    rules: list[dict[str, Any]] = Field(default_factory=list)
+    strict: bool = Field(default=False)
+
+
+@v1.put("/flows/{flow_id}/input-validation", tags=["Flows"])
+async def set_flow_input_validation(
+    flow_id: str,
+    body: FlowInputValidationBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_input_validation_store.set(flow_id, body.rules, body.strict)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/input-validation", tags=["Flows"])
+async def get_flow_input_validation(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_input_validation_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No input validation for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/input-validation", tags=["Flows"])
+async def delete_flow_input_validation(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_input_validation_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No input validation for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 

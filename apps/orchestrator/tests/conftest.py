@@ -41,6 +41,7 @@ from apps.orchestrator.main import (
     flow_favorite_store,
     flow_group_store,
     flow_input_schema_store,
+    flow_input_validation_store,
     flow_label_store,
     flow_metadata_store,
     flow_notif_pref_store,
@@ -221,6 +222,7 @@ def _reset_all_stores() -> None:
     flow_approval_store.reset()
     flow_acl_store.reset()
     flow_execution_mode_store.reset()
+    flow_input_validation_store.reset()
     flow_error_alert_store.reset()
     flow_output_destination_store.reset()
     flow_resource_limit_store.reset()
