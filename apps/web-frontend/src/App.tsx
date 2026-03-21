@@ -86,6 +86,12 @@ const AiAssistPage = React.lazy(
 const WorkflowDebugPage = React.lazy(
   () => import('./pages/WorkflowDebugPage/WorkflowDebugPage'),
 );
+const WorkflowVarsPage = React.lazy(
+  () => import('./pages/WorkflowVarsPage/WorkflowVarsPage'),
+);
+const AuditTrailPage = React.lazy(
+  () => import('./pages/AuditTrailPage/AuditTrailPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -401,6 +407,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <WorkflowDebugPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflow-vars"
+            element={
+              <ProtectedRoute>
+                <WorkflowVarsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/audit-trail"
+            element={
+              <ProtectedRoute>
+                <AuditTrailPage />
               </ProtectedRoute>
             }
           />
