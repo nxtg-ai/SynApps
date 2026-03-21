@@ -82,6 +82,8 @@
 | N-71 | Workflow Monitoring Dashboard — Health Status + Alert Rules | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-72 | AI Assist UI — Suggest Next Node + Autocomplete + Patterns | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-73 | Workflow Step-Through Debugger UI — Breakpoints + Live Polling | EXECUTION | SHIPPED | P1 | 2026-03-20 |
+| N-74 | Workflow Variables & Secrets Manager UI — N-26 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-75 | Audit Trail Viewer — Compliance Log UI — N-30 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 

@@ -93,6 +93,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/workflow-debug', icon: '🐛', label: 'Step Debugger' },
     { path: '/workflow-vars', icon: '🔧', label: 'Workflow Vars' },
     { path: '/audit-trail', icon: '📜', label: 'Audit Trail' },
+    { path: '/schedules', icon: '⏰', label: 'Schedules' },
+    { path: '/dlq', icon: '💀', label: 'Dead Letter Queue' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
