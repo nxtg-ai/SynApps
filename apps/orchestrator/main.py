@@ -9399,6 +9399,40 @@ flow_favorite_store = FlowFavoriteStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowDescriptionStore — N-134 Flow Descriptions
+# ---------------------------------------------------------------------------
+
+
+class FlowDescriptionStore:
+    """Stores a free-text description per flow_id (max 4 000 chars)."""
+
+    MAX_LEN = 4000
+
+    def __init__(self) -> None:
+        self._descriptions: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, text: str) -> None:
+        with self._lock:
+            self._descriptions[flow_id] = text[: self.MAX_LEN]
+
+    def get(self, flow_id: str) -> str:
+        with self._lock:
+            return self._descriptions.get(flow_id, "")
+
+    def delete(self, flow_id: str) -> None:
+        with self._lock:
+            self._descriptions.pop(flow_id, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._descriptions.clear()
+
+
+flow_description_store = FlowDescriptionStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15084,6 +15118,41 @@ async def remove_flow_favorite(
     if not removed:
         raise HTTPException(status_code=404, detail="Flow is not in favorites")
     return {"flow_id": flow_id, "favorited": False}
+
+
+# ---------------------------------------------------------------------------
+# N-134 Flow Descriptions — GET/PUT /flows/{id}/description
+# ---------------------------------------------------------------------------
+
+
+class FlowDescriptionRequest(BaseModel):
+    description: str = Field("", max_length=FlowDescriptionStore.MAX_LEN)
+
+
+@v1.get("/flows/{flow_id}/description", tags=["Flows"])
+async def get_flow_description(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the description for a flow. Returns empty string if none set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"flow_id": flow_id, "description": flow_description_store.get(flow_id)}
+
+
+@v1.put("/flows/{flow_id}/description", tags=["Flows"])
+async def set_flow_description(
+    flow_id: str,
+    body: FlowDescriptionRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set or replace the description for a flow. Send empty string to clear."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    flow_description_store.set(flow_id, body.description)
+    return {"flow_id": flow_id, "description": flow_description_store.get(flow_id)}
 
 
 async def _run_flow_impl(
