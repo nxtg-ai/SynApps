@@ -116,10 +116,13 @@ _MOCK_HTTP = AppletMessage(
 )
 
 
-def _poll_run(client: TestClient, run_id: str, *, timeout: float = 5.0) -> dict | None:
+def _poll_run(client: TestClient, run_id: str, *, timeout: float = 20.0) -> dict | None:
+    # 1-second intervals keep us inside the token-bucket burst window (10 tokens/key).
+    # Polling at 100 ms exhausted the burst after ~1 s in full-suite runs, causing
+    # spurious 429s that prevented run status from being read.
     deadline = time.time() + timeout
     while time.time() < deadline:
-        time.sleep(0.1)
+        time.sleep(1.0)
         resp = client.get(f"/api/v1/runs/{run_id}")
         if resp.status_code == 200:
             run = resp.json()

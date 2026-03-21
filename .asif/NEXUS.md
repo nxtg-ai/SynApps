@@ -75,6 +75,8 @@
 | N-63 | API Key Management UI — Create/List/Revoke Keys | SECURITY | SHIPPED | P1 | 2026-03-20 |
 | N-64 | CI Coverage Config Fix — Explicit Path + Working Dir | STACK | SHIPPED | P1 | 2026-03-20 |
 | N-65 | Flaky Test Stabilization — Rate Limiter Poll Fix | STACK | SHIPPED | P1 | 2026-03-20 |
+| N-66 | Real-time Plugin Config in Canvas — SchemaForm in NodeConfigModal | VISUAL | SHIPPED | P1 | 2026-03-20 |
+| N-67 | Async Flaky Test Fixes — 1s Poll Intervals + Burst=100 | STACK | SHIPPED | P1 | 2026-03-20 |
 
 ---
 

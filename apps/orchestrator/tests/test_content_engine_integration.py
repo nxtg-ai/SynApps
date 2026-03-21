@@ -262,8 +262,8 @@ class TestContentEngineIntegration:
                     assert run_id is not None
 
                     run = None
-                    for _ in range(40):
-                        await asyncio.sleep(0.15)
+                    for _ in range(20):
+                        await asyncio.sleep(1.0)
                         run = await WorkflowRunRepository.get_by_run_id(run_id)
                         if run and run.get("status") in ("success", "error"):
                             break
@@ -312,8 +312,8 @@ class TestContentEngineIntegration:
                     )
 
                     run = None
-                    for _ in range(40):
-                        await asyncio.sleep(0.15)
+                    for _ in range(20):
+                        await asyncio.sleep(1.0)
                         run = await WorkflowRunRepository.get_by_run_id(run_id)
                         if run and run.get("status") in ("success", "error"):
                             break

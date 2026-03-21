@@ -52,7 +52,10 @@ def _reset_rate_limit_counter(monkeypatch):
     )
     monkeypatch.setattr(
         "apps.orchestrator.middleware.rate_limiter._token_buckets",
-        TokenBucketRegistry(),
+        # Use a higher burst in tests so that polling loops (up to 1 req/s) don't
+        # exhaust the default TOKEN_BUCKET_BURST=10 before the run reaches a
+        # terminal status — especially under full-suite event loop contention.
+        TokenBucketRegistry(default_burst=100),
     )
 
 

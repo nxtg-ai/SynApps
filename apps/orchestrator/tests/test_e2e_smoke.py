@@ -126,10 +126,16 @@ def _reset_trigger_registry():
 # ---------------------------------------------------------------------------
 
 
-async def _poll_until_terminal(run_id: str, *, max_attempts: int = 80) -> dict | None:
-    """Poll WorkflowRunRepository until the run reaches a terminal status."""
+async def _poll_until_terminal(run_id: str, *, max_attempts: int = 20) -> dict | None:
+    """Poll WorkflowRunRepository until the run reaches a terminal status.
+
+    Uses 1-second intervals to stay within the token-bucket burst limit (10 tokens
+    per key by default). Under event loop contention in full-suite runs, 150ms
+    intervals exhausted the burst in < 2 s — causing spurious 429s and/or
+    timeouts before the background task completed.
+    """
     for _ in range(max_attempts):
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(1.0)
         run = await WorkflowRunRepository.get_by_run_id(run_id)
         if run and run.get("status") in ("success", "error"):
             return run
@@ -310,10 +316,10 @@ class TestSmokePipelineViaReceiveEndpoint:
                         #    The background execute_flow task must finish writing its
                         #    final DB status before TestClient tears down the event loop.
                         run_id = data["run_id"]
-                        deadline = time.time() + 5.0
+                        deadline = time.time() + 20.0
                         run = None
                         while time.time() < deadline:
-                            time.sleep(0.1)
+                            time.sleep(1.0)
                             run_resp = client.get(f"/api/v1/runs/{run_id}")
                             if run_resp.status_code == 200:
                                 run = run_resp.json()
