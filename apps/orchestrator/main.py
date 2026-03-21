@@ -9399,6 +9399,57 @@ flow_favorite_store = FlowFavoriteStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowPinStore — N-137 Flow Pinning
+# ---------------------------------------------------------------------------
+
+
+class FlowPinStore:
+    """Tracks which flows each user has pinned (top-of-list ordering).
+
+    Keyed by user_email → ordered list of flow_ids (insertion order).
+    Pins are personal — one user pinning a flow does not affect others.
+    """
+
+    def __init__(self) -> None:
+        self._pins: dict[str, list[str]] = {}  # email → ordered list
+        self._lock = threading.Lock()
+
+    def pin(self, user_email: str, flow_id: str) -> bool:
+        """Pin a flow. Returns False if already pinned, True if newly pinned."""
+        with self._lock:
+            pins = self._pins.setdefault(user_email, [])
+            if flow_id in pins:
+                return False
+            pins.append(flow_id)
+            return True
+
+    def unpin(self, user_email: str, flow_id: str) -> bool:
+        """Unpin a flow. Returns True if it was pinned, False otherwise."""
+        with self._lock:
+            pins = self._pins.get(user_email, [])
+            if flow_id in pins:
+                pins.remove(flow_id)
+                return True
+            return False
+
+    def get(self, user_email: str) -> list[str]:
+        """Return pinned flow_ids in pin order (oldest first)."""
+        with self._lock:
+            return list(self._pins.get(user_email, []))
+
+    def is_pinned(self, user_email: str, flow_id: str) -> bool:
+        with self._lock:
+            return flow_id in self._pins.get(user_email, [])
+
+    def reset(self) -> None:
+        with self._lock:
+            self._pins.clear()
+
+
+flow_pin_store = FlowPinStore()
+
+
+# ---------------------------------------------------------------------------
 # FlowDescriptionStore — N-134 Flow Descriptions
 # ---------------------------------------------------------------------------
 
@@ -14728,6 +14779,21 @@ async def list_favorite_flows(
     return {"items": flows, "total": len(flows)}
 
 
+@v1.get("/flows/pinned", tags=["Flows"])
+async def list_pinned_flows(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return all flows the current user has pinned, in pin order (oldest first)."""
+    user_email = current_user.get("email", "anonymous@local")
+    pin_ids = flow_pin_store.get(user_email)
+    flows: list[dict[str, Any]] = []
+    for fid in pin_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if flow:
+            flows.append(flow)
+    return {"items": flows, "total": len(flows)}
+
+
 @v1.get("/flows/{flow_id}", tags=["Flows"])
 async def get_flow(
     flow_id: str,
@@ -15173,6 +15239,47 @@ async def remove_flow_favorite(
     if not removed:
         raise HTTPException(status_code=404, detail="Flow is not in favorites")
     return {"flow_id": flow_id, "favorited": False}
+
+
+# ---------------------------------------------------------------------------
+# N-137 Flow Pinning — POST/DELETE /flows/{id}/pin
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/pin", status_code=201, tags=["Flows"])
+async def pin_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Pin a flow for the current user (top-of-list ordering).
+
+    Returns 409 if the flow is already pinned.
+    List pinned flows with GET /flows/pinned.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user_email = current_user.get("email", "anonymous@local")
+    pinned = flow_pin_store.pin(user_email, flow_id)
+    if not pinned:
+        raise HTTPException(status_code=409, detail="Flow is already pinned")
+    return {"flow_id": flow_id, "pinned": True}
+
+
+@v1.delete("/flows/{flow_id}/pin", tags=["Flows"])
+async def unpin_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Unpin a flow for the current user. Returns 404 if not pinned."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user_email = current_user.get("email", "anonymous@local")
+    removed = flow_pin_store.unpin(user_email, flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Flow is not pinned")
+    return {"flow_id": flow_id, "pinned": False}
 
 
 # ---------------------------------------------------------------------------
