@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SchemaForm from '@/components/SchemaForm';
 import './NodeConfigModal.css';
 
 interface NodeConfigModalProps {
@@ -978,7 +979,33 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
           </>
         );
 
-      default:
+      default: {
+        const schema = (nodeData as any)?.config_schema;
+        if (schema && typeof schema === 'object') {
+          return (
+            <>
+              <div className="form-group">
+                <label htmlFor="label">Node Label</label>
+                <input
+                  type="text"
+                  id="label"
+                  name="label"
+                  value={formData.label || ''}
+                  onChange={handleChange}
+                  placeholder="Enter node label"
+                />
+              </div>
+              <div className="form-group">
+                <label>Plugin Configuration</label>
+                <SchemaForm
+                  schema={schema}
+                  value={formData}
+                  onChange={(updated) => setFormData(updated)}
+                />
+              </div>
+            </>
+          );
+        }
         return (
           <>
             <div className="form-group">
@@ -994,6 +1021,7 @@ const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
             </div>
           </>
         );
+      }
     }
   };
   

@@ -138,3 +138,79 @@ describe('NodeConfigModal — Memory Node', () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+describe('NodeConfigModal — Plugin Node (default case)', () => {
+  const pluginSchema = {
+    type: 'object',
+    properties: {
+      api_key: { type: 'string', title: 'API Key' },
+      max_retries: { type: 'number', title: 'Max Retries' },
+    },
+    required: ['api_key'],
+  };
+
+  it('renders generic label input for unknown nodeType without config_schema', () => {
+    render(
+      <NodeConfigModal
+        {...baseProps}
+        nodeType="custom_unknown"
+        nodeData={{ label: 'My Plugin' }}
+      />,
+    );
+    const labelInput = screen.getByLabelText('Node Label') as HTMLInputElement;
+    expect(labelInput).toBeDefined();
+    expect(labelInput.value).toBe('My Plugin');
+    // SchemaForm should NOT be present
+    expect(screen.queryByTestId('schema-form')).toBeNull();
+  });
+
+  it('renders SchemaForm when nodeData has config_schema', () => {
+    render(
+      <NodeConfigModal
+        {...baseProps}
+        nodeType="custom_plugin"
+        nodeData={{ label: 'Plugin Node', config_schema: pluginSchema }}
+      />,
+    );
+    // Both the label input and SchemaForm should be present
+    expect(screen.getByLabelText('Node Label')).toBeDefined();
+    expect(screen.getByTestId('schema-form')).toBeDefined();
+    expect(screen.getByText('Plugin Configuration')).toBeDefined();
+  });
+
+  it('SchemaForm receives correct schema prop', () => {
+    render(
+      <NodeConfigModal
+        {...baseProps}
+        nodeType="custom_plugin"
+        nodeData={{ label: 'Plugin Node', config_schema: pluginSchema }}
+      />,
+    );
+    // The schema fields should be rendered by SchemaForm (exact: false to ignore required asterisk)
+    expect(screen.getByLabelText('API Key', { exact: false })).toBeDefined();
+    expect(screen.getByLabelText('Max Retries', { exact: false })).toBeDefined();
+  });
+
+  it('SchemaForm value updates are reflected in formData on save', () => {
+    const onSave = vi.fn();
+    render(
+      <NodeConfigModal
+        {...baseProps}
+        onSave={onSave}
+        nodeType="custom_plugin"
+        nodeData={{ label: 'Plugin', config_schema: pluginSchema }}
+      />,
+    );
+    // Fill in the API Key field rendered by SchemaForm
+    const apiKeyInput = screen.getByLabelText('API Key', { exact: false }) as HTMLInputElement;
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test-123' } });
+
+    // Save and verify formData includes the SchemaForm value
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    expect(onSave).toHaveBeenCalledOnce();
+    const [savedNodeId, savedData] = onSave.mock.calls[0];
+    expect(savedNodeId).toBe('node-1');
+    expect(savedData.api_key).toBe('sk-test-123');
+    expect(savedData.label).toBe('Plugin');
+  });
+});
