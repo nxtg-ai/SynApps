@@ -97,6 +97,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/dlq', icon: '💀', label: 'Dead Letter Queue' },
     { path: '/workflow-notifications', icon: '🔔', label: 'Notifications' },
     { path: '/execution-logs', icon: '📋', label: 'Execution Logs' },
+    { path: '/usage', icon: '📊', label: 'Usage & Quota' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

@@ -104,6 +104,9 @@ const WorkflowNotificationsPage = React.lazy(
 const ExecutionLogsPage = React.lazy(
   () => import('./pages/ExecutionLogsPage/ExecutionLogsPage'),
 );
+const UsagePage = React.lazy(
+  () => import('./pages/UsagePage/UsagePage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -467,6 +470,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ExecutionLogsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/usage"
+            element={
+              <ProtectedRoute>
+                <UsagePage />
               </ProtectedRoute>
             }
           />
