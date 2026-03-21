@@ -78,6 +78,7 @@
 | N-66 | Real-time Plugin Config in Canvas — SchemaForm in NodeConfigModal | VISUAL | SHIPPED | P1 | 2026-03-20 |
 | N-67 | Async Flaky Test Fixes — 1s Poll Intervals + Burst=100 | STACK | SHIPPED | P1 | 2026-03-20 |
 | N-69 | Frontend E2E Tests — Import Wizard + API Keys + Node Config | STACK | SHIPPED | P1 | 2026-03-20 |
+| N-70 | Node Performance Profiler UI — Heatmap + Bottleneck View | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 

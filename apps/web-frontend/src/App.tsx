@@ -74,6 +74,9 @@ const ImportWizardPage = React.lazy(
 const ApiKeyManagerPage = React.lazy(
   () => import('./pages/ApiKeyManagerPage/ApiKeyManagerPage'),
 );
+const NodeProfilerPage = React.lazy(
+  () => import('./pages/NodeProfilerPage/NodeProfilerPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -357,6 +360,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ApiKeyManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/node-profiler"
+            element={
+              <ProtectedRoute>
+                <NodeProfilerPage />
               </ProtectedRoute>
             }
           />
