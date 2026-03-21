@@ -101,6 +101,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/cost-tracker', icon: '💵', label: 'Cost Tracker' },
     { path: '/workflow-permissions', icon: '🔒', label: 'Permissions' },
     { path: '/connectors', icon: '🔌', label: 'Connectors' },
+    { path: '/subflows', icon: '🔀', label: 'Subflows' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
