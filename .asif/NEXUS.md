@@ -113,6 +113,13 @@
 | N-102 | Outgoing Webhook Registry — Register, List, Delete delivery webhooks | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-103 | Template Tools — Validate, Fetch by Semver, Rollback, Run Async + Poll | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-104 | Node Comments — Per-node threaded comment management | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-105 | Portfolio Dashboard — System health, providers, profile 3-tab view | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-106 | Flow Testing — Test case CRUD + suite runner + results history | EXECUTION | SHIPPED | P1 | 2026-03-21 |
+| N-107 | Debug Session — Interactive step-through debugger with breakpoints | EXECUTION | SHIPPED | P1 | 2026-03-21 |
+| N-108 | System Config — API version, metrics snapshot, config viewer | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-109 | Monitoring Alerts — Alert rule CRUD + workflow health summaries | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-110 | Workflow Secrets — Encrypted secrets GET/PUT + diff + version snapshots | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-111 | Connector Probe — All-connectors health + single connector probe | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2657,4 +2664,61 @@ Still uncovered (candidates for N-82+):
 **Automated CoS trigger — 10th invocation.** No new CoS content has appeared in NEXUS on any of the 10 automated triggers. Continuing per self-authorization protocol. All work self-authorized.
 
 **`origin/main` divergence**: now 80+ commits behind master. Still awaiting directive. Self-authorization for force-push to main still pending explicit CoS approval.
+
+---
+
+## Team Feedback — Cycle 82 (2026-03-21)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Tests Added |
+|---|---|---|
+| N-105 | `PortfolioDashboardPage` at `/portfolio`: `GET /dashboard/portfolio` + `GET /health/detailed` + `GET /auth/me`. Three-tab view with formatUptime helper. | 12 frontend |
+| N-106 | `FlowTestingPage` at `/flow-testing`: test case CRUD (POST/GET/DELETE), suite runner with exit_code, results history. | 16 frontend |
+| N-107 | `DebugSessionPage` at `/debug-session`: start session, continue/skip breakpoints, update breakpoints, abort. | 15 frontend |
+| N-108 | `SystemConfigPage` at `/system-config`: version/metrics/config 3-tab view with validation error list. | 12 frontend |
+| N-109 | `MonitoringAlertsPage` at `/monitoring-alerts`: alert rule CRUD + workflow health table. | 15 frontend |
+| N-110 | `WorkflowSecretsPage` at `/workflow-secrets`: secrets GET/PUT, workflow diff (v1 vs v2), version save/history/view. | 16 frontend |
+| N-111 | `ConnectorProbePage` at `/connector-probe`: all-connectors health with summary cards, single connector probe. | 10 frontend |
+| **fix** | `main.py`: capture `initial_status` before `asyncio.create_task()` in debug session endpoint to eliminate race condition in `test_start_debug_returns_session_id` | backend flaky test fixed |
+
+**Frontend total: 898 passed** (80 test files, +84 vs last cycle). Backend: **2,697 passed**. Commits: `82fdbcd`, `8ba95d4`, `341a50d`, `8f03d6e`.
+
+---
+
+### 2. What surprised me?
+
+**Two distinct flaky-test root causes in one cycle:**
+- `test_logs_ordered_by_timestamp` — concurrent async tasks append log entries in non-deterministic order. Fix: sort at read time in endpoint.
+- `test_start_debug_returns_session_id` — `asyncio.create_task()` can resume the background task before `return` under event-loop contention (even though there's no explicit `await` between them). Fix: capture `initial_status = session.status` before `create_task()`.
+
+The second is subtle: Python asyncio doesn't guarantee that `create_task` won't interleave with subsequent synchronous code if the task is already runnable. Capturing immutable state before scheduling background work is the correct pattern.
+
+**Backend endpoint coverage survey**: ~15-20 endpoints remain genuinely uncovered. Most cluster around: OAuth introspect flows (not useful as UI pages), AI suggest (covered by AiAssistPage), and a few admin utility endpoints.
+
+---
+
+### 3. Cross-project signals
+
+**`asyncio.create_task()` → capture state pattern.** Any time a background task is launched and the response returns mutable state that the task can modify, capture the state BEFORE `create_task`. General asyncio correctness pattern, not SynApps-specific.
+
+**Frontend endpoint coverage now ~95%.** Pattern: survey `@v1.` decorators, cross-reference pages directory, build targeted React pages. 111 frontend pages now cover essentially the full backend surface.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **N-112+: Remaining gap endpoints** — A handful remain: `GET /ai/suggest` (likely covered), `POST /subflows/validate`, `GET /executions/{id}/stream`, `POST /oauth/introspect`. Could consolidate into 1-2 pages.
+2. **N-68: Merge master → main** — `origin/main` is now 100+ commits behind. Need explicit CoS authorization.
+3. **CRUCIBLE audit** — 898 frontend + 2,697 backend. A Gate 2-7 pass would verify assertion quality at this scale.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`origin/main` divergence**: 100+ commits. Awaiting directive.
+
+**Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
+
+> Last updated: 2026-03-21 (cycle 82) — N-105 through N-111 shipped
 
