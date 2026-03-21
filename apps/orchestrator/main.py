@@ -9963,6 +9963,56 @@ flow_priority_store = FlowPriorityStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowExpiryStore — N-149 Flow Expiry
+# ---------------------------------------------------------------------------
+
+
+class FlowExpiryStore:
+    """Store optional expiry timestamps per flow.
+
+    Expiry is checked lazily at read time — no background worker needed.
+    A flow past its expiry is considered expired; callers decide what to
+    return (410 Gone, 404, auto-archive, etc.).
+    """
+
+    def __init__(self) -> None:
+        self._expiries: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, expires_at: float) -> float:
+        """Set expiry timestamp (Unix epoch). Returns the stored value."""
+        with self._lock:
+            self._expiries[flow_id] = expires_at
+            return expires_at
+
+    def get(self, flow_id: str) -> float | None:
+        """Return the expiry timestamp, or None if not set."""
+        with self._lock:
+            return self._expiries.get(flow_id)
+
+    def clear(self, flow_id: str) -> bool:
+        """Remove expiry. Returns True if removed, False if not set."""
+        with self._lock:
+            if flow_id not in self._expiries:
+                return False
+            del self._expiries[flow_id]
+            return True
+
+    def is_expired(self, flow_id: str) -> bool:
+        """Return True if a non-None expiry exists and is in the past."""
+        with self._lock:
+            ts = self._expiries.get(flow_id)
+        return ts is not None and time.time() > ts
+
+    def reset(self) -> None:
+        with self._lock:
+            self._expiries.clear()
+
+
+flow_expiry_store = FlowExpiryStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15286,10 +15336,15 @@ async def get_flow(
     flow_id: str,
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
-    """Get a flow by ID."""
+    """Get a flow by ID.
+
+    Returns 410 Gone if the flow has an expiry set and that expiry is in the past.
+    """
     flow = await FlowRepository.get_by_id(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
+    if flow_expiry_store.is_expired(flow_id):
+        raise HTTPException(status_code=410, detail="Flow has expired")
     flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
     flow_access_log_store.record(flow_id, current_user.get("email", "anonymous@local"))
     return flow
@@ -16501,6 +16556,78 @@ async def bulk_set_priority(
         flow_priority_store.set(fid, body.priority)
         succeeded.append(fid)
     return _bulk_result(succeeded, failed, "priority")
+
+
+# ---------------------------------------------------------------------------
+# N-149 Flow Expiry — GET/PUT/DELETE /flows/{id}/expiry
+# ---------------------------------------------------------------------------
+
+
+class FlowExpiryRequest(BaseModel):
+    expires_at: str = Field(
+        ...,
+        description="ISO-8601 datetime string (UTC). Flow will return 410 after this time.",
+    )
+
+
+def _expiry_response(flow_id: str, ts: float | None) -> dict[str, Any]:
+    return {
+        "flow_id": flow_id,
+        "expires_at": datetime.fromtimestamp(ts, tz=UTC).isoformat() if ts else None,
+        "expired": flow_expiry_store.is_expired(flow_id),
+    }
+
+
+@v1.get("/flows/{flow_id}/expiry", tags=["Flows"])
+async def get_flow_expiry(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the expiry configuration of a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return _expiry_response(flow_id, flow_expiry_store.get(flow_id))
+
+
+@v1.put("/flows/{flow_id}/expiry", tags=["Flows"])
+async def set_flow_expiry(
+    flow_id: str,
+    body: FlowExpiryRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Set or replace the expiry for a flow.
+
+    ``expires_at`` must be an ISO-8601 UTC datetime string.
+    Returns 422 if the datetime cannot be parsed or is in the past.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        dt = datetime.fromisoformat(body.expires_at.replace("Z", "+00:00"))
+        ts = dt.timestamp()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid datetime: {exc}") from exc
+    if ts <= time.time():
+        raise HTTPException(status_code=422, detail="expires_at must be in the future")
+    flow_expiry_store.set(flow_id, ts)
+    return _expiry_response(flow_id, ts)
+
+
+@v1.delete("/flows/{flow_id}/expiry", tags=["Flows"])
+async def clear_flow_expiry(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove the expiry from a flow. Returns 404 if no expiry was set."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_expiry_store.clear(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No expiry set for this flow")
+    return _expiry_response(flow_id, None)
 
 
 # ---------------------------------------------------------------------------
