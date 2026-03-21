@@ -11799,6 +11799,50 @@ class FlowApprovalStore:
 flow_approval_store = FlowApprovalStore()
 
 
+
+# ---------------------------------------------------------------------------
+# FlowTriggerConfigStore — N-175 Flow Trigger Configuration
+# ---------------------------------------------------------------------------
+
+_TRIGGER_TYPES: frozenset[str] = frozenset(["manual", "webhook", "schedule", "event", "api"])
+
+
+class FlowTriggerConfigStore:
+    """Store trigger configuration for a flow (what initiates execution)."""
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, trigger_type: str, config: dict[str, Any]) -> dict[str, Any]:
+        if trigger_type not in _TRIGGER_TYPES:
+            raise ValueError(f"trigger_type must be one of {sorted(_TRIGGER_TYPES)}")
+        with self._lock:
+            self._configs[flow_id] = {
+                "trigger_type": trigger_type,
+                "config": config,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._configs[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._configs.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._configs.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_trigger_config_store = FlowTriggerConfigStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -20312,6 +20356,60 @@ async def delete_flow_approval(
     deleted = flow_approval_store.clear(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No approval record for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-175 Flow Trigger Configuration — PUT/GET/DELETE /flows/{id}/trigger-config
+# ---------------------------------------------------------------------------
+
+
+class FlowTriggerConfigBody(BaseModel):
+    trigger_type: str
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+@v1.put("/flows/{flow_id}/trigger-config", tags=["Flows"])
+async def set_flow_trigger_config(
+    flow_id: str,
+    body: FlowTriggerConfigBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_trigger_config_store.set(flow_id, body.trigger_type, body.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/trigger-config", tags=["Flows"])
+async def get_flow_trigger_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_trigger_config_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No trigger config for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/trigger-config", tags=["Flows"])
+async def delete_flow_trigger_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_trigger_config_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No trigger config for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 

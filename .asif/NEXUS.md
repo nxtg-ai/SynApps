@@ -183,6 +183,7 @@
 | N-172 | Flow Visibility — PUT/GET/DELETE /flows/{id}/visibility (private/internal/public) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-173 | Flow Version Lock — POST/GET/DELETE /flows/{id}/version-lock (pin version, locked_by, reason) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-174 | Flow Approval Workflow — POST/GET/DELETE /flows/{id}/approval/{request,approve,reject} (pending/approved/rejected lifecycle) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-175 | Flow Trigger Configuration — PUT/GET/DELETE /flows/{id}/trigger-config (manual/webhook/schedule/event/api) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
