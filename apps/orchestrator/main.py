@@ -10382,6 +10382,117 @@ flow_annotation_store = FlowAnnotationStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowDependencyStore — N-155 Flow Dependencies
+# ---------------------------------------------------------------------------
+
+
+class FlowDependencyStore:
+    """Directed dependency graph between flows.
+
+    Records that flow A *depends on* flow B (A → B).
+    Each directed edge is stored as a record with an id, from_flow_id, to_flow_id,
+    optional label, and created_at.
+
+    Cycle detection: adding A→B is rejected (ValueError) if B already
+    transitively depends on A (would create a cycle).
+    Max out-degree: 50 dependencies per flow.
+    """
+
+    MAX_DEPS = 50
+
+    def __init__(self) -> None:
+        # from_flow_id → [edge_dict, ...]
+        self._outgoing: dict[str, list[dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Internal helpers (must be called with lock held)
+    # ------------------------------------------------------------------
+
+    def _reaches(self, start: str, target: str) -> bool:
+        """BFS: can *start* reach *target* following outgoing edges?"""
+        visited: set[str] = set()
+        queue = [start]
+        while queue:
+            node = queue.pop()
+            if node == target:
+                return True
+            if node in visited:
+                continue
+            visited.add(node)
+            for e in self._outgoing.get(node, []):
+                queue.append(e["to_flow_id"])
+        return False
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def add(
+        self,
+        from_flow_id: str,
+        to_flow_id: str,
+        label: str = "",
+    ) -> dict[str, Any]:
+        with self._lock:
+            edges = self._outgoing.setdefault(from_flow_id, [])
+            # Check duplicate
+            if any(e["to_flow_id"] == to_flow_id for e in edges):
+                raise ValueError("Dependency already exists")
+            if len(edges) >= self.MAX_DEPS:
+                raise ValueError(
+                    f"Dependency limit ({self.MAX_DEPS}) reached for this flow"
+                )
+            # Self-loop
+            if from_flow_id == to_flow_id:
+                raise ValueError("A flow cannot depend on itself")
+            # Cycle detection: if to_flow_id already reaches from_flow_id, adding
+            # this edge would create a cycle.
+            if self._reaches(to_flow_id, from_flow_id):
+                raise ValueError(
+                    "Adding this dependency would create a cycle"
+                )
+            edge: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "from_flow_id": from_flow_id,
+                "to_flow_id": to_flow_id,
+                "label": label,
+                "created_at": time.time(),
+            }
+            edges.append(edge)
+            return edge.copy()
+
+    def list_dependencies(self, flow_id: str) -> list[dict[str, Any]]:
+        """Flows that *flow_id* depends on (outgoing edges)."""
+        with self._lock:
+            return [e.copy() for e in self._outgoing.get(flow_id, [])]
+
+    def list_dependents(self, flow_id: str) -> list[dict[str, Any]]:
+        """Flows that depend on *flow_id* (incoming edges)."""
+        with self._lock:
+            result = []
+            for edges in self._outgoing.values():
+                for e in edges:
+                    if e["to_flow_id"] == flow_id:
+                        result.append(e.copy())
+            return result
+
+    def delete(self, from_flow_id: str, dep_id: str) -> bool:
+        with self._lock:
+            edges = self._outgoing.get(from_flow_id, [])
+            before = len(edges)
+            self._outgoing[from_flow_id] = [e for e in edges if e["id"] != dep_id]
+            return len(self._outgoing[from_flow_id]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._outgoing.clear()
+
+
+flow_dependency_store = FlowDependencyStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -17442,6 +17553,97 @@ async def delete_annotation(
     if not removed:
         raise HTTPException(status_code=404, detail="Annotation not found")
     return {"deleted": True, "annotation_id": ann_id}
+
+
+# ---------------------------------------------------------------------------
+# N-155 Flow Dependencies — POST/GET /flows/{id}/dependencies
+#                           GET /flows/{id}/dependents
+#                           DELETE /flows/{id}/dependencies/{dep_id}
+# ---------------------------------------------------------------------------
+
+
+class FlowDependencyRequest(BaseModel):
+    to_flow_id: str = Field(..., min_length=1, description="ID of the flow being depended upon.")
+    label: str = Field("", max_length=200, description="Optional human-readable label.")
+
+
+def _fmt_dep(e: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **e,
+        "created_at": datetime.fromtimestamp(e["created_at"], tz=UTC).isoformat(),
+    }
+
+
+@v1.post("/flows/{flow_id}/dependencies", status_code=201, tags=["Flows"])
+async def add_flow_dependency(
+    flow_id: str,
+    body: FlowDependencyRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Declare that *flow_id* depends on *to_flow_id*.
+
+    - Returns 409 if the dependency already exists or would create a cycle.
+    - Returns 422 if capacity (50) is reached or self-loop is attempted.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    dep_flow = await FlowRepository.get_by_id(body.to_flow_id)
+    if dep_flow is None:
+        raise HTTPException(status_code=404, detail="Dependency flow not found")
+    try:
+        edge = flow_dependency_store.add(flow_id, body.to_flow_id, body.label)
+    except ValueError as exc:
+        msg = str(exc)
+        if "cycle" in msg.lower() or "already exists" in msg.lower():
+            raise HTTPException(status_code=409, detail=msg) from exc
+        raise HTTPException(status_code=422, detail=msg) from exc
+    return _fmt_dep(edge)
+
+
+@v1.get("/flows/{flow_id}/dependencies", tags=["Flows"])
+async def list_flow_dependencies(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List flows that *flow_id* depends on (outgoing edges)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deps = flow_dependency_store.list_dependencies(flow_id)
+    return {"flow_id": flow_id, "items": [_fmt_dep(e) for e in deps]}
+
+
+@v1.get("/flows/{flow_id}/dependents", tags=["Flows"])
+async def list_flow_dependents(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List flows that depend on *flow_id* (incoming edges / reverse lookup)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deps = flow_dependency_store.list_dependents(flow_id)
+    return {"flow_id": flow_id, "items": [_fmt_dep(e) for e in deps]}
+
+
+@v1.delete("/flows/{flow_id}/dependencies/{dep_id}", tags=["Flows"])
+async def delete_flow_dependency(
+    flow_id: str,
+    dep_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a declared dependency edge.
+
+    Returns 404 if the flow or the dependency edge does not exist.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_dependency_store.delete(flow_id, dep_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Dependency not found")
+    return {"deleted": True, "dep_id": dep_id}
 
 
 # ---------------------------------------------------------------------------

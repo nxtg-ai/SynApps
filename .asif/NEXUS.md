@@ -163,6 +163,7 @@
 | N-152 | Flow Changelog — POST/GET /flows/{id}/changelog + DELETE /flows/{id}/changelog/{entry_id} | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-153 | Flow Run Presets — POST/GET/DELETE /flows/{id}/presets + POST /runs?preset_id= | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-154 | Flow Annotations — POST/GET /flows/{id}/annotations + PATCH/DELETE per annotation (hex color, canvas x/y) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-155 | Flow Dependencies — POST/GET/DELETE /flows/{id}/dependencies + GET /dependents (DAG, cycle detection) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
