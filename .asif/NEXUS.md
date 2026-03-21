@@ -136,6 +136,7 @@
 | N-125 | Execution History Explorer — GET /history (filtered list) + GET /history/{run_id} (trace detail) | EXECUTION | SHIPPED | P1 | 2026-03-21 |
 | N-126 | Plugin Schema Viewer — GET /plugins/{plugin_id}/schema (properties table + raw JSON) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-127 | Marketplace Publish — POST /marketplace/publish (flow_id + name + category + tags + author form) | MARKETPLACE | SHIPPED | P1 | 2026-03-21 |
+| N-128 | Security: npm dependency vulnerability fix — dompurify GHSA-v2wj-7wpq-c8vv (0 vulnerabilities) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2834,5 +2835,65 @@ The second is subtle: Python asyncio doesn't guarantee that `create_task` won't 
 
 **Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
 
-> Last updated: 2026-03-21 (cycle 88) — N-127 shipped (MarketplacePublishPage, last uncovered endpoint); 1,090 frontend tests; backend endpoint coverage complete
+---
+
+## Team Feedback — Cycle 90 (2026-03-21)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Tests Added |
+|---|---|---|
+| N-128 | `package.json` overrides.dompurify ^3.3.3 — 0 npm vulnerabilities (was 4: 2 high + 2 moderate) | 0 |
+| CRUCIBLE | Gate 2: len guards on `test_marketplace_api.py:344` and `test_health_dashboard.py:275`; Gate 5: OMIT JUSTIFIED comments on 2 bare `pass`/`continue` blocks in `main.py` | 0 |
+
+**Frontend total: 1,090 passed** (94 test files). Backend: **2,697 passed**. Coverage: **95%**. Commits: `6a2f1f2`, `e8cac67`.
+
+---
+
+### 2. CRUCIBLE Audit Report
+
+**Project**: SynApps | **Tier**: Standard | **Date**: 2026-03-21
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| 1. xfail Governance | **PASS** | 10 skip markers, all governed with clear reasons (missing template files, missing deps) |
+| 2. Non-Empty Assertions | **PASS** (fixed) | 32 flagged; 2 true violations fixed (marketplace nodes, health providers) |
+| 3. Mock Drift | **PASS** | No implementation+mock co-located commits without spec change |
+| 4. Test Count Delta | **PASS** | 2,697 backend + 1,090 frontend = 3,787 total (matches README) |
+| 5. Silent Exceptions | **PASS** (fixed) | 2 bare pass/continue given OMIT JUSTIFIED comments |
+| 6. Mutation Testing | **NOT ASSESSED** | mutmut not installed |
+| 7. Spec Traceability | **PASS** | Standard tier — 3/4 oracle types present (example, contract, integration) |
+| 8.1 Coverage Omits | **PASS** | Omits: tests/, venv/, migrations/, setup.py — all justified |
+| 8.2 Env-Gated Tests | **PASS** | 1 skipif (asyncpg not installed) — runtime dep check, not dead test |
+| 8.3 Integration Mocks | **PASS** | 8 mock lines in test_e2e_sdk_cli.py — documented/justified (SDK layer) |
+| 8.4 Badge Accuracy | **PASS** | README: 3,787 tests — matches actual count exactly |
+| 8.5 Real Coverage | **PASS** | 95% actual (no unjustified omits) |
+
+**Overall: 7/8 gates PASS (Gate 6 not assessed — tooling absent)**
+
+---
+
+### 3. What surprised me?
+
+**High false-positive rate in Gate 2 scanner.** Of 32 `isinstance(result, list)` checks flagged, only 2 were true violations. The rest were: empty-state tests (intentionally checking `== []`), tests with implicit non-empty checks via set membership, or tests with inline comments explaining why len guard was omitted. The gate scanner needs context awareness.
+
+**95% backend coverage despite 2,697 tests.** The 5% miss (1,701 lines) is almost entirely in platform-dependent code paths (kernel resource limit settings, OS-specific fallbacks), vendor-integrated code (Fernet key rotation), and complex async edge cases in the SSE streaming path.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **N-68: Merge master → main** — `origin/main` is now 130+ commits behind master. Awaiting CoS directive.
+2. **CLAUDE.md Gate 4 baseline update** — current baseline is 1,465 (2026-03-06). Actual is 3,787. Update to reflect reality.
+3. **mutmut installation** — complete Gate 6 (mutation testing) of CRUCIBLE audit.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`origin/main` divergence**: 130+ commits. Awaiting directive.
+
+**Automated trigger**: 14th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
+
+> Last updated: 2026-03-21 (cycle 90) — CRUCIBLE audit complete (7/8 PASS); 2 Gate 2 + 2 Gate 5 fixes; 95% coverage; 3,787 tests
 

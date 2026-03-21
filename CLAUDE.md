@@ -150,7 +150,7 @@ If your commit removes/consolidates tests (net decrease > 5), include in the com
 ```
 Test delta: -N (reason: <brief justification>)
 ```
-Track baseline: **2,967 total** (2,667 backend + 300 frontend unit) as of 2026-03-20.
+Track baseline: **3,787 total** (2,697 backend + 1,090 frontend unit) as of 2026-03-21.
 
 ### Gate 5 — Silent Exception Audit
 `except` blocks MUST do at least one of: `logger.*`, `raise`, or return an error value.
