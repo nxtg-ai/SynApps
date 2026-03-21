@@ -10270,6 +10270,11 @@ class Orchestrator:
             applet_registry[ERROR_HANDLER_NODE_TYPE] = ErrorHandlerNodeApplet
             return ErrorHandlerNodeApplet()
 
+        # Fallback: check the plugin registry for third-party node types (N-60)
+        plugin_entry = plugin_registry.get_by_node_type(normalized_type)
+        if plugin_entry:
+            return DynamicPluginApplet(plugin_entry)
+
         try:
             module_path = f"apps.applets.{normalized_type}.applet"
             module = importlib.import_module(module_path)
@@ -21281,6 +21286,155 @@ class AcquireNodeLockRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Workflow Marketplace Plugin System (N-60)
+# ---------------------------------------------------------------------------
+
+
+class PluginManifest(BaseModel):
+    """Schema describing a third-party plugin that can be used as a workflow node."""
+
+    name: str
+    version: str
+    display_name: str
+    description: str
+    node_type: str
+    endpoint_url: str
+    config_schema: dict[str, Any] = {}
+    tags: list[str] = []
+    author: str = ""
+    icon_url: str = ""
+
+
+class PluginRegistry:
+    """Thread-safe in-memory store for registered marketplace plugins."""
+
+    # Node types reserved for built-in applets -- plugins cannot claim these.
+    RESERVED_NODE_TYPES: set[str] = {
+        "llm",
+        "imagegen",
+        "code",
+        "http_request",
+        "transform",
+        "if_else",
+        "merge",
+        "foreach",
+        "start",
+        "end",
+        "webhook_trigger",
+        "scheduler",
+        "subflow",
+        "branch",
+        "compound_merge",
+    }
+
+    def __init__(self) -> None:
+        self._plugins: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def register(self, manifest: PluginManifest) -> str:
+        """Register a plugin and return a unique plugin_id.
+
+        Raises ValueError if the manifest's node_type collides with a built-in.
+        """
+        if manifest.node_type in self.RESERVED_NODE_TYPES:
+            raise ValueError(
+                f"node_type '{manifest.node_type}' is reserved for built-in applets"
+            )
+        plugin_id = str(uuid.uuid4())
+        with self._lock:
+            self._plugins[plugin_id] = {
+                "id": plugin_id,
+                "manifest": manifest.model_dump(),
+                "installed_at": time.time(),
+                "install_count": 0,
+            }
+        return plugin_id
+
+    def unregister(self, plugin_id: str) -> bool:
+        """Remove a plugin. Returns True if found and removed, False otherwise."""
+        with self._lock:
+            return self._plugins.pop(plugin_id, None) is not None
+
+    def get(self, plugin_id: str) -> dict[str, Any] | None:
+        """Return a plugin entry by id, or None if not found."""
+        with self._lock:
+            return self._plugins.get(plugin_id)
+
+    def get_by_node_type(self, node_type: str) -> dict[str, Any] | None:
+        """Return the first plugin whose manifest matches *node_type*."""
+        with self._lock:
+            for entry in self._plugins.values():
+                if entry["manifest"]["node_type"] == node_type:
+                    return entry
+            return None
+
+    def list_all(self) -> list[dict[str, Any]]:
+        """Return a shallow copy of all registered plugin entries."""
+        with self._lock:
+            return list(self._plugins.values())
+
+    def increment_install_count(self, plugin_id: str) -> None:
+        """Bump the install counter for a plugin (no-op if id missing)."""
+        with self._lock:
+            if plugin_id in self._plugins:
+                self._plugins[plugin_id]["install_count"] += 1
+
+    def reset(self) -> None:
+        """Remove all plugins -- used between tests."""
+        with self._lock:
+            self._plugins.clear()
+
+
+class DynamicPluginApplet:
+    """Applet adapter that executes a third-party plugin via HTTP POST."""
+
+    def __init__(self, plugin_entry: dict[str, Any]) -> None:
+        self.plugin_entry = plugin_entry
+
+    async def execute(self, message: Any) -> dict[str, Any]:
+        """POST input data to the plugin's endpoint_url and return the JSON response."""
+        manifest = self.plugin_entry["manifest"]
+        endpoint = manifest["endpoint_url"]
+        payload = {
+            "input": message.input if hasattr(message, "input") else {},
+            "config": message.config if hasattr(message, "config") else {},
+            "node_id": message.node_id if hasattr(message, "node_id") else "",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(endpoint, json=payload)
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.TimeoutException as exc:
+            raise ValueError(f"Plugin '{manifest['name']}' timed out after 30s") from exc
+        except httpx.HTTPStatusError as exc:
+            raise ValueError(
+                f"Plugin '{manifest['name']}' returned HTTP {exc.response.status_code}"
+            ) from exc
+        except Exception as exc:
+            logger.warning("Plugin '%s' execution error: %s", manifest["name"], exc)
+            raise ValueError(f"Plugin '{manifest['name']}' failed: {exc}") from exc
+
+
+plugin_registry = PluginRegistry()
+
+
+class RegisterPluginRequest(BaseModel):
+    """Request body for POST /plugins."""
+
+    name: str
+    version: str
+    display_name: str
+    description: str
+    node_type: str
+    endpoint_url: str
+    config_schema: dict[str, Any] = {}
+    tags: list[str] = []
+    author: str = ""
+    icon_url: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Marketplace Analytics endpoints (N-45)
 # MUST be registered before app.include_router(v1) so FastAPI sees them.
 # Static segments (/trending, /publisher/dashboard) come before parametric
@@ -22035,6 +22189,80 @@ async def collaboration_activity(
     """Return the most recent 20 activity events for a flow."""
     activity = collaboration_activity_store.get_activity(flow_id, limit=20)
     return {"activity": activity}
+
+
+# ---------------------------------------------------------------------------
+# Plugin System endpoints (N-60)
+# MUST be registered before app.include_router(v1) so FastAPI sees them.
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/plugins", status_code=201, tags=["Plugins"])
+async def register_plugin(
+    body: RegisterPluginRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Register a new marketplace plugin (authenticated)."""
+    manifest = PluginManifest(**body.model_dump())
+    try:
+        plugin_id = plugin_registry.register(manifest)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"plugin_id": plugin_id, "message": f"Plugin '{body.name}' registered"}
+
+
+@v1.get("/plugins", tags=["Plugins"])
+async def list_plugins() -> dict[str, Any]:
+    """List all registered plugins (public)."""
+    plugins = plugin_registry.list_all()
+    return {"plugins": plugins, "total": len(plugins)}
+
+
+@v1.get("/plugins/{plugin_id}", tags=["Plugins"])
+async def get_plugin(plugin_id: str) -> dict[str, Any]:
+    """Get details of a specific plugin (public)."""
+    entry = plugin_registry.get(plugin_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    return entry
+
+
+@v1.delete("/plugins/{plugin_id}", status_code=204, tags=["Plugins"])
+async def delete_plugin(
+    plugin_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> None:
+    """Unregister a plugin (authenticated)."""
+    if not plugin_registry.unregister(plugin_id):
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+
+@v1.get("/plugins/{plugin_id}/schema", tags=["Plugins"])
+async def get_plugin_schema(plugin_id: str) -> dict[str, Any]:
+    """Return the config_schema for a plugin (public)."""
+    entry = plugin_registry.get(plugin_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    return {"plugin_id": plugin_id, "config_schema": entry["manifest"]["config_schema"]}
+
+
+@v1.post("/plugins/{plugin_id}/install", tags=["Plugins"])
+async def install_plugin(
+    plugin_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    """Increment the install count for a plugin (authenticated)."""
+    entry = plugin_registry.get(plugin_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    plugin_registry.increment_install_count(plugin_id)
+    updated = plugin_registry.get(plugin_id)
+    return {
+        "plugin_id": plugin_id,
+        "node_type": entry["manifest"]["node_type"],
+        "message": "Plugin installed",
+        "install_count": updated["install_count"] if updated else 0,
+    }
 
 
 # Include versioned router

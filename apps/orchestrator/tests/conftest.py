@@ -12,6 +12,7 @@ from apps.orchestrator.main import (
     featured_store,
     issue_store,
     node_lock_store,
+    plugin_registry,
     presence_store,
     rating_store,
     reply_store,
@@ -80,6 +81,7 @@ def _reset_shared_stores():
     presence_store.reset()
     node_lock_store.reset()
     collaboration_activity_store.reset()
+    plugin_registry.reset()
     yield
     # Post-test cleanup (belt-and-suspenders for any state written during test)
     execution_quota_store.reset()
@@ -98,3 +100,4 @@ def _reset_shared_stores():
     presence_store.reset()
     node_lock_store.reset()
     collaboration_activity_store.reset()
+    plugin_registry.reset()
