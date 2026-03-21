@@ -11714,6 +11714,92 @@ flow_version_lock_store = FlowVersionLockStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowApprovalStore — N-174 Flow Approval Workflow
+# ---------------------------------------------------------------------------
+
+_APPROVAL_STATUSES: frozenset[str] = frozenset(["pending", "approved", "rejected"])
+
+
+class FlowApprovalStore:
+    """Tracks per-flow deployment approval gate.
+
+    Lifecycle:
+      POST /request  — submitter opens an approval request (→ pending)
+      POST /approve  — reviewer approves                   (→ approved)
+      POST /reject   — reviewer rejects with reason        (→ rejected)
+      GET  /         — current approval record
+      DELETE /       — clear the approval record
+    """
+
+    def __init__(self) -> None:
+        self._approvals: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def request(self, flow_id: str, submitted_by: str, note: str) -> dict[str, Any]:
+        if len(note) > 500:
+            raise ValueError("note exceeds 500 characters")
+        with self._lock:
+            self._approvals[flow_id] = {
+                "status": "pending",
+                "submitted_by": submitted_by,
+                "note": note,
+                "reviewer": None,
+                "review_comment": None,
+                "requested_at": datetime.now(UTC).isoformat(),
+                "reviewed_at": None,
+            }
+            return {"flow_id": flow_id, **self._approvals[flow_id]}
+
+    def _review(
+        self,
+        flow_id: str,
+        status: str,
+        reviewer: str,
+        comment: str,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            approval = self._approvals.get(flow_id)
+            if approval is None:
+                return None
+            approval.update(
+                {
+                    "status": status,
+                    "reviewer": reviewer,
+                    "review_comment": comment,
+                    "reviewed_at": datetime.now(UTC).isoformat(),
+                }
+            )
+            return {"flow_id": flow_id, **approval}
+
+    def approve(self, flow_id: str, reviewer: str, comment: str) -> dict[str, Any] | None:
+        return self._review(flow_id, "approved", reviewer, comment)
+
+    def reject(self, flow_id: str, reviewer: str, comment: str) -> dict[str, Any] | None:
+        return self._review(flow_id, "rejected", reviewer, comment)
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            approval = self._approvals.get(flow_id)
+            if approval is None:
+                return None
+            return {"flow_id": flow_id, **approval}
+
+    def clear(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._approvals:
+                return False
+            del self._approvals[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._approvals.clear()
+
+
+flow_approval_store = FlowApprovalStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -20139,6 +20225,93 @@ async def unlock_flow_version(
     removed = flow_version_lock_store.unlock(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="Flow is not version-locked")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-174 Flow Approval Workflow — POST/GET/DELETE /flows/{id}/approval/...
+# ---------------------------------------------------------------------------
+
+
+class FlowApprovalRequestBody(BaseModel):
+    note: str = Field(default="", max_length=500)
+
+
+class FlowApprovalReviewBody(BaseModel):
+    comment: str = Field(default="", max_length=500)
+
+
+@v1.post("/flows/{flow_id}/approval/request", tags=["Flows"])
+async def request_flow_approval(
+    flow_id: str,
+    body: FlowApprovalRequestBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_approval_store.request(flow_id, current_user["email"], body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.post("/flows/{flow_id}/approval/approve", tags=["Flows"])
+async def approve_flow(
+    flow_id: str,
+    body: FlowApprovalReviewBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_approval_store.approve(flow_id, current_user["email"], body.comment)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No pending approval for this flow")
+    return record
+
+
+@v1.post("/flows/{flow_id}/approval/reject", tags=["Flows"])
+async def reject_flow(
+    flow_id: str,
+    body: FlowApprovalReviewBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_approval_store.reject(flow_id, current_user["email"], body.comment)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No pending approval for this flow")
+    return record
+
+
+@v1.get("/flows/{flow_id}/approval", tags=["Flows"])
+async def get_flow_approval(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_approval_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No approval record for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/approval", tags=["Flows"])
+async def delete_flow_approval(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_approval_store.clear(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No approval record for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
