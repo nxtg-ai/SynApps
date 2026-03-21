@@ -10774,6 +10774,112 @@ flow_schedule_store = FlowScheduleStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowWebhookStore — N-160 Flow Outbound Webhooks
+# ---------------------------------------------------------------------------
+
+_WEBHOOK_EVENTS: frozenset[str] = frozenset(
+    ["run.started", "run.completed", "run.failed", "flow.updated", "flow.deleted"]
+)
+_URL_PATTERN = re.compile(r"^https?://\S+$")
+
+
+class FlowWebhookStore:
+    """Stores outbound webhook subscriptions per flow.
+
+    Each webhook has a URL, a set of events to listen for, and an optional
+    secret (for HMAC signing).  Multiple webhooks per flow are allowed (max 20).
+    """
+
+    MAX_WEBHOOKS = 20
+
+    def __init__(self) -> None:
+        self._store: dict[str, list[dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def _validate(self, url: str, events: list[str]) -> None:
+        if not _URL_PATTERN.match(url):
+            raise ValueError(f"Invalid URL: {url!r}")
+        unknown = set(events) - _WEBHOOK_EVENTS
+        if unknown:
+            raise ValueError(f"Unknown events: {sorted(unknown)}")
+        if not events:
+            raise ValueError("At least one event is required")
+
+    def add(
+        self,
+        flow_id: str,
+        url: str,
+        events: list[str],
+        secret: str = "",
+        label: str = "",
+    ) -> dict[str, Any]:
+        self._validate(url, events)
+        with self._lock:
+            hooks = self._store.setdefault(flow_id, [])
+            if len(hooks) >= self.MAX_WEBHOOKS:
+                raise ValueError(f"Maximum of {self.MAX_WEBHOOKS} webhooks per flow exceeded")
+            hook: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "flow_id": flow_id,
+                "url": url,
+                "events": sorted(set(events)),
+                "secret": secret,
+                "label": label,
+                "enabled": True,
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            hooks.append(hook)
+            return hook.copy()
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [h.copy() for h in self._store.get(flow_id, [])]
+
+    def get(self, flow_id: str, hook_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            for h in self._store.get(flow_id, []):
+                if h["id"] == hook_id:
+                    return h.copy()
+            return None
+
+    def patch(self, flow_id: str, hook_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+        with self._lock:
+            for h in self._store.get(flow_id, []):
+                if h["id"] == hook_id:
+                    if "url" in updates:
+                        if not _URL_PATTERN.match(updates["url"]):
+                            raise ValueError(f"Invalid URL: {updates['url']!r}")
+                        h["url"] = updates["url"]
+                    if "events" in updates:
+                        unknown = set(updates["events"]) - _WEBHOOK_EVENTS
+                        if unknown:
+                            raise ValueError(f"Unknown events: {sorted(unknown)}")
+                        h["events"] = sorted(set(updates["events"]))
+                    if "enabled" in updates:
+                        h["enabled"] = bool(updates["enabled"])
+                    if "label" in updates:
+                        h["label"] = updates["label"]
+                    if "secret" in updates:
+                        h["secret"] = updates["secret"]
+                    return h.copy()
+            return None
+
+    def delete(self, flow_id: str, hook_id: str) -> bool:
+        with self._lock:
+            hooks = self._store.get(flow_id, [])
+            before = len(hooks)
+            self._store[flow_id] = [h for h in hooks if h["id"] != hook_id]
+            return len(self._store[flow_id]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+flow_webhook_store = FlowWebhookStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -18254,6 +18360,115 @@ async def delete_flow_schedule(
     if not removed:
         raise HTTPException(status_code=404, detail="No schedule set for this flow")
     return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# N-160 Flow Outbound Webhooks — POST/GET /flows/{id}/webhooks
+#                                GET/PATCH/DELETE /flows/{id}/webhooks/{hook_id}
+# ---------------------------------------------------------------------------
+
+
+class FlowWebhookCreateRequest(BaseModel):
+    url: str = Field(..., min_length=1, max_length=500)
+    events: list[str] = Field(..., min_length=1)
+    secret: str = Field(default="", max_length=200)
+    label: str = Field(default="", max_length=200)
+
+
+class FlowWebhookPatchRequest(BaseModel):
+    url: str | None = Field(default=None, max_length=500)
+    events: list[str] | None = Field(default=None)
+    enabled: bool | None = Field(default=None)
+    label: str | None = Field(default=None, max_length=200)
+    secret: str | None = Field(default=None, max_length=200)
+
+
+@v1.post("/flows/{flow_id}/webhooks", status_code=201, tags=["Flows"])
+async def create_flow_webhook(
+    flow_id: str,
+    body: FlowWebhookCreateRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Register an outbound webhook for flow events."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        hook = flow_webhook_store.add(flow_id, body.url, body.events, body.secret, body.label)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return hook
+
+
+@v1.get("/flows/{flow_id}/webhooks", tags=["Flows"])
+async def list_flow_webhooks(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all outbound webhooks registered for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    items = flow_webhook_store.list(flow_id)
+    return {
+        "flow_id": flow_id,
+        "total": len(items),
+        "items": items,
+        "allowed_events": sorted(_WEBHOOK_EVENTS),
+    }
+
+
+@v1.get("/flows/{flow_id}/webhooks/{hook_id}", tags=["Flows"])
+async def get_flow_webhook(
+    flow_id: str,
+    hook_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Retrieve a single webhook by ID."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    hook = flow_webhook_store.get(flow_id, hook_id)
+    if hook is None:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return hook
+
+
+@v1.patch("/flows/{flow_id}/webhooks/{hook_id}", tags=["Flows"])
+async def patch_flow_webhook(
+    flow_id: str,
+    hook_id: str,
+    body: FlowWebhookPatchRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Partially update a webhook (url, events, enabled, label, secret)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        updated = flow_webhook_store.patch(flow_id, hook_id, updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return updated
+
+
+@v1.delete("/flows/{flow_id}/webhooks/{hook_id}", tags=["Flows"])
+async def delete_flow_webhook(
+    flow_id: str,
+    hook_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete an outbound webhook."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_webhook_store.delete(flow_id, hook_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return {"deleted": True, "webhook_id": hook_id}
 
 
 # ---------------------------------------------------------------------------
