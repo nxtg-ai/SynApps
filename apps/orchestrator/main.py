@@ -11243,6 +11243,75 @@ flow_timeout_store = FlowTimeoutStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowRetryPolicyStore — N-166 Flow Retry Policy
+# ---------------------------------------------------------------------------
+
+_RETRY_MAX_RETRIES_MAX = 10
+_RETRY_DELAY_MAX = 300  # seconds
+_RETRY_BACKOFF_MAX = 10.0
+
+
+class FlowRetryPolicyStore:
+    """Stores per-flow default retry policy for node execution failures.
+
+    Fields:
+      max_retries       — 0 (no retry) to 10
+      retry_delay_s     — initial delay between retries, 0–300 seconds
+      backoff_multiplier — exponential backoff factor, 1.0–10.0 (1.0 = constant delay)
+
+    This policy applies as a default when individual nodes do not have
+    their own retry config. Enforcement is downstream of this API.
+    """
+
+    def __init__(self) -> None:
+        self._policies: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        max_retries: int,
+        retry_delay_s: int,
+        backoff_multiplier: float,
+    ) -> dict[str, Any]:
+        if not (0 <= max_retries <= _RETRY_MAX_RETRIES_MAX):
+            raise ValueError(f"max_retries must be 0–{_RETRY_MAX_RETRIES_MAX}")
+        if not (0 <= retry_delay_s <= _RETRY_DELAY_MAX):
+            raise ValueError(f"retry_delay_s must be 0–{_RETRY_DELAY_MAX}")
+        if not (1.0 <= backoff_multiplier <= _RETRY_BACKOFF_MAX):
+            raise ValueError(f"backoff_multiplier must be 1.0–{_RETRY_BACKOFF_MAX}")
+        with self._lock:
+            self._policies[flow_id] = {
+                "max_retries": max_retries,
+                "retry_delay_s": retry_delay_s,
+                "backoff_multiplier": backoff_multiplier,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._policies[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            policy = self._policies.get(flow_id)
+            if policy is None:
+                return None
+            return {"flow_id": flow_id, **policy}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._policies:
+                return False
+            del self._policies[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._policies.clear()
+
+
+flow_retry_policy_store = FlowRetryPolicyStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19228,6 +19297,63 @@ async def delete_flow_timeout(
     removed = flow_timeout_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No timeout configured")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-166 Flow Retry Policy — PUT/GET/DELETE /flows/{id}/retry-policy
+# ---------------------------------------------------------------------------
+
+
+class FlowRetryPolicyRequest(BaseModel):
+    max_retries: int = Field(..., ge=0, le=_RETRY_MAX_RETRIES_MAX)
+    retry_delay_s: int = Field(default=0, ge=0, le=_RETRY_DELAY_MAX)
+    backoff_multiplier: float = Field(default=1.0, ge=1.0, le=_RETRY_BACKOFF_MAX)
+
+
+@v1.put("/flows/{flow_id}/retry-policy", tags=["Flows"])
+async def set_flow_retry_policy(
+    flow_id: str,
+    body: FlowRetryPolicyRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_retry_policy_store.set(
+            flow_id, body.max_retries, body.retry_delay_s, body.backoff_multiplier
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/retry-policy", tags=["Flows"])
+async def get_flow_retry_policy(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    policy = flow_retry_policy_store.get(flow_id)
+    if policy is None:
+        raise HTTPException(status_code=404, detail="No retry policy configured")
+    return policy
+
+
+@v1.delete("/flows/{flow_id}/retry-policy", tags=["Flows"])
+async def delete_flow_retry_policy(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_retry_policy_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No retry policy configured")
     return {"deleted": True, "flow_id": flow_id}
 
 
