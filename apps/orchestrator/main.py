@@ -11657,6 +11657,63 @@ flow_visibility_store = FlowVisibilityStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowVersionLockStore — N-173 Flow Version Lock
+# ---------------------------------------------------------------------------
+
+
+class FlowVersionLockStore:
+    """Pins a flow to a specific version string, preventing auto-updates.
+
+    Fields:
+      locked_version — semver or arbitrary version string (max 50 chars)
+      reason         — freeform annotation (max 500 chars)
+      locked_by      — user who set the lock
+      locked_at      — ISO timestamp
+    """
+
+    def __init__(self) -> None:
+        self._locks: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def lock(
+        self, flow_id: str, locked_version: str, reason: str, locked_by: str
+    ) -> dict[str, Any]:
+        if not locked_version or len(locked_version) > 50:
+            raise ValueError("locked_version must be 1–50 characters")
+        if len(reason) > 500:
+            raise ValueError("reason exceeds 500 characters")
+        with self._lock:
+            self._locks[flow_id] = {
+                "locked_version": locked_version,
+                "reason": reason,
+                "locked_by": locked_by,
+                "locked_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._locks[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            entry = self._locks.get(flow_id)
+            if entry is None:
+                return None
+            return {"flow_id": flow_id, **entry}
+
+    def unlock(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._locks:
+                return False
+            del self._locks[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._locks.clear()
+
+
+flow_version_lock_store = FlowVersionLockStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -20026,6 +20083,62 @@ async def delete_flow_visibility(
     removed = flow_visibility_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No visibility set")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-173 Flow Version Lock — POST/GET/DELETE /flows/{id}/version-lock
+# ---------------------------------------------------------------------------
+
+
+class FlowVersionLockRequest(BaseModel):
+    locked_version: str = Field(..., min_length=1, max_length=50)
+    reason: str = Field(default="", max_length=500)
+
+
+@v1.post("/flows/{flow_id}/version-lock", tags=["Flows"])
+async def lock_flow_version(
+    flow_id: str,
+    body: FlowVersionLockRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_version_lock_store.lock(
+            flow_id, body.locked_version, body.reason, current_user["email"]
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/version-lock", tags=["Flows"])
+async def get_flow_version_lock(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entry = flow_version_lock_store.get(flow_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Flow is not version-locked")
+    return entry
+
+
+@v1.delete("/flows/{flow_id}/version-lock", tags=["Flows"])
+async def unlock_flow_version(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_version_lock_store.unlock(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Flow is not version-locked")
     return {"deleted": True, "flow_id": flow_id}
 
 
