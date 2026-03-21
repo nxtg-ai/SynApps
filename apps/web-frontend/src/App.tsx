@@ -155,6 +155,9 @@ const OAuthClientsPage = React.lazy(
 const TemplateManagerPage = React.lazy(
   () => import('./pages/TemplateManagerPage/TemplateManagerPage'),
 );
+const FlowVersionsPage = React.lazy(
+  () => import('./pages/FlowVersionsPage/FlowVersionsPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -654,6 +657,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <TemplateManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flow-versions"
+            element={
+              <ProtectedRoute>
+                <FlowVersionsPage />
               </ProtectedRoute>
             }
           />
