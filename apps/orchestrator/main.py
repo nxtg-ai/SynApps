@@ -9690,6 +9690,57 @@ flow_group_store = FlowGroupStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowAccessLogStore — N-142 Flow Access Log
+# ---------------------------------------------------------------------------
+
+
+class FlowAccessLogStore:
+    """Records who accessed (read) each flow and when.
+
+    Capped at MAX_ENTRIES per flow to prevent unbounded memory growth.
+    Entries are stored in chronological order (oldest first).
+    """
+
+    MAX_ENTRIES = 500
+
+    def __init__(self) -> None:
+        self._log: dict[str, list[dict[str, Any]]] = {}  # flow_id → entries
+        self._lock = threading.Lock()
+
+    def record(self, flow_id: str, accessor: str) -> None:
+        entry: dict[str, Any] = {"accessor": accessor, "accessed_at": time.time()}
+        with self._lock:
+            entries = self._log.setdefault(flow_id, [])
+            entries.append(entry)
+            if len(entries) > self.MAX_ENTRIES:
+                del entries[0]  # drop oldest when cap exceeded
+
+    def get(self, flow_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+        with self._lock:
+            entries = self._log.get(flow_id, [])
+            # Return newest-first slice
+            sliced = list(reversed(entries))[offset : offset + limit]
+        return [
+            {
+                "accessor": e["accessor"],
+                "accessed_at": datetime.fromtimestamp(e["accessed_at"], tz=UTC).isoformat(),
+            }
+            for e in sliced
+        ]
+
+    def count(self, flow_id: str) -> int:
+        with self._lock:
+            return len(self._log.get(flow_id, []))
+
+    def reset(self) -> None:
+        with self._lock:
+            self._log.clear()
+
+
+flow_access_log_store = FlowAccessLogStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15000,6 +15051,7 @@ async def get_flow(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
+    flow_access_log_store.record(flow_id, current_user.get("email", "anonymous@local"))
     return flow
 
 
@@ -15708,6 +15760,30 @@ async def save_flow_as_template(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return entry
+
+
+# ---------------------------------------------------------------------------
+# N-142 Flow Access Log — GET /flows/{id}/access-log
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/flows/{flow_id}/access-log", tags=["Flows"])
+async def get_flow_access_log(
+    flow_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the access log (read audit trail) for a flow.
+
+    Entries are returned newest-first. Cap is 500 entries per flow.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entries = flow_access_log_store.get(flow_id, limit=limit, offset=offset)
+    total = flow_access_log_store.count(flow_id)
+    return {"flow_id": flow_id, "entries": entries, "total": total}
 
 
 # ---------------------------------------------------------------------------

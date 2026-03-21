@@ -18,6 +18,7 @@ from apps.orchestrator.main import (
     execution_log_store,
     execution_quota_store,
     featured_store,
+    flow_access_log_store,
     flow_archive_store,
     flow_description_store,
     flow_favorite_store,
@@ -143,7 +144,7 @@ def _reset_all_stores() -> None:
     plugin_registry.reset()
     # Suites
     test_suite_store.reset()
-    # Flow tags / favorites / descriptions / archive / pins / labels / shares / groups
+    # Flow tags / favorites / descriptions / archive / pins / labels / shares / groups / access log
     flow_tag_store.reset()
     flow_favorite_store.reset()
     flow_pin_store.reset()
@@ -152,6 +153,7 @@ def _reset_all_stores() -> None:
     flow_label_store.reset()
     flow_share_store.reset()
     flow_group_store.reset()
+    flow_access_log_store.reset()
 
 
 @pytest.fixture(autouse=True)
