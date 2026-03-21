@@ -9637,6 +9637,59 @@ flow_share_store = FlowShareStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowGroupStore — N-140 Flow Groups
+# ---------------------------------------------------------------------------
+
+
+class FlowGroupStore:
+    """Assigns each flow to at most one named group (folder).
+
+    Groups are implicit — they exist as long as at least one flow is assigned.
+    Group names are lowercased and stripped on write.
+    """
+
+    def __init__(self) -> None:
+        self._flow_to_group: dict[str, str] = {}  # flow_id → group_name
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, group: str) -> None:
+        """Assign (or move) a flow to a group."""
+        with self._lock:
+            self._flow_to_group[flow_id] = group.lower().strip()
+
+    def get(self, flow_id: str) -> str | None:
+        """Return the group for a flow, or None if ungrouped."""
+        with self._lock:
+            return self._flow_to_group.get(flow_id)
+
+    def remove(self, flow_id: str) -> bool:
+        """Remove a flow from its group. Returns True if it was in a group."""
+        with self._lock:
+            return self._flow_to_group.pop(flow_id, None) is not None
+
+    def flows_in_group(self, group: str) -> list[str]:
+        """Return all flow_ids in the given group (normalised)."""
+        norm = group.lower().strip()
+        with self._lock:
+            return [fid for fid, g in self._flow_to_group.items() if g == norm]
+
+    def all_groups(self) -> dict[str, int]:
+        """Return {group_name: flow_count} for all non-empty groups."""
+        with self._lock:
+            counts: dict[str, int] = {}
+            for g in self._flow_to_group.values():
+                counts[g] = counts.get(g, 0) + 1
+            return counts
+
+    def reset(self) -> None:
+        with self._lock:
+            self._flow_to_group.clear()
+
+
+flow_group_store = FlowGroupStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -14821,21 +14874,28 @@ async def list_flows(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     archived: bool = Query(False, description="If true, return only archived flows. Default returns only non-archived flows."),
+    group: str | None = Query(None, description="Filter by group name (case-insensitive). Omit to return all groups."),
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
     """List flows with pagination.
 
     - Default (archived=false): only non-archived flows.
     - archived=true: only archived flows.
+    - group=<name>: only flows in the given group.
     """
     flows = await FlowRepository.get_all()
     migrated_flows: list[dict[str, Any]] = []
+    group_norm = group.lower().strip() if group else None
     for flow in flows:
         migrated_flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
         if isinstance(migrated_flow, dict):
-            is_archived = flow_archive_store.is_archived(migrated_flow["id"])
-            if is_archived == archived:
-                migrated_flows.append(migrated_flow)
+            fid = migrated_flow["id"]
+            is_archived = flow_archive_store.is_archived(fid)
+            if is_archived != archived:
+                continue
+            if group_norm is not None and flow_group_store.get(fid) != group_norm:
+                continue
+            migrated_flows.append(migrated_flow)
     return paginate(migrated_flows, page, page_size)
 
 
@@ -14897,6 +14957,21 @@ async def list_pinned_flows(
         if flow:
             flows.append(flow)
     return {"items": flows, "total": len(flows)}
+
+
+@v1.get("/flows/groups", tags=["Flows"])
+async def list_flow_groups(
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return all group names with their flow counts.
+
+    Registered before /flows/{flow_id} to prevent path shadowing.
+    """
+    groups = flow_group_store.all_groups()
+    return {
+        "groups": [{"name": name, "flow_count": count} for name, count in sorted(groups.items())],
+        "total": len(groups),
+    }
 
 
 @v1.get("/flows/shared/{token}", tags=["Flows"])
@@ -15525,6 +15600,60 @@ async def revoke_share_link(
     if not revoked:
         raise HTTPException(status_code=404, detail="Share token not found")
     return {"token": token, "revoked": True}
+
+
+# ---------------------------------------------------------------------------
+# N-140 Flow Groups — GET/PUT/DELETE /flows/{id}/group
+# ---------------------------------------------------------------------------
+
+
+class FlowGroupRequest(BaseModel):
+    group: str = Field(..., min_length=1, max_length=100)
+
+
+@v1.get("/flows/{flow_id}/group", tags=["Flows"])
+async def get_flow_group(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the group a flow belongs to. Returns null if ungrouped."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"flow_id": flow_id, "group": flow_group_store.get(flow_id)}
+
+
+@v1.put("/flows/{flow_id}/group", tags=["Flows"])
+async def set_flow_group(
+    flow_id: str,
+    body: FlowGroupRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Assign a flow to a group (creates the group if it doesn't exist).
+
+    A flow can belong to at most one group; calling this replaces any
+    existing assignment. Group names are lowercased and stripped.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    flow_group_store.set(flow_id, body.group)
+    return {"flow_id": flow_id, "group": flow_group_store.get(flow_id)}
+
+
+@v1.delete("/flows/{flow_id}/group", tags=["Flows"])
+async def remove_flow_group(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a flow from its group. Returns 404 if the flow is ungrouped."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_group_store.remove(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Flow is not in any group")
+    return {"flow_id": flow_id, "group": None}
 
 
 # ---------------------------------------------------------------------------
