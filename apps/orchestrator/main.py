@@ -9855,6 +9855,70 @@ flow_edit_lock_store = FlowEditLockStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowMetadataStore — N-146 Flow Metadata
+# ---------------------------------------------------------------------------
+
+
+class FlowMetadataStore:
+    """Store arbitrary JSON-serialisable key-value metadata per flow.
+
+    Keys are strings; values can be any JSON-compatible type.
+    Maximum 50 keys per flow. Key names max 100 chars.
+    """
+
+    MAX_KEYS = 50
+    MAX_KEY_LEN = 100
+
+    def __init__(self) -> None:
+        self._data: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, flow_id: str) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._data.get(flow_id, {}))
+
+    def set(self, flow_id: str, metadata: dict[str, Any]) -> dict[str, Any]:
+        """Replace the entire metadata dict for a flow. Returns the saved dict."""
+        if len(metadata) > self.MAX_KEYS:
+            raise ValueError(f"Metadata exceeds {self.MAX_KEYS} key limit")
+        for key in metadata:
+            if len(key) > self.MAX_KEY_LEN:
+                raise ValueError(f"Key '{key[:20]}...' exceeds {self.MAX_KEY_LEN} char limit")
+        with self._lock:
+            self._data[flow_id] = dict(metadata)
+            return dict(self._data[flow_id])
+
+    def patch(self, flow_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        """Merge updates into existing metadata. Returns the merged dict."""
+        with self._lock:
+            current = self._data.get(flow_id, {})
+            merged = {**current, **updates}
+        if len(merged) > self.MAX_KEYS:
+            raise ValueError(f"Metadata would exceed {self.MAX_KEYS} key limit")
+        for key in merged:
+            if len(key) > self.MAX_KEY_LEN:
+                raise ValueError(f"Key '{key[:20]}...' exceeds {self.MAX_KEY_LEN} char limit")
+        with self._lock:
+            self._data[flow_id] = merged
+            return dict(merged)
+
+    def delete_key(self, flow_id: str, key: str) -> bool:
+        """Remove a single key. Returns True if removed, False if not present."""
+        with self._lock:
+            if flow_id not in self._data or key not in self._data[flow_id]:
+                return False
+            del self._data[flow_id][key]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+
+flow_metadata_store = FlowMetadataStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -16064,6 +16128,78 @@ async def unlock_flow(
     if not removed:
         raise HTTPException(status_code=404, detail="Flow is not locked")
     return _lock_response(flow_id, None)
+
+
+# ---------------------------------------------------------------------------
+# N-146 Flow Metadata — GET/PUT/PATCH /flows/{id}/metadata
+#                        DELETE /flows/{id}/metadata/{key}
+# ---------------------------------------------------------------------------
+
+
+class FlowMetadataSetRequest(BaseModel):
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@v1.get("/flows/{flow_id}/metadata", tags=["Flows"])
+async def get_flow_metadata(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the metadata dict for a flow (empty dict if none set)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"flow_id": flow_id, "metadata": flow_metadata_store.get(flow_id)}
+
+
+@v1.put("/flows/{flow_id}/metadata", tags=["Flows"])
+async def set_flow_metadata(
+    flow_id: str,
+    body: FlowMetadataSetRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Replace the entire metadata dict for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        saved = flow_metadata_store.set(flow_id, body.metadata)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"flow_id": flow_id, "metadata": saved}
+
+
+@v1.patch("/flows/{flow_id}/metadata", tags=["Flows"])
+async def patch_flow_metadata(
+    flow_id: str,
+    body: FlowMetadataSetRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Merge new key-value pairs into the existing metadata (partial update)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        merged = flow_metadata_store.patch(flow_id, body.metadata)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"flow_id": flow_id, "metadata": merged}
+
+
+@v1.delete("/flows/{flow_id}/metadata/{key}", tags=["Flows"])
+async def delete_flow_metadata_key(
+    flow_id: str,
+    key: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a single metadata key from a flow. Returns 404 if key not present."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_metadata_store.delete_key(flow_id, key)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Metadata key '{key}' not found")
+    return {"flow_id": flow_id, "deleted_key": key, "metadata": flow_metadata_store.get(flow_id)}
 
 
 # ---------------------------------------------------------------------------
