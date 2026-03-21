@@ -2540,5 +2540,50 @@ Total: **364 frontend + 2,697 backend = 3,061 tests**. Commits: `ab2a82e` (N-64)
 
 ---
 
-> Last updated: 2026-03-20 (Wolf) — cycle 79 (N-64 CI fix, N-65 flaky test fix, reflection)
+## Team Feedback — Cycle 80 (2026-03-20)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Notes |
+|---|---|---|
+| N-66 | SchemaForm wired into NodeConfigModal `default:` case for plugin nodes | 4 new tests |
+| N-67 | 5 remaining flaky tests fixed; poll intervals 50–150ms → 1s; `_poll_run` timeout 5s → 20s; conftest `TokenBucketRegistry(default_burst=100)` | 0 test delta |
+
+Total: **364 frontend + 2,697 backend = 3,061 tests**. Commits: `e0c563d` (N-66), `e814a8a` (N-67).
+
+---
+
+### 2. What surprised me?
+
+**The async DB-polling tests weren't rate-limited — just under-resourced.** `asyncio.sleep(0.15)×40 = 6s max`. Under event loop contention across 2,697 tests, background tasks that normally finish in <100ms were taking 4–8 seconds. The fix was extending time budget, not changing poll mechanisms. The conftest `default_burst=100` is belt-and-suspenders for the HTTP-polling tests.
+
+**All 5 identified flaky tests now pass on back-to-back full-suite runs.** Root cause was consistently "too-tight timing budget" rather than any logic error.
+
+---
+
+### 3. Cross-project signals
+
+**Async task timing budgets degrade predictably under full-suite contention.** Rule of thumb: if your background task takes T seconds in isolation, budget 10×T in a shared test suite. For SynApps: 100ms isolation → 1s full-suite → budget 1s+ polls.
+
+**`TokenBucketRegistry(default_burst=N)` should be a standard conftest fixture in any project with rate limiting + HTTP test polling.** Default burst=10 is production-correct but test-hostile. Parameterizing at fixture instantiation time (not env var) is the cleanest pattern.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **N-68: Merge master → main** — Still awaiting CoS directive. `origin/main` is 70+ commits behind master. This is increasingly risky for external contributors and any CI/CD targeting main.
+2. **N-69: Frontend E2E test expansion** — Playwright tests cover basic flows only. The import wizard, API key manager, and node config UI added in N-61→N-66 have zero E2E coverage.
+3. **N-70: Node Performance Profiler UI** — N-44 shipped the backend profiler API. A React component showing per-node timing heatmap in the canvas would close the loop.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`origin/main` divergence**: 70+ commits on master not reflected in main. If any external dependency (deploy pipeline, external PR) targets main, it's completely stale. Requesting explicit authorization for `git push origin master:main --force` or a merge PR strategy.
+
+**Automated CoS trigger**: 8th invocation with no actual response in NEXUS. Acknowledged. Continuing work per self-authorization protocol.
+
+---
+
+> Last updated: 2026-03-20 (Wolf) — cycle 80 (N-67 async flaky test fixes, reflection)
 
