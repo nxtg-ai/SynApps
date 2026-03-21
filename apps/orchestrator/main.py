@@ -10493,6 +10493,71 @@ flow_dependency_store = FlowDependencyStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowBookmarkStore — N-156 Flow Bookmarks
+# ---------------------------------------------------------------------------
+
+
+class FlowBookmarkStore:
+    """Per-user canvas viewport bookmarks for a flow.
+
+    Each bookmark captures a name, the user who created it, and an optional
+    viewport dict (x, y, zoom) so the UI can restore the exact canvas position.
+    Scoped to (flow_id, user) — a user can have up to 50 bookmarks per flow.
+    """
+
+    MAX_PER_USER_FLOW = 50
+
+    def __init__(self) -> None:
+        # (flow_id, user) → [bookmark_dict, ...]
+        self._store: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def add(
+        self,
+        flow_id: str,
+        user: str,
+        name: str,
+        viewport: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            key = (flow_id, user)
+            bms = self._store.setdefault(key, [])
+            if len(bms) >= self.MAX_PER_USER_FLOW:
+                raise ValueError(
+                    f"Bookmark capacity ({self.MAX_PER_USER_FLOW}) reached for this flow/user"
+                )
+            bm: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "flow_id": flow_id,
+                "user": user,
+                "name": name,
+                "viewport": viewport or {},
+                "created_at": time.time(),
+            }
+            bms.append(bm)
+            return bm.copy()
+
+    def list(self, flow_id: str, user: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [b.copy() for b in self._store.get((flow_id, user), [])]
+
+    def delete(self, flow_id: str, user: str, bm_id: str) -> bool:
+        with self._lock:
+            key = (flow_id, user)
+            bms = self._store.get(key, [])
+            before = len(bms)
+            self._store[key] = [b for b in bms if b["id"] != bm_id]
+            return len(self._store[key]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+flow_bookmark_store = FlowBookmarkStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -17644,6 +17709,79 @@ async def delete_flow_dependency(
     if not removed:
         raise HTTPException(status_code=404, detail="Dependency not found")
     return {"deleted": True, "dep_id": dep_id}
+
+
+# ---------------------------------------------------------------------------
+# N-156 Flow Bookmarks — POST/GET /flows/{id}/bookmarks
+#                        DELETE /flows/{id}/bookmarks/{bm_id}
+# ---------------------------------------------------------------------------
+
+
+class FlowBookmarkRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200, description="Bookmark name.")
+    viewport: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional canvas viewport state (e.g. {x, y, zoom}).",
+    )
+
+
+def _fmt_bm(b: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **b,
+        "created_at": datetime.fromtimestamp(b["created_at"], tz=UTC).isoformat(),
+    }
+
+
+@v1.post("/flows/{flow_id}/bookmarks", status_code=201, tags=["Flows"])
+async def create_bookmark(
+    flow_id: str,
+    body: FlowBookmarkRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Save a named canvas-viewport bookmark for the current user on *flow_id*.
+
+    Returns 422 when the user's bookmark capacity (50) is reached for this flow.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    try:
+        bm = flow_bookmark_store.add(flow_id, user, body.name, body.viewport)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _fmt_bm(bm)
+
+
+@v1.get("/flows/{flow_id}/bookmarks", tags=["Flows"])
+async def list_bookmarks(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List the current user's bookmarks for *flow_id*."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    bms = flow_bookmark_store.list(flow_id, user)
+    return {"flow_id": flow_id, "user": user, "items": [_fmt_bm(b) for b in bms]}
+
+
+@v1.delete("/flows/{flow_id}/bookmarks/{bm_id}", tags=["Flows"])
+async def delete_bookmark(
+    flow_id: str,
+    bm_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete a bookmark.  Returns 404 if not found for this user."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    removed = flow_bookmark_store.delete(flow_id, user, bm_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    return {"deleted": True, "bookmark_id": bm_id}
 
 
 # ---------------------------------------------------------------------------
