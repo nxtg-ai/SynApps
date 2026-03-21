@@ -149,6 +149,7 @@
 | N-138 | Flow Labels — GET/PUT/DELETE /flows/{id}/label (hex color + optional icon, Pydantic-validated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-139 | Flow Sharing Links — POST /flows/{id}/share + GET /flows/shared/{token} + revoke (TTL 1m–7d) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-140 | Flow Groups — GET/PUT/DELETE /flows/{id}/group + GET /flows/groups + GET /flows?group= | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-141 | Flow Save-as-Template — POST /flows/{id}/save-as-template (versioned, semver, tags, metadata) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

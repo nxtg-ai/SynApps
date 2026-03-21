@@ -15657,6 +15657,60 @@ async def remove_flow_group(
 
 
 # ---------------------------------------------------------------------------
+# N-141 Flow Save-as-Template — POST /flows/{id}/save-as-template
+# ---------------------------------------------------------------------------
+
+
+class SaveAsTemplateRequest(BaseModel):
+    name: str = Field("", description="Template name. Defaults to the flow name.")
+    description: str = Field("", max_length=1000)
+    tags: list[str] = Field(default_factory=list)
+    version: str | None = Field(
+        None,
+        description="Explicit semver (e.g. '1.2.0'). Auto-increments patch if omitted.",
+    )
+
+
+@v1.post("/flows/{flow_id}/save-as-template", status_code=201, tags=["Flows"])
+async def save_flow_as_template(
+    flow_id: str,
+    body: SaveAsTemplateRequest = SaveAsTemplateRequest(),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Promote a live flow into the template registry.
+
+    Creates a new versioned template entry. If a template with the same
+    flow_id already exists in the registry, a new version is appended.
+    The returned object is the template entry (id, version, semver, name, …).
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    template_name = body.name.strip() or flow.get("name", "Untitled Template")
+    actor = current_user.get("email", "anonymous@local")
+
+    template_data: dict[str, Any] = {
+        "id": flow_id,
+        "name": template_name,
+        "description": body.description,
+        "tags": [t.lower().strip() for t in body.tags if t.strip()],
+        "nodes": flow.get("nodes", []),
+        "edges": flow.get("edges", []),
+        "metadata": {"created_from_flow": flow_id, "author": actor},
+    }
+    if body.version:
+        template_data["version"] = body.version
+
+    try:
+        entry = template_registry.import_template(template_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return entry
+
+
+# ---------------------------------------------------------------------------
 # N-134 Flow Descriptions — GET/PUT /flows/{id}/description
 # ---------------------------------------------------------------------------
 
