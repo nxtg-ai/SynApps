@@ -178,6 +178,7 @@
 | N-167 | Flow Concurrency Limit — PUT/GET/DELETE /flows/{id}/concurrency (1–100 max concurrent runs) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-168 | Flow Input Schema — PUT/GET/DELETE /flows/{id}/input-schema (JSON Schema validation contract) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-169 | Flow Output Schema — PUT/GET/DELETE /flows/{id}/output-schema (JSON Schema output contract) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-170 | Flow Contact Info — PUT/GET/DELETE /flows/{id}/contact (name, email, slack_handle, team) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

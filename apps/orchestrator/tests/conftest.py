@@ -26,6 +26,7 @@ from apps.orchestrator.main import (
     flow_changelog_store,
     flow_collaborator_store,
     flow_concurrency_store,
+    flow_contact_store,
     flow_custom_field_store,
     flow_dependency_store,
     flow_description_store,
@@ -200,6 +201,7 @@ def _reset_all_stores() -> None:
     flow_notif_pref_store.reset()
     flow_priority_store.reset()
     flow_concurrency_store.reset()
+    flow_contact_store.reset()
     flow_input_schema_store.reset()
     flow_output_schema_store.reset()
     flow_retry_policy_store.reset()

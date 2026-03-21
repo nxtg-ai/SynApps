@@ -11480,6 +11480,62 @@ flow_output_schema_store = FlowOutputSchemaStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowContactStore — N-170 Flow Contact Info
+# ---------------------------------------------------------------------------
+
+
+class FlowContactStore:
+    """Stores per-flow owner/point-of-contact information.
+
+    Fields are all optional strings — name, email, slack_handle, team.
+    Intended for discoverability and incident response escalation.
+    """
+
+    def __init__(self) -> None:
+        self._contacts: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        name: str,
+        email: str,
+        slack_handle: str,
+        team: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._contacts[flow_id] = {
+                "name": name,
+                "email": email,
+                "slack_handle": slack_handle,
+                "team": team,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._contacts[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            contact = self._contacts.get(flow_id)
+            if contact is None:
+                return None
+            return {"flow_id": flow_id, **contact}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._contacts:
+                return False
+            del self._contacts[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._contacts.clear()
+
+
+flow_contact_store = FlowContactStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19685,6 +19741,60 @@ async def delete_flow_output_schema(
     removed = flow_output_schema_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No output schema defined")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-170 Flow Contact Info — PUT/GET/DELETE /flows/{id}/contact
+# ---------------------------------------------------------------------------
+
+
+class FlowContactRequest(BaseModel):
+    name: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=200)
+    slack_handle: str = Field(default="", max_length=100)
+    team: str = Field(default="", max_length=200)
+
+
+@v1.put("/flows/{flow_id}/contact", tags=["Flows"])
+async def set_flow_contact(
+    flow_id: str,
+    body: FlowContactRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow_contact_store.set(
+        flow_id, body.name, body.email, body.slack_handle, body.team
+    )
+
+
+@v1.get("/flows/{flow_id}/contact", tags=["Flows"])
+async def get_flow_contact(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    contact = flow_contact_store.get(flow_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="No contact info set")
+    return contact
+
+
+@v1.delete("/flows/{flow_id}/contact", tags=["Flows"])
+async def delete_flow_contact(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_contact_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No contact info set")
     return {"deleted": True, "flow_id": flow_id}
 
 
