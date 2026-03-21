@@ -90,6 +90,10 @@
 | N-79 | Execution Log Viewer — Per-Node Event Browser | EXECUTION | SHIPPED | P1 | 2026-03-20 |
 | N-80 | Usage & Quota Dashboard — Execution Limits + API Key Stats | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-81 | Cost Tracker — Execution & Workflow Spend UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-82 | Workflow Permissions Manager — Share/Revoke Access UI | SECURITY | SHIPPED | P1 | 2026-03-20 |
+| N-83 | Connectors Health Dashboard — Probe & Status UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-84 | Subflows Browser — Cycle Validator UI | EXECUTION | SHIPPED | P1 | 2026-03-20 |
+| N-85 | Workflow Activity — Comments & Feed Viewer | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
