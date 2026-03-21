@@ -15211,6 +15211,123 @@ async def set_flow_description(
 
 
 # ---------------------------------------------------------------------------
+# N-136 Flow Bulk Operations — POST /flows/bulk/{action}
+# ---------------------------------------------------------------------------
+# Registered BEFORE /flows/{flow_id}/archive so static "bulk" literal takes
+# precedence over the dynamic {flow_id} segment.
+# ---------------------------------------------------------------------------
+
+
+class BulkFlowRequest(BaseModel):
+    flow_ids: list[str] = Field(..., min_length=1, max_length=100)
+
+
+class BulkTagRequest(BaseModel):
+    flow_ids: list[str] = Field(..., min_length=1, max_length=100)
+    tag: str = Field(..., min_length=1, max_length=50)
+
+
+def _bulk_result(
+    succeeded: list[str],
+    failed: list[dict[str, str]],
+    action: str,
+) -> dict[str, Any]:
+    return {
+        "action": action,
+        "succeeded": succeeded,
+        "failed": failed,
+        "total": len(succeeded) + len(failed),
+        "success_count": len(succeeded),
+        "failure_count": len(failed),
+    }
+
+
+@v1.post("/flows/bulk/archive", tags=["Flows"])
+async def bulk_archive_flows(
+    body: BulkFlowRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Archive multiple flows in one request.
+
+    Returns per-flow success/failure breakdown. Already-archived flows are
+    reported as failures with reason "already_archived".
+    """
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    for fid in body.flow_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if not flow:
+            failed.append({"flow_id": fid, "reason": "not_found"})
+            continue
+        if flow_archive_store.is_archived(fid):
+            failed.append({"flow_id": fid, "reason": "already_archived"})
+            continue
+        flow_archive_store.archive(fid)
+        succeeded.append(fid)
+    return _bulk_result(succeeded, failed, "archive")
+
+
+@v1.post("/flows/bulk/restore", tags=["Flows"])
+async def bulk_restore_flows(
+    body: BulkFlowRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Restore multiple archived flows in one request.
+
+    Not-archived flows are reported as failures with reason "not_archived".
+    """
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    for fid in body.flow_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if not flow:
+            failed.append({"flow_id": fid, "reason": "not_found"})
+            continue
+        if not flow_archive_store.is_archived(fid):
+            failed.append({"flow_id": fid, "reason": "not_archived"})
+            continue
+        flow_archive_store.restore(fid)
+        succeeded.append(fid)
+    return _bulk_result(succeeded, failed, "restore")
+
+
+@v1.post("/flows/bulk/delete", tags=["Flows"])
+async def bulk_delete_flows(
+    body: BulkFlowRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Permanently delete multiple flows in one request."""
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    for fid in body.flow_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if not flow:
+            failed.append({"flow_id": fid, "reason": "not_found"})
+            continue
+        await FlowRepository.delete(fid)
+        succeeded.append(fid)
+    return _bulk_result(succeeded, failed, "delete")
+
+
+@v1.post("/flows/bulk/tag", tags=["Flows"])
+async def bulk_tag_flows(
+    body: BulkTagRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Add a tag to multiple flows in one request."""
+    succeeded: list[str] = []
+    failed: list[dict[str, str]] = []
+    for fid in body.flow_ids:
+        flow = await FlowRepository.get_by_id(fid)
+        if not flow:
+            failed.append({"flow_id": fid, "reason": "not_found"})
+            continue
+        flow_tag_store.add(fid, body.tag)
+        succeeded.append(fid)
+    return _bulk_result(succeeded, failed, "tag")
+
+
+# ---------------------------------------------------------------------------
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
 
