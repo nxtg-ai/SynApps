@@ -176,6 +176,7 @@
 | N-165 | Flow Timeout Config — PUT/GET/DELETE /flows/{id}/timeout (1–3600 s, advisory enforcement) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-166 | Flow Retry Policy — PUT/GET/DELETE /flows/{id}/retry-policy (max_retries, delay, backoff) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-167 | Flow Concurrency Limit — PUT/GET/DELETE /flows/{id}/concurrency (1–100 max concurrent runs) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-168 | Flow Input Schema — PUT/GET/DELETE /flows/{id}/input-schema (JSON Schema validation contract) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
