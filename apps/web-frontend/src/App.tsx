@@ -113,6 +113,9 @@ const CostTrackerPage = React.lazy(
 const WorkflowPermissionsPage = React.lazy(
   () => import('./pages/WorkflowPermissionsPage/WorkflowPermissionsPage'),
 );
+const ConnectorsPage = React.lazy(
+  () => import('./pages/ConnectorsPage/ConnectorsPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -500,6 +503,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <WorkflowPermissionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/connectors"
+            element={
+              <ProtectedRoute>
+                <ConnectorsPage />
               </ProtectedRoute>
             }
           />
