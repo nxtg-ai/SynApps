@@ -143,6 +143,9 @@ const ProviderStatusPage = React.lazy(
 const TaskMonitorPage = React.lazy(
   () => import('./pages/TaskMonitorPage/TaskMonitorPage'),
 );
+const CostEstimatorPage = React.lazy(
+  () => import('./pages/CostEstimatorPage/CostEstimatorPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -610,6 +613,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <TaskMonitorPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cost-estimator"
+            element={
+              <ProtectedRoute>
+                <CostEstimatorPage />
               </ProtectedRoute>
             }
           />
