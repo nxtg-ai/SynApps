@@ -11312,6 +11312,59 @@ flow_retry_policy_store = FlowRetryPolicyStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowConcurrencyStore — N-167 Flow Concurrency Limit
+# ---------------------------------------------------------------------------
+
+_CONCURRENCY_MIN = 1
+_CONCURRENCY_MAX = 100
+
+
+class FlowConcurrencyStore:
+    """Stores per-flow maximum concurrent execution limit.
+
+    When set, no more than max_concurrent runs of the flow should be
+    active at once. Enforcement is downstream of this API.
+    """
+
+    def __init__(self) -> None:
+        self._limits: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, max_concurrent: int) -> dict[str, Any]:
+        if not (_CONCURRENCY_MIN <= max_concurrent <= _CONCURRENCY_MAX):
+            raise ValueError(
+                f"max_concurrent must be between {_CONCURRENCY_MIN} and {_CONCURRENCY_MAX}"
+            )
+        with self._lock:
+            self._limits[flow_id] = {
+                "max_concurrent": max_concurrent,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._limits[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            cfg = self._limits.get(flow_id)
+            if cfg is None:
+                return None
+            return {"flow_id": flow_id, **cfg}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._limits:
+                return False
+            del self._limits[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._limits.clear()
+
+
+flow_concurrency_store = FlowConcurrencyStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19354,6 +19407,59 @@ async def delete_flow_retry_policy(
     removed = flow_retry_policy_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No retry policy configured")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-167 Flow Concurrency Limit — PUT/GET/DELETE /flows/{id}/concurrency
+# ---------------------------------------------------------------------------
+
+
+class FlowConcurrencyRequest(BaseModel):
+    max_concurrent: int = Field(..., ge=_CONCURRENCY_MIN, le=_CONCURRENCY_MAX)
+
+
+@v1.put("/flows/{flow_id}/concurrency", tags=["Flows"])
+async def set_flow_concurrency(
+    flow_id: str,
+    body: FlowConcurrencyRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_concurrency_store.set(flow_id, body.max_concurrent)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/concurrency", tags=["Flows"])
+async def get_flow_concurrency(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    cfg = flow_concurrency_store.get(flow_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail="No concurrency limit configured")
+    return cfg
+
+
+@v1.delete("/flows/{flow_id}/concurrency", tags=["Flows"])
+async def delete_flow_concurrency(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_concurrency_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No concurrency limit configured")
     return {"deleted": True, "flow_id": flow_id}
 
 
