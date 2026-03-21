@@ -149,6 +149,9 @@ const CostEstimatorPage = React.lazy(
 const AppletsRegistryPage = React.lazy(
   () => import('./pages/AppletsRegistryPage/AppletsRegistryPage'),
 );
+const OAuthClientsPage = React.lazy(
+  () => import('./pages/OAuthClientsPage/OAuthClientsPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -632,6 +635,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <AppletsRegistryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/oauth-clients"
+            element={
+              <ProtectedRoute>
+                <OAuthClientsPage />
               </ProtectedRoute>
             }
           />

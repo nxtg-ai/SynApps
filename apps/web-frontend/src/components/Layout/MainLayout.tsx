@@ -112,6 +112,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/task-monitor', icon: '📋', label: 'Task Monitor' },
     { path: '/cost-estimator', icon: '💲', label: 'Cost Estimator' },
     { path: '/applets-registry', icon: '🧱', label: 'Applets' },
+    { path: '/oauth-clients', icon: '🔐', label: 'OAuth2 Clients' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
