@@ -5,7 +5,7 @@ execution, and permission changes.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -101,7 +101,7 @@ class TestAuditLogStoreUnit:
 
     def test_purge_old_removes_stale_entries(self):
         # Manually inject a stale entry
-        stale_ts = (datetime.utcnow() - timedelta(days=100)).isoformat()
+        stale_ts = (datetime.now(UTC) - timedelta(days=100)).isoformat()
         with audit_log_store._lock:
             audit_log_store._entries.append(
                 {
@@ -303,7 +303,7 @@ class TestAuditEndpoint:
 
     def test_audit_since_filter(self):
         # Inject a clearly old entry
-        old_ts = (datetime.utcnow() - timedelta(hours=2)).isoformat()
+        old_ts = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
         with audit_log_store._lock:
             audit_log_store._entries.append(
                 {
@@ -317,7 +317,7 @@ class TestAuditEndpoint:
                 }
             )
         audit_log_store.record("a@x.com", "workflow_created", "flow", "new-flow")
-        since = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        since = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         with TestClient(app) as client:
             token, _ = _register(client)
             resp = client.get(
