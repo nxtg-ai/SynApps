@@ -11536,6 +11536,72 @@ flow_contact_store = FlowContactStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowCostConfigStore — N-171 Flow Cost Estimate Config
+# ---------------------------------------------------------------------------
+
+_COST_CURRENCIES: frozenset[str] = frozenset(["USD", "EUR", "GBP", "JPY", "AUD", "CAD"])
+
+
+class FlowCostConfigStore:
+    """Stores per-flow cost estimation configuration.
+
+    Fields:
+      cost_per_run   — estimated monetary cost per execution (non-negative float)
+      currency       — ISO 4217 currency code (USD, EUR, GBP, JPY, AUD, CAD)
+      billing_note   — freeform annotation (max 500 chars)
+
+    Intended for cost dashboards and pre-run cost estimation UI.
+    """
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        cost_per_run: float,
+        currency: str,
+        billing_note: str,
+    ) -> dict[str, Any]:
+        if cost_per_run < 0:
+            raise ValueError("cost_per_run must be non-negative")
+        if currency not in _COST_CURRENCIES:
+            raise ValueError(f"Unsupported currency: {currency!r}")
+        if len(billing_note) > 500:
+            raise ValueError("billing_note exceeds 500 characters")
+        with self._lock:
+            self._configs[flow_id] = {
+                "cost_per_run": cost_per_run,
+                "currency": currency,
+                "billing_note": billing_note,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._configs[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            cfg = self._configs.get(flow_id)
+            if cfg is None:
+                return None
+            return {"flow_id": flow_id, **cfg}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._configs:
+                return False
+            del self._configs[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_cost_config_store = FlowCostConfigStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19795,6 +19861,63 @@ async def delete_flow_contact(
     removed = flow_contact_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No contact info set")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-171 Flow Cost Estimate Config — PUT/GET/DELETE /flows/{id}/cost-config
+# ---------------------------------------------------------------------------
+
+
+class FlowCostConfigRequest(BaseModel):
+    cost_per_run: float = Field(..., ge=0)
+    currency: str = Field(default="USD")
+    billing_note: str = Field(default="", max_length=500)
+
+
+@v1.put("/flows/{flow_id}/cost-config", tags=["Flows"])
+async def set_flow_cost_config(
+    flow_id: str,
+    body: FlowCostConfigRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_cost_config_store.set(
+            flow_id, body.cost_per_run, body.currency, body.billing_note
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {**result, "allowed_currencies": sorted(_COST_CURRENCIES)}
+
+
+@v1.get("/flows/{flow_id}/cost-config", tags=["Flows"])
+async def get_flow_cost_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    cfg = flow_cost_config_store.get(flow_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail="No cost config set")
+    return {**cfg, "allowed_currencies": sorted(_COST_CURRENCIES)}
+
+
+@v1.delete("/flows/{flow_id}/cost-config", tags=["Flows"])
+async def delete_flow_cost_config(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_cost_config_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No cost config set")
     return {"deleted": True, "flow_id": flow_id}
 
 
