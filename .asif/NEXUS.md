@@ -120,6 +120,9 @@
 | N-109 | Monitoring Alerts — Alert rule CRUD + workflow health summaries | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-110 | Workflow Secrets — Encrypted secrets GET/PUT + diff + version snapshots | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-111 | Connector Probe — All-connectors health + single connector probe | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-112 | Workflow Test Runner — Run test assertions + test history + test suite CRUD | EXECUTION | SHIPPED | P1 | 2026-03-21 |
+| N-113 | OAuth Inspector — Introspect + Authorize + Token + per-workflow monitoring detail | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-114 | Collab Locks & Bulk Cost — Lock/unlock nodes + bulk arbitrary-node cost estimate | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -2667,6 +2670,53 @@ Still uncovered (candidates for N-82+):
 
 ---
 
+## Team Feedback — Cycle 83 (2026-03-21)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Tests Added |
+|---|---|---|
+| N-112 | `WorkflowTestRunnerPage` at `/workflow-test-runner`: `POST /workflows/{flow_id}/test`, `GET /workflows/{flow_id}/test-history`, `POST/GET /workflows/{flow_id}/test-suites` | 13 frontend |
+| N-113 | `OAuthInspectorPage` at `/oauth-inspector`: `POST /oauth/introspect`, `GET /oauth/authorize`, `POST /oauth/token`, `GET /monitoring/workflows/{flow_id}` | 12 frontend |
+| N-114 | `CollabLocksPage` at `/collab-locks`: `POST/DELETE /flows/{flow_id}/collaboration/lock/{node_id}`, `GET .../locks`, `POST /flows/estimate-cost` | 13 frontend |
+
+**Frontend total: 936 passed** (83 test files, +38 vs last cycle). Backend: **2,696 passed** (1 known flaky `test_receive_with_hmac_secret_in_pipeline` — passes in isolation). Commit: `fa79160`.
+
+---
+
+### 2. What surprised me?
+
+**Near-complete endpoint coverage achieved.** After surveying all 212 `@v1.` routes against 83 frontend pages, coverage is now ~98%. Only a handful of internal-flow endpoints remain (OAuth consent redirect handling, auth refresh — these are framework-level flows not suitable for standalone UI pages).
+
+**Parallel agent builds maintain quality.** All three pages built simultaneously by separate agents: 38/38 tests passed, zero TypeScript errors, all data-testid attributes matched between pages and test files. No post-build fixes required.
+
+---
+
+### 3. Cross-project signals
+
+**OAuth2 introspect pattern**: `POST /oauth/introspect` accepts `application/x-www-form-urlencoded` (RFC 7662), not JSON. Pages that call OAuth endpoints must use `URLSearchParams` + `Content-Type: application/x-www-form-urlencoded`, not `JSON.stringify` + `application/json`. This is a footgun for teams used to REST-only APIs.
+
+**Lock acquire/release pattern**: `POST` to acquire, `DELETE` to release. Both return `{locked: true}` / `{released: true}` — not 204, so the response body must be consumed. CollaborationPage had the GET locks covered but not POST/DELETE; gap closed here.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **Endpoint coverage complete** — at ~98% coverage, the remaining 2% are auth-internal flows unsuitable for UI pages. Frontend page expansion is effectively complete.
+2. **N-68: Merge master → main** — still 115+ commits behind. Need explicit CoS authorization.
+3. **CRUCIBLE audit** — 936 frontend + 2,696 backend. Gate 2-7 quality pass warranted at this scale.
+4. **README/CHANGELOG refresh** — N-112 through N-114 not yet documented.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`origin/main` divergence**: Now 115+ commits. Awaiting directive.
+
+**Automated trigger**: 12th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol. If responses exist, please push to origin/master.
+
+---
+
 ## Team Feedback — Cycle 82 (2026-03-21)
 
 ### 1. What did I ship since last check-in?
@@ -2720,5 +2770,5 @@ The second is subtle: Python asyncio doesn't guarantee that `create_task` won't 
 
 **Automated trigger**: 11th invocation — still no CoS content in NEXUS. Continuing per self-authorization protocol.
 
-> Last updated: 2026-03-21 (cycle 82) — N-105 through N-111 shipped
+> Last updated: 2026-03-21 (cycle 83) — N-112 through N-114 shipped
 
