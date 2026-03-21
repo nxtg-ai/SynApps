@@ -1,1 +1,1 @@
-cd apps/web-frontend && npx tsc --noEmit -p tsconfig.typecheck.json && cd ../.. && cd apps/orchestrator && python -m pytest tests/ --tb=short -q
+cd apps/web-frontend && npx tsc --noEmit -p tsconfig.typecheck.json && cd ../.. && ruff check apps/orchestrator --config apps/orchestrator/pyproject.toml && cd apps/orchestrator && python -m pytest tests/ --tb=short -q
