@@ -11189,6 +11189,60 @@ flow_notif_pref_store = FlowNotifPrefStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowTimeoutStore — N-165 Flow Timeout Config
+# ---------------------------------------------------------------------------
+
+_TIMEOUT_MIN = 1
+_TIMEOUT_MAX = 3600
+
+
+class FlowTimeoutStore:
+    """Stores per-flow execution timeout configuration.
+
+    When set, any run for the flow that exceeds the configured number of
+    seconds should be terminated. The store is advisory — enforcement is
+    downstream of this API.
+    """
+
+    def __init__(self) -> None:
+        self._timeouts: dict[str, dict[str, Any]] = {}  # flow_id → {timeout_seconds, updated_at}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, timeout_seconds: int) -> dict[str, Any]:
+        if not (_TIMEOUT_MIN <= timeout_seconds <= _TIMEOUT_MAX):
+            raise ValueError(
+                f"timeout_seconds must be between {_TIMEOUT_MIN} and {_TIMEOUT_MAX}"
+            )
+        with self._lock:
+            self._timeouts[flow_id] = {
+                "timeout_seconds": timeout_seconds,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._timeouts[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            cfg = self._timeouts.get(flow_id)
+            if cfg is None:
+                return None
+            return {"flow_id": flow_id, **cfg}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._timeouts:
+                return False
+            del self._timeouts[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._timeouts.clear()
+
+
+flow_timeout_store = FlowTimeoutStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19121,6 +19175,59 @@ async def delete_flow_notif_prefs(
     removed = flow_notif_pref_store.delete(flow_id, current_user["email"])
     if not removed:
         raise HTTPException(status_code=404, detail="No notification preferences set")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-165 Flow Timeout Config — PUT/GET/DELETE /flows/{id}/timeout
+# ---------------------------------------------------------------------------
+
+
+class FlowTimeoutRequest(BaseModel):
+    timeout_seconds: int = Field(..., ge=_TIMEOUT_MIN, le=_TIMEOUT_MAX)
+
+
+@v1.put("/flows/{flow_id}/timeout", tags=["Flows"])
+async def set_flow_timeout(
+    flow_id: str,
+    body: FlowTimeoutRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_timeout_store.set(flow_id, body.timeout_seconds)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/timeout", tags=["Flows"])
+async def get_flow_timeout(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    cfg = flow_timeout_store.get(flow_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail="No timeout configured")
+    return cfg
+
+
+@v1.delete("/flows/{flow_id}/timeout", tags=["Flows"])
+async def delete_flow_timeout(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_timeout_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No timeout configured")
     return {"deleted": True, "flow_id": flow_id}
 
 

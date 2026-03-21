@@ -173,6 +173,7 @@
 | N-162 | Flow Collaborators — PUT/GET/DELETE /flows/{id}/collaborators/{user} + GET list (4 roles) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-163 | Flow Environments — PUT/GET/DELETE /flows/{id}/environments/{env} + GET list + POST activate (dev/staging/prod) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-164 | Flow Notification Preferences — PUT/GET/DELETE /flows/{id}/notification-prefs (5 events, 3 channels, per-user) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-165 | Flow Timeout Config — PUT/GET/DELETE /flows/{id}/timeout (1–3600 s, advisory enforcement) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

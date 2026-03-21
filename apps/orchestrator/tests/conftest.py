@@ -45,6 +45,7 @@ from apps.orchestrator.main import (
     flow_share_store,
     flow_snapshot_store,
     flow_tag_store,
+    flow_timeout_store,
     flow_watch_store,
     flow_webhook_store,
     issue_store,
@@ -194,6 +195,7 @@ def _reset_all_stores() -> None:
     flow_metadata_store.reset()
     flow_notif_pref_store.reset()
     flow_priority_store.reset()
+    flow_timeout_store.reset()
 
 
 @pytest.fixture(autouse=True)
