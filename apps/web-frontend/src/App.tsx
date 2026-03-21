@@ -98,6 +98,12 @@ const SchedulesPage = React.lazy(
 const DLQPage = React.lazy(
   () => import('./pages/DLQPage/DLQPage'),
 );
+const WorkflowNotificationsPage = React.lazy(
+  () => import('./pages/WorkflowNotificationsPage/WorkflowNotificationsPage'),
+);
+const ExecutionLogsPage = React.lazy(
+  () => import('./pages/ExecutionLogsPage/ExecutionLogsPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -445,6 +451,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <DLQPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflow-notifications"
+            element={
+              <ProtectedRoute>
+                <WorkflowNotificationsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/execution-logs"
+            element={
+              <ProtectedRoute>
+                <ExecutionLogsPage />
               </ProtectedRoute>
             }
           />
