@@ -158,6 +158,9 @@ const TemplateManagerPage = React.lazy(
 const FlowVersionsPage = React.lazy(
   () => import('./pages/FlowVersionsPage/FlowVersionsPage'),
 );
+const ServerInfoPage = React.lazy(
+  () => import('./pages/ServerInfoPage/ServerInfoPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -665,6 +668,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <FlowVersionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/server-info"
+            element={
+              <ProtectedRoute>
+                <ServerInfoPage />
               </ProtectedRoute>
             }
           />

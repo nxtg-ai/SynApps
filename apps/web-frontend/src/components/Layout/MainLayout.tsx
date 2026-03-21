@@ -115,6 +115,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/oauth-clients', icon: '🔐', label: 'OAuth2 Clients' },
     { path: '/templates-manager', icon: '📦', label: 'Templates' },
     { path: '/flow-versions', icon: '🕰', label: 'Flow Versions' },
+    { path: '/server-info', icon: '🖥', label: 'Server Info' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
