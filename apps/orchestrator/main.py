@@ -11936,6 +11936,50 @@ class FlowErrorAlertStore:
 
 flow_error_alert_store = FlowErrorAlertStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowOutputDestinationStore — N-178 Flow Output Destination
+# ---------------------------------------------------------------------------
+
+_OUTPUT_DEST_TYPES: frozenset[str] = frozenset(["webhook", "s3", "database", "file", "none"])
+
+
+class FlowOutputDestinationStore:
+    """Store output destination configuration for a flow."""
+
+    def __init__(self) -> None:
+        self._destinations: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, dest_type: str, config: dict[str, Any]) -> dict[str, Any]:
+        if dest_type not in _OUTPUT_DEST_TYPES:
+            raise ValueError(f"dest_type must be one of {sorted(_OUTPUT_DEST_TYPES)}")
+        with self._lock:
+            self._destinations[flow_id] = {
+                "dest_type": dest_type,
+                "config": config,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._destinations[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._destinations.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._destinations.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._destinations.clear()
+
+
+flow_output_destination_store = FlowOutputDestinationStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -20611,6 +20655,60 @@ async def delete_flow_error_alerts(
     deleted = flow_error_alert_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No error alert config for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-178 Flow Output Destination — PUT/GET/DELETE /flows/{id}/output-destination
+# ---------------------------------------------------------------------------
+
+
+class FlowOutputDestinationBody(BaseModel):
+    dest_type: str
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+@v1.put("/flows/{flow_id}/output-destination", tags=["Flows"])
+async def set_flow_output_destination(
+    flow_id: str,
+    body: FlowOutputDestinationBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_output_destination_store.set(flow_id, body.dest_type, body.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/output-destination", tags=["Flows"])
+async def get_flow_output_destination(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_output_destination_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No output destination for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/output-destination", tags=["Flows"])
+async def delete_flow_output_destination(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_output_destination_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No output destination for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
