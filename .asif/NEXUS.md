@@ -147,6 +147,7 @@
 | N-136 | Flow Bulk Ops — POST /flows/bulk/{archive,restore,delete,tag} (per-flow success/failure breakdown) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-137 | Flow Pinning — POST/DELETE /flows/{id}/pin + GET /flows/pinned (per-user, insertion-order) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-138 | Flow Labels — GET/PUT/DELETE /flows/{id}/label (hex color + optional icon, Pydantic-validated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-139 | Flow Sharing Links — POST /flows/{id}/share + GET /flows/shared/{token} + revoke (TTL 1m–7d) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

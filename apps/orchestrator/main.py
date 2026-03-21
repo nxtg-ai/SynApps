@@ -9570,6 +9570,73 @@ flow_label_store = FlowLabelStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowShareStore — N-139 Flow Sharing Links
+# ---------------------------------------------------------------------------
+
+
+class FlowShareStore:
+    """Issues and validates short-lived read-only share tokens for flows.
+
+    Tokens are UUID4 hex strings. Expired tokens are not automatically
+    purged — they are rejected on access and can accumulate, but the store
+    is only in-memory so they vanish on restart or reset().
+    """
+
+    DEFAULT_TTL = 86_400  # 24 hours in seconds
+
+    def __init__(self) -> None:
+        self._tokens: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def create(self, flow_id: str, created_by: str, ttl: int = DEFAULT_TTL) -> dict[str, Any]:
+        """Generate a new share token. Returns the token record."""
+        token = uuid.uuid4().hex
+        expires_at = time.time() + ttl
+        record: dict[str, Any] = {
+            "token": token,
+            "flow_id": flow_id,
+            "created_by": created_by,
+            "expires_at": expires_at,
+            "ttl": ttl,
+        }
+        with self._lock:
+            self._tokens[token] = record
+        return record
+
+    def get(self, token: str) -> dict[str, Any] | None:
+        """Return the token record if it exists and has not expired."""
+        with self._lock:
+            record = self._tokens.get(token)
+        if record is None:
+            return None
+        if time.time() > record["expires_at"]:
+            return None  # expired
+        return record
+
+    def revoke(self, token: str) -> bool:
+        """Delete a token regardless of expiry. Returns True if it existed."""
+        with self._lock:
+            return self._tokens.pop(token, None) is not None
+
+    def list_for_flow(self, flow_id: str) -> list[dict[str, Any]]:
+        """Return all active (non-expired) tokens for a given flow."""
+        now = time.time()
+        with self._lock:
+            return [
+                dict(r)
+                for r in self._tokens.values()
+                if r["flow_id"] == flow_id and now <= r["expires_at"]
+            ]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._tokens.clear()
+
+
+flow_share_store = FlowShareStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -14832,6 +14899,22 @@ async def list_pinned_flows(
     return {"items": flows, "total": len(flows)}
 
 
+@v1.get("/flows/shared/{token}", tags=["Flows"])
+async def get_shared_flow_early(token: str):
+    """Fetch a flow via a share token. No authentication required.
+
+    Returns 404 if the token does not exist or has expired.
+    Registered before /flows/{flow_id} to prevent path shadowing.
+    """
+    record = flow_share_store.get(token)
+    if not record:
+        raise HTTPException(status_code=404, detail="Share token not found or expired")
+    flow = await FlowRepository.get_by_id(record["flow_id"])
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"flow": flow, "share": _share_record_response(record)}
+
+
 @v1.get("/flows/{flow_id}", tags=["Flows"])
 async def get_flow(
     flow_id: str,
@@ -15370,6 +15453,78 @@ async def delete_flow_label(
     if not removed:
         raise HTTPException(status_code=404, detail="Flow has no label")
     return {"flow_id": flow_id, "label": None}
+
+
+# ---------------------------------------------------------------------------
+# N-139 Flow Sharing Links — POST /flows/{id}/share + GET/DELETE /shared
+# ---------------------------------------------------------------------------
+
+
+class FlowShareRequest(BaseModel):
+    ttl: int = Field(
+        FlowShareStore.DEFAULT_TTL,
+        ge=60,
+        le=604_800,
+        description="Token lifetime in seconds (60s–7d). Default: 86400 (24h).",
+    )
+
+
+def _share_record_response(record: dict[str, Any]) -> dict[str, Any]:
+    expires_at_iso = datetime.fromtimestamp(record["expires_at"], tz=UTC).isoformat()
+    return {
+        "token": record["token"],
+        "flow_id": record["flow_id"],
+        "expires_at": expires_at_iso,
+        "ttl": record["ttl"],
+    }
+
+
+@v1.post("/flows/{flow_id}/share", status_code=201, tags=["Flows"])
+async def create_share_link(
+    flow_id: str,
+    body: FlowShareRequest = FlowShareRequest(),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Generate a short-lived read-only share token for a flow.
+
+    The returned token can be used with GET /flows/shared/{token} to fetch the
+    flow without authentication. Default TTL is 24 hours (max 7 days).
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    actor = current_user.get("email", "anonymous@local")
+    record = flow_share_store.create(flow_id, created_by=actor, ttl=body.ttl)
+    return _share_record_response(record)
+
+
+@v1.get("/flows/{flow_id}/shares", tags=["Flows"])
+async def list_share_links(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all active (non-expired) share tokens for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    tokens = flow_share_store.list_for_flow(flow_id)
+    return {"flow_id": flow_id, "tokens": [_share_record_response(r) for r in tokens]}
+
+
+@v1.delete("/flows/{flow_id}/share/{token}", tags=["Flows"])
+async def revoke_share_link(
+    flow_id: str,
+    token: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Revoke a specific share token. Returns 404 if the token does not exist."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    revoked = flow_share_store.revoke(token)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Share token not found")
+    return {"token": token, "revoked": True}
 
 
 # ---------------------------------------------------------------------------
