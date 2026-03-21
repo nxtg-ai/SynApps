@@ -10223,6 +10223,76 @@ flow_changelog_store = FlowChangelogStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowRunPresetStore — N-153 Flow Run Presets
+# ---------------------------------------------------------------------------
+
+
+class FlowRunPresetStore:
+    """Named input presets for a flow.
+
+    Each preset stores a name, optional description, and an input payload dict.
+    Presets are scoped to (flow_id) and allow users to save commonly-used inputs
+    for quick reuse when triggering runs.
+    Capacity: 100 presets per flow.
+    """
+
+    MAX_PRESETS = 100
+
+    def __init__(self) -> None:
+        self._store: dict[str, list[dict[str, Any]]] = {}  # flow_id → [preset, ...]
+        self._lock = threading.Lock()
+
+    def add(
+        self,
+        flow_id: str,
+        name: str,
+        input_payload: dict[str, Any],
+        description: str = "",
+    ) -> dict[str, Any]:
+        with self._lock:
+            presets = self._store.setdefault(flow_id, [])
+            if len(presets) >= self.MAX_PRESETS:
+                raise ValueError(
+                    f"Preset capacity ({self.MAX_PRESETS}) reached for this flow"
+                )
+            preset: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "flow_id": flow_id,
+                "name": name,
+                "description": description,
+                "input": input_payload,
+                "created_at": time.time(),
+            }
+            presets.append(preset)
+            return preset.copy()
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [p.copy() for p in self._store.get(flow_id, [])]
+
+    def get(self, flow_id: str, preset_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            for p in self._store.get(flow_id, []):
+                if p["id"] == preset_id:
+                    return p.copy()
+            return None
+
+    def delete(self, flow_id: str, preset_id: str) -> bool:
+        with self._lock:
+            presets = self._store.get(flow_id, [])
+            before = len(presets)
+            self._store[flow_id] = [p for p in presets if p["id"] != preset_id]
+            return len(self._store[flow_id]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+flow_run_preset_store = FlowRunPresetStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -17086,6 +17156,94 @@ async def delete_changelog_entry(
 
 
 # ---------------------------------------------------------------------------
+# N-153 Flow Run Presets — POST/GET /flows/{id}/presets
+#                          GET/DELETE /flows/{id}/presets/{preset_id}
+#                          POST /flows/{id}/runs?preset_id=
+# ---------------------------------------------------------------------------
+
+
+class FlowRunPresetRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200, description="Human-readable preset name.")
+    description: str = Field("", max_length=1000, description="Optional description.")
+    input: dict[str, Any] = Field(default_factory=dict, description="Input payload for the run.")
+
+
+def _fmt_preset(p: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **p,
+        "created_at": datetime.fromtimestamp(p["created_at"], tz=UTC).isoformat(),
+    }
+
+
+@v1.post("/flows/{flow_id}/presets", status_code=201, tags=["Flows"])
+async def create_run_preset(
+    flow_id: str,
+    body: FlowRunPresetRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Save a named input preset for *flow_id*.
+
+    Returns 422 if the flow's preset capacity (100) is reached.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        preset = flow_run_preset_store.add(flow_id, body.name, body.input, body.description)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _fmt_preset(preset)
+
+
+@v1.get("/flows/{flow_id}/presets", tags=["Flows"])
+async def list_run_presets(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all named run presets for *flow_id*."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    presets = flow_run_preset_store.list(flow_id)
+    return {"flow_id": flow_id, "items": [_fmt_preset(p) for p in presets]}
+
+
+@v1.get("/flows/{flow_id}/presets/{preset_id}", tags=["Flows"])
+async def get_run_preset(
+    flow_id: str,
+    preset_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return a single run preset by ID."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    preset = flow_run_preset_store.get(flow_id, preset_id)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return _fmt_preset(preset)
+
+
+@v1.delete("/flows/{flow_id}/presets/{preset_id}", tags=["Flows"])
+async def delete_run_preset(
+    flow_id: str,
+    preset_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete a named run preset.
+
+    Returns 404 if the flow or preset does not exist.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_run_preset_store.delete(flow_id, preset_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"deleted": True, "preset_id": preset_id}
+
+
+# ---------------------------------------------------------------------------
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
 
@@ -17165,13 +17323,20 @@ async def create_flow_run(
     debug: bool = Query(
         False, description="When true, poll until terminal then return execution logs inline"
     ),
+    preset_id: str | None = Query(None, description="Use a saved run preset as the input payload."),
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
     """RESTful run creation endpoint for a flow.
 
     Pass ``?debug=true`` to block until the run reaches a terminal state and
     return the full per-node execution log inline with the response.
+    Pass ``?preset_id=<id>`` to load a saved input preset (overrides body.input).
     """
+    if preset_id is not None:
+        preset = flow_run_preset_store.get(flow_id, preset_id)
+        if preset is None:
+            raise HTTPException(status_code=404, detail="Preset not found")
+        body = RunFlowRequest(input=preset["input"])
     result = await _run_flow_impl(flow_id, body, current_user)
     if not debug:
         return result
