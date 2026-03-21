@@ -73,6 +73,7 @@
 | N-61 | Schema-Driven Node Config UI — SchemaForm Component | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-62 | Workflow Import Wizard — Guided n8n/Zapier Import UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-63 | API Key Management UI — Create/List/Revoke Keys | SECURITY | SHIPPED | P1 | 2026-03-20 |
+| N-64 | CI Coverage Config Fix — Explicit Path + Working Dir | STACK | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
