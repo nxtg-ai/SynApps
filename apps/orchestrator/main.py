@@ -11423,6 +11423,63 @@ flow_input_schema_store = FlowInputSchemaStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowOutputSchemaStore — N-169 Flow Output Schema
+# ---------------------------------------------------------------------------
+
+_OUTPUT_SCHEMA_MAX_BYTES = 16_384
+
+
+class FlowOutputSchemaStore:
+    """Stores a JSON Schema definition describing a flow's output payload.
+
+    Intended for documentation and downstream consumer validation. The schema
+    must be a JSON object. Enforcement is upstream of this API.
+    """
+
+    def __init__(self) -> None:
+        self._schemas: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, schema: dict[str, Any]) -> dict[str, Any]:
+        import json as _json
+
+        if not isinstance(schema, dict):
+            raise ValueError("Schema must be a JSON object")
+        serialized = _json.dumps(schema)
+        if len(serialized) > _OUTPUT_SCHEMA_MAX_BYTES:
+            raise ValueError(
+                f"Schema exceeds maximum size of {_OUTPUT_SCHEMA_MAX_BYTES} bytes"
+            )
+        with self._lock:
+            self._schemas[flow_id] = {
+                "schema": schema,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._schemas[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            entry = self._schemas.get(flow_id)
+            if entry is None:
+                return None
+            return {"flow_id": flow_id, **entry}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._schemas:
+                return False
+            del self._schemas[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._schemas.clear()
+
+
+flow_output_schema_store = FlowOutputSchemaStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19573,6 +19630,61 @@ async def delete_flow_input_schema(
     removed = flow_input_schema_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No input schema defined")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-169 Flow Output Schema — PUT/GET/DELETE /flows/{id}/output-schema
+# ---------------------------------------------------------------------------
+
+
+class FlowOutputSchemaRequest(BaseModel):
+    schema_: dict[str, Any] = Field(..., alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
+@v1.put("/flows/{flow_id}/output-schema", tags=["Flows"])
+async def set_flow_output_schema(
+    flow_id: str,
+    body: FlowOutputSchemaRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_output_schema_store.set(flow_id, body.schema_)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@v1.get("/flows/{flow_id}/output-schema", tags=["Flows"])
+async def get_flow_output_schema(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entry = flow_output_schema_store.get(flow_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No output schema defined")
+    return entry
+
+
+@v1.delete("/flows/{flow_id}/output-schema", tags=["Flows"])
+async def delete_flow_output_schema(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_output_schema_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No output schema defined")
     return {"deleted": True, "flow_id": flow_id}
 
 
