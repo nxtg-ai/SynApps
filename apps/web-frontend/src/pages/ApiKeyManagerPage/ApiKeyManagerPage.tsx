@@ -85,7 +85,7 @@ const ApiKeyManagerPage: React.FC = () => {
 
   const fetchKeys = useCallback(async () => {
     try {
-      const resp = await fetch(`${getBaseUrl()}/api/v1/auth/api-keys`, {
+      const resp = await fetch(`${getBaseUrl()}/auth/api-keys`, {
         headers: authHeaders(),
       });
       if (!resp.ok) {
@@ -117,7 +117,7 @@ const ApiKeyManagerPage: React.FC = () => {
       setCopied(false);
 
       try {
-        const resp = await fetch(`${getBaseUrl()}/api/v1/auth/api-keys`, {
+        const resp = await fetch(`${getBaseUrl()}/auth/api-keys`, {
           method: 'POST',
           headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: trimmed }),
@@ -145,7 +145,7 @@ const ApiKeyManagerPage: React.FC = () => {
     async (keyId: string) => {
       setError(null);
       try {
-        const resp = await fetch(`${getBaseUrl()}/api/v1/auth/api-keys/${keyId}`, {
+        const resp = await fetch(`${getBaseUrl()}/auth/api-keys/${keyId}`, {
           method: 'DELETE',
           headers: authHeaders(),
         });
