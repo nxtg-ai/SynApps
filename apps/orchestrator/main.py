@@ -15787,6 +15787,28 @@ async def get_flow_access_log(
 
 
 # ---------------------------------------------------------------------------
+# N-143 Flow Statistics — GET /flows/{id}/stats
+# ---------------------------------------------------------------------------
+
+
+@v1.get("/flows/{flow_id}/stats", tags=["Flows"])
+async def get_flow_stats(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return per-flow execution aggregate statistics.
+
+    Aggregates all execution dashboard entries for the given flow.
+    Returns total_runs, success_count, failure_count, active_count,
+    avg_duration_ms, and last_run_at.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return execution_dashboard_store.stats_for_flow(flow_id)
+
+
+# ---------------------------------------------------------------------------
 # N-134 Flow Descriptions — GET/PUT /flows/{id}/description
 # ---------------------------------------------------------------------------
 
@@ -22083,6 +22105,44 @@ class ExecutionDashboardStore:
             "total_today": total_today,
             "avg_duration_ms": round(avg_duration_ms, 2),
             "kill_count": kill_count,
+        }
+
+    def stats_for_flow(self, flow_id: str) -> dict[str, Any]:
+        """Return per-flow aggregate statistics.
+
+        Returns total_runs, success_count, failure_count, last_run_at (ISO or None),
+        avg_duration_ms, and active_count (currently running/paused for this flow).
+        """
+        with self._lock:
+            flow_entries = [e for e in self._entries.values() if e.get("flow_id") == flow_id]
+
+        total_runs = len(flow_entries)
+        success_count = sum(1 for e in flow_entries if e.get("status") == "completed")
+        failure_count = sum(1 for e in flow_entries if e.get("status") == "failed")
+        active_count = sum(
+            1 for e in flow_entries if e.get("status") in ("running", "paused")
+        )
+        durations: list[float] = []
+        last_started: float = 0.0
+        for e in flow_entries:
+            started = e.get("started_at", 0.0)
+            updated = e.get("updated_at", started)
+            durations.append((updated - started) * 1000)
+            if started > last_started:
+                last_started = started
+
+        avg_duration_ms = round(sum(durations) / len(durations), 2) if durations else 0.0
+        last_run_at = (
+            datetime.fromtimestamp(last_started, tz=UTC).isoformat() if last_started else None
+        )
+        return {
+            "flow_id": flow_id,
+            "total_runs": total_runs,
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "active_count": active_count,
+            "avg_duration_ms": avg_duration_ms,
+            "last_run_at": last_run_at,
         }
 
     def reset(self) -> None:

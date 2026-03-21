@@ -150,6 +150,8 @@
 | N-139 | Flow Sharing Links — POST /flows/{id}/share + GET /flows/shared/{token} + revoke (TTL 1m–7d) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-140 | Flow Groups — GET/PUT/DELETE /flows/{id}/group + GET /flows/groups + GET /flows?group= | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-141 | Flow Save-as-Template — POST /flows/{id}/save-as-template (versioned, semver, tags, metadata) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-142 | Flow Access Log — GET /flows/{id}/access-log (per-flow read audit trail, newest-first, paginated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-143 | Flow Statistics — GET /flows/{id}/stats (total_runs, success/failure counts, avg_duration_ms, last_run_at) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
