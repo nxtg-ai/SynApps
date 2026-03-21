@@ -273,6 +273,7 @@ class TestHealthDetailedEndpoint:
         data = resp.json()
         providers = data["providers"]
         assert isinstance(providers, list)
+        assert len(providers) >= 1  # Gate 2: system always registers ≥1 LLM provider
         for p in providers:
             assert "name" in p
             assert "connected" in p

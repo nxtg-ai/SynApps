@@ -340,8 +340,9 @@ class TestMarketplacePublishEndpoint:
         assert data["featured"] is False
         assert "id" in data
         assert "published_at" in data
-        # Nodes were cloned from flow
+        # Nodes were cloned from flow (_create_flow makes 3 nodes: start, llm, end)
         assert isinstance(data["nodes"], list)
+        assert len(data["nodes"]) >= 1  # Gate 2: cloned flow has nodes
 
     def test_publish_flow_not_found_404(self, client):
         """POST /marketplace/publish with nonexistent flow_id returns 404."""

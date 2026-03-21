@@ -5981,7 +5981,7 @@ class LLMNodeApplet(BaseApplet):
                     try:
                         messages.append(LLMMessageModel(role=role, content=content))
                     except Exception:
-                        continue
+                        continue  # OMIT JUSTIFIED: skip malformed chat history item; valid messages still processed
 
         if config.system_prompt:
             messages.insert(0, LLMMessageModel(role="system", content=config.system_prompt))
@@ -6811,7 +6811,7 @@ class HTTPRequestNodeApplet(BaseApplet):
             try:
                 return response.json()
             except Exception:
-                pass
+                pass  # OMIT JUSTIFIED: decode fallback — falls through to json.loads(text_body)
 
         text_body = response.text
         if not text_body:
