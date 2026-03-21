@@ -2665,6 +2665,12 @@ class FlowCloneRequest(BaseModel):
     name: str | None = Field(None, max_length=200, description="Name for the cloned flow. Defaults to 'Copy of {original_name}'.")
 
 
+class FlowTagRequest(BaseModel):
+    """Body for adding a tag to a flow."""
+
+    tag: str = Field(..., min_length=1, max_length=64, description="Tag to add (alphanumeric, hyphens, underscores).")
+
+
 class RerunFlowRequest(StrictRequestModel):
     """Request body for re-running a previous flow execution with input overrides."""
 
@@ -9307,6 +9313,47 @@ audit_log_store = AuditLogStore(retention_days=int(os.getenv("AUDIT_LOG_RETENTIO
 
 
 # ---------------------------------------------------------------------------
+# FlowTagStore — N-131 Flow Tags / Labels
+# ---------------------------------------------------------------------------
+
+
+class FlowTagStore:
+    """In-memory store for flow tags. Each flow has a set of string tags."""
+
+    def __init__(self) -> None:
+        self._tags: dict[str, set[str]] = {}
+        self._lock = threading.Lock()
+
+    def add(self, flow_id: str, tag: str) -> None:
+        with self._lock:
+            self._tags.setdefault(flow_id, set()).add(tag.lower().strip())
+
+    def remove(self, flow_id: str, tag: str) -> bool:
+        """Returns True if the tag existed and was removed."""
+        with self._lock:
+            tags = self._tags.get(flow_id, set())
+            if tag.lower().strip() in tags:
+                tags.discard(tag.lower().strip())
+                return True
+            return False
+
+    def get(self, flow_id: str) -> list[str]:
+        with self._lock:
+            return sorted(self._tags.get(flow_id, set()))
+
+    def delete_flow(self, flow_id: str) -> None:
+        with self._lock:
+            self._tags.pop(flow_id, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._tags.clear()
+
+
+flow_tag_store = FlowTagStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -14863,6 +14910,53 @@ async def clone_flow(
         "edge_count": len(new_edges),
         "cloned_from": flow_id,
     }
+
+
+# ---------------------------------------------------------------------------
+# N-131 Flow Tags — POST/GET/DELETE /flows/{flow_id}/tags
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/tags", status_code=201, tags=["Flows"])
+async def add_flow_tag(
+    flow_id: str,
+    body: FlowTagRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Add a tag to a flow. Idempotent — adding an existing tag is a no-op."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    flow_tag_store.add(flow_id, body.tag)
+    return {"flow_id": flow_id, "tags": flow_tag_store.get(flow_id)}
+
+
+@v1.get("/flows/{flow_id}/tags", tags=["Flows"])
+async def get_flow_tags(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return all tags for a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"flow_id": flow_id, "tags": flow_tag_store.get(flow_id)}
+
+
+@v1.delete("/flows/{flow_id}/tags/{tag}", tags=["Flows"])
+async def remove_flow_tag(
+    flow_id: str,
+    tag: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Remove a tag from a flow. Returns 404 if the flow or tag doesn't exist."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_tag_store.remove(flow_id, tag)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return {"flow_id": flow_id, "tags": flow_tag_store.get(flow_id)}
 
 
 async def _run_flow_impl(

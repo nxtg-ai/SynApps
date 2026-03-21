@@ -5841,6 +5841,245 @@
         }
       }
     },
+    "/api/v1/flows/{flow_id}/tags": {
+      "post": {
+        "tags": [
+          "v1",
+          "Flows"
+        ],
+        "summary": "Add Flow Tag",
+        "description": "Add a tag to a flow. Idempotent \u2014 adding an existing tag is a no-op.",
+        "operationId": "add_flow_tag_api_v1_flows__flow_id__tags_post",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlowTagRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "v1",
+          "Flows"
+        ],
+        "summary": "Get Flow Tags",
+        "description": "Return all tags for a flow.",
+        "operationId": "get_flow_tags_api_v1_flows__flow_id__tags_get",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/flows/{flow_id}/tags/{tag}": {
+      "delete": {
+        "tags": [
+          "v1",
+          "Flows"
+        ],
+        "summary": "Remove Flow Tag",
+        "description": "Remove a tag from a flow. Returns 404 if the flow or tag doesn't exist.",
+        "operationId": "remove_flow_tag_api_v1_flows__flow_id__tags__tag__delete",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/flows/{flow_id}/runs": {
       "post": {
         "tags": [
@@ -16963,6 +17202,23 @@
         ],
         "title": "FlowNodeRequest",
         "description": "Strictly validated flow node for API requests."
+      },
+      "FlowTagRequest": {
+        "properties": {
+          "tag": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tag",
+            "description": "Tag to add (alphanumeric, hyphens, underscores)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag"
+        ],
+        "title": "FlowTagRequest",
+        "description": "Body for adding a tag to a flow."
       },
       "FlowUpdateRequest": {
         "properties": {
