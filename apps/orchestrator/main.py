@@ -11843,6 +11843,53 @@ class FlowTriggerConfigStore:
 
 flow_trigger_config_store = FlowTriggerConfigStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowRunRetentionStore — N-176 Flow Run History Retention
+# ---------------------------------------------------------------------------
+
+
+class FlowRunRetentionStore:
+    """Store per-flow retention policy for run history records."""
+
+    _MIN_DAYS: int = 1
+    _MAX_DAYS: int = 365
+
+    def __init__(self) -> None:
+        self._policies: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, retain_days: int, max_runs: int | None) -> dict[str, Any]:
+        if not (self._MIN_DAYS <= retain_days <= self._MAX_DAYS):
+            raise ValueError(f"retain_days must be between {self._MIN_DAYS} and {self._MAX_DAYS}")
+        if max_runs is not None and max_runs < 1:
+            raise ValueError("max_runs must be at least 1 if provided")
+        with self._lock:
+            self._policies[flow_id] = {
+                "retain_days": retain_days,
+                "max_runs": max_runs,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._policies[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._policies.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._policies.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._policies.clear()
+
+
+flow_run_retention_store = FlowRunRetentionStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -20410,6 +20457,60 @@ async def delete_flow_trigger_config(
     deleted = flow_trigger_config_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No trigger config for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-176 Flow Run History Retention — PUT/GET/DELETE /flows/{id}/run-retention
+# ---------------------------------------------------------------------------
+
+
+class FlowRunRetentionBody(BaseModel):
+    retain_days: int = Field(default=30, ge=1, le=365)
+    max_runs: int | None = Field(default=None)
+
+
+@v1.put("/flows/{flow_id}/run-retention", tags=["Flows"])
+async def set_flow_run_retention(
+    flow_id: str,
+    body: FlowRunRetentionBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_run_retention_store.set(flow_id, body.retain_days, body.max_runs)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/run-retention", tags=["Flows"])
+async def get_flow_run_retention(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_run_retention_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No retention policy for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/run-retention", tags=["Flows"])
+async def delete_flow_run_retention(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_run_retention_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No retention policy for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
