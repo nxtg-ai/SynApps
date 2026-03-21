@@ -152,6 +152,9 @@ const AppletsRegistryPage = React.lazy(
 const OAuthClientsPage = React.lazy(
   () => import('./pages/OAuthClientsPage/OAuthClientsPage'),
 );
+const TemplateManagerPage = React.lazy(
+  () => import('./pages/TemplateManagerPage/TemplateManagerPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -643,6 +646,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <OAuthClientsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/templates-manager"
+            element={
+              <ProtectedRoute>
+                <TemplateManagerPage />
               </ProtectedRoute>
             }
           />
