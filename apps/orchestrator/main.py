@@ -14549,6 +14549,35 @@ async def list_flows(
     return paginate(migrated_flows, page, page_size)
 
 
+@v1.get("/flows/search", tags=["Flows"])
+async def search_flows(
+    q: str = Query("", description="Search term matched against flow name (case-insensitive substring)."),
+    tag: list[str] = Query([], description="Filter by tag(s). Multiple values = AND logic."),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Search flows by name and/or tags.
+
+    - `q` — substring match on flow name (case-insensitive).
+    - `tag` — one or more tag values; flow must have ALL specified tags (AND logic).
+    - Both filters are optional; omitting both returns all flows (same as GET /flows).
+    """
+    flows = await FlowRepository.get_all()
+    results: list[dict[str, Any]] = []
+    q_lower = q.strip().lower()
+    tag_set = {t.lower().strip() for t in tag if t.strip()}
+    for flow in flows:
+        if q_lower and q_lower not in flow.get("name", "").lower():
+            continue
+        if tag_set:
+            flow_tags = set(flow_tag_store.get(flow["id"]))
+            if not tag_set.issubset(flow_tags):
+                continue
+        results.append(flow)
+    return paginate(results, page, page_size)
+
+
 @v1.get("/flows/{flow_id}", tags=["Flows"])
 async def get_flow(
     flow_id: str,
