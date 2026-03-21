@@ -19181,6 +19181,10 @@ async def _run_flow_debug(
     """
     try:
         await _run_flow_debug_inner(flow_id, run_id, session_id, input_data)
+    except asyncio.CancelledError:
+        # Task was cancelled (e.g. TestClient teardown). Absorb silently so asyncio
+        # does not report an unhandled exception in the task.
+        logger.debug("Debug background task %s: cancelled (teardown)", run_id)
     except Exception as exc:
         # Background task: DB may be closed (e.g. during test teardown). Log at
         # WARNING so asyncio does not escalate to an unhandled-task-exception ERROR.
@@ -19217,6 +19221,10 @@ async def _run_flow_debug_inner(
         await workflow_run_repo.save(stub_status)
     except Exception as exc:
         logger.warning("Debug run %s: failed to persist stub status: %s", run_id, exc)
+        # DB is unavailable (e.g. test teardown with closed connection); abort
+        # immediately rather than continuing with more DB calls that will also fail.
+        session.status = "aborted"
+        return
 
     flow = await FlowRepository.get_by_id(flow_id)
     if flow is None:
