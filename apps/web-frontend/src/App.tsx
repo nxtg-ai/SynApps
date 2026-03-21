@@ -219,6 +219,12 @@ const FlowExportImportPage = React.lazy(
   () => import('./pages/FlowExportImportPage/FlowExportImportPage'),
 );
 const RunsPage = React.lazy(() => import('./pages/RunsPage/RunsPage'));
+const WorkflowSnapshotsPage = React.lazy(
+  () => import('./pages/WorkflowSnapshotsPage/WorkflowSnapshotsPage'),
+);
+const ListingAnalyticsDetailPage = React.lazy(
+  () => import('./pages/ListingAnalyticsDetailPage/ListingAnalyticsDetailPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -910,6 +916,22 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <RunsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflow-snapshots"
+            element={
+              <ProtectedRoute>
+                <WorkflowSnapshotsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/listing-analytics"
+            element={
+              <ProtectedRoute>
+                <ListingAnalyticsDetailPage />
               </ProtectedRoute>
             }
           />

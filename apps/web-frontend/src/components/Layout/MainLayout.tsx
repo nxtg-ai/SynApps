@@ -138,6 +138,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/usage-detail', icon: '📈', label: 'Usage Detail' },
     { path: '/flow-export-import', icon: '📦', label: 'Export/Import' },
     { path: '/runs', icon: '▶️', label: 'Runs' },
+    { path: '/workflow-snapshots', icon: '📸', label: 'Snapshots' },
+    { path: '/listing-analytics', icon: '📊', label: 'Listing Analytics' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

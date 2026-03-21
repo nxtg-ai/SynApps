@@ -205,7 +205,7 @@ See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
-**3,714 tests** (2,697 backend + 1,017 frontend unit) — all passing.
+**3,743 tests** (2,697 backend + 1,046 frontend unit) — all passing.
 
 ### Backend
 

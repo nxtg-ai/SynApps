@@ -130,6 +130,8 @@
 | N-119 | Usage Detail — Per-key bandwidth + error rate + by-endpoint/hour breakdown | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-120 | Flow Export/Import — GET /flows/{id}/export + POST /flows/import (JSON roundtrip) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-121 | Runs Page — Paginated GET /runs + GET /runs/{id} detail with progress + applets | EXECUTION | SHIPPED | P1 | 2026-03-21 |
+| N-122 | Workflow Snapshots — Save/list/inspect/diff workflow snapshots (POST+GET /workflows/{id}/versions, POST /workflows/{id}/diff) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-123 | Listing Analytics Detail — GET /marketplace/publisher/analytics/{listing_id} (ratings, credits, 30-day trend, reviews) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
