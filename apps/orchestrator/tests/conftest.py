@@ -21,6 +21,7 @@ from apps.orchestrator.main import (
     flow_access_log_store,
     flow_archive_store,
     flow_description_store,
+    flow_edit_lock_store,
     flow_favorite_store,
     flow_group_store,
     flow_label_store,
@@ -156,6 +157,7 @@ def _reset_all_stores() -> None:
     flow_group_store.reset()
     flow_access_log_store.reset()
     flow_watch_store.reset()
+    flow_edit_lock_store.reset()
 
 
 @pytest.fixture(autouse=True)

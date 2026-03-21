@@ -9799,6 +9799,62 @@ flow_watch_store = FlowWatchStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowEditLockStore — N-145 Flow Edit Lock
+# ---------------------------------------------------------------------------
+
+
+class FlowEditLockStore:
+    """Prevent edits to a flow by locking it.
+
+    A locked flow cannot be updated via PUT /flows/{id} until unlocked.
+    Lock includes the locking user and an optional reason.
+    """
+
+    def __init__(self) -> None:
+        self._locks: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def lock(self, flow_id: str, user: str, reason: str = "") -> dict[str, Any]:
+        """Lock a flow. Returns the lock record. Raises ValueError if already locked."""
+        with self._lock:
+            if flow_id in self._locks:
+                raise ValueError("Flow is already locked")
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "locked_by": user,
+                "reason": reason,
+                "locked_at": time.time(),
+            }
+            self._locks[flow_id] = record
+            return dict(record)
+
+    def unlock(self, flow_id: str) -> bool:
+        """Unlock a flow. Returns True if removed, False if not locked."""
+        with self._lock:
+            if flow_id not in self._locks:
+                return False
+            del self._locks[flow_id]
+            return True
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        """Return the lock record for a flow, or None if unlocked."""
+        with self._lock:
+            record = self._locks.get(flow_id)
+            return dict(record) if record else None
+
+    def is_locked(self, flow_id: str) -> bool:
+        with self._lock:
+            return flow_id in self._locks
+
+    def reset(self) -> None:
+        with self._lock:
+            self._locks.clear()
+
+
+flow_edit_lock_store = FlowEditLockStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -15160,6 +15216,12 @@ async def update_flow(
     snapshot is taken).
     """
     _check_flow_permission(flow_id, current_user.get("email", ""), "editor")
+    if flow_edit_lock_store.is_locked(flow_id):
+        lock = flow_edit_lock_store.get(flow_id)
+        raise HTTPException(
+            status_code=423,
+            detail=f"Flow is locked by {lock['locked_by']}",
+        )
     existing = await FlowRepository.get_by_id(flow_id)
     if existing:
         flow_version_registry.snapshot(flow_id, existing)
@@ -15934,6 +15996,74 @@ async def list_flow_watchers(
         raise HTTPException(status_code=404, detail="Flow not found")
     watchers = flow_watch_store.watchers_for_flow(flow_id)
     return {"flow_id": flow_id, "watchers": watchers, "total": len(watchers)}
+
+
+# ---------------------------------------------------------------------------
+# N-145 Flow Edit Lock — POST/DELETE /flows/{id}/lock + GET /flows/{id}/lock
+# ---------------------------------------------------------------------------
+
+
+class FlowLockRequest(BaseModel):
+    reason: str = Field("", max_length=500)
+
+
+def _lock_response(flow_id: str, record: dict[str, Any] | None) -> dict[str, Any]:
+    if record is None:
+        return {"flow_id": flow_id, "locked": False, "lock": None}
+    return {
+        "flow_id": flow_id,
+        "locked": True,
+        "lock": {
+            "locked_by": record["locked_by"],
+            "reason": record["reason"],
+            "locked_at": datetime.fromtimestamp(record["locked_at"], tz=UTC).isoformat(),
+        },
+    }
+
+
+@v1.get("/flows/{flow_id}/lock", tags=["Flows"])
+async def get_flow_lock(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Return the current lock status of a flow."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return _lock_response(flow_id, flow_edit_lock_store.get(flow_id))
+
+
+@v1.post("/flows/{flow_id}/lock", status_code=201, tags=["Flows"])
+async def lock_flow(
+    flow_id: str,
+    body: FlowLockRequest = FlowLockRequest(),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Lock a flow to prevent edits. Returns 409 if already locked."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    user = current_user.get("email", "anonymous@local")
+    try:
+        record = flow_edit_lock_store.lock(flow_id, user, body.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _lock_response(flow_id, record)
+
+
+@v1.delete("/flows/{flow_id}/lock", tags=["Flows"])
+async def unlock_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Unlock a flow. Returns 404 if the flow is not locked."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_edit_lock_store.unlock(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Flow is not locked")
+    return _lock_response(flow_id, None)
 
 
 # ---------------------------------------------------------------------------
