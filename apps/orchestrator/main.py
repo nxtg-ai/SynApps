@@ -14921,6 +14921,7 @@ async def get_execution_logs(
     if not execution_log_store.has(run_id):
         raise HTTPException(status_code=404, detail="No execution logs found for this run")
     logs = execution_log_store.get(run_id)
+    logs = sorted(logs, key=lambda e: e.get("timestamp", ""))
     return {"run_id": run_id, "count": len(logs), "logs": logs}
 
 
