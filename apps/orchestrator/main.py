@@ -11124,6 +11124,71 @@ flow_environment_store = FlowEnvironmentStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowNotifPrefStore — N-164 Flow Notification Preferences
+# ---------------------------------------------------------------------------
+
+_NOTIF_EVENTS: frozenset[str] = frozenset(
+    ["run.completed", "run.failed", "flow.updated", "flow.deleted", "collaborator.added"]
+)
+_NOTIF_CHANNELS: frozenset[str] = frozenset(["email", "slack", "in_app"])
+
+
+class FlowNotifPrefStore:
+    """Per-user, per-flow notification preference store.
+
+    Each (flow_id, user) pair can specify which events they want notifications
+    for and via which channels. Preferences are stored as-is; enforcement of
+    actual delivery is downstream of this API.
+    """
+
+    def __init__(self) -> None:
+        self._prefs: dict[tuple[str, str], dict[str, Any]] = {}  # (flow_id, user) → prefs
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        user: str,
+        events: dict[str, bool],
+        channels: list[str],
+    ) -> dict[str, Any]:
+        unknown_events = set(events) - _NOTIF_EVENTS
+        if unknown_events:
+            raise ValueError(f"Unknown events: {sorted(unknown_events)}")
+        unknown_channels = set(channels) - _NOTIF_CHANNELS
+        if unknown_channels:
+            raise ValueError(f"Unknown channels: {sorted(unknown_channels)}")
+        with self._lock:
+            self._prefs[(flow_id, user)] = {
+                "events": dict(events),
+                "channels": list(channels),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, "user": user, **self._prefs[(flow_id, user)]}
+
+    def get(self, flow_id: str, user: str) -> dict[str, Any] | None:
+        with self._lock:
+            prefs = self._prefs.get((flow_id, user))
+            if prefs is None:
+                return None
+            return {"flow_id": flow_id, "user": user, **prefs}
+
+    def delete(self, flow_id: str, user: str) -> bool:
+        with self._lock:
+            if (flow_id, user) not in self._prefs:
+                return False
+            del self._prefs[(flow_id, user)]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._prefs.clear()
+
+
+flow_notif_pref_store = FlowNotifPrefStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -18993,6 +19058,70 @@ async def delete_flow_environment(
     if not removed:
         raise HTTPException(status_code=404, detail="Environment not configured")
     return {"deleted": True, "env_name": env_name}
+
+
+# ---------------------------------------------------------------------------
+# N-164 Flow Notification Preferences — PUT/GET/DELETE /flows/{id}/notification-prefs
+# ---------------------------------------------------------------------------
+
+
+class FlowNotifPrefRequest(BaseModel):
+    events: dict[str, bool] = Field(default_factory=dict)
+    channels: list[str] = Field(default_factory=list)
+
+
+@v1.put("/flows/{flow_id}/notification-prefs", tags=["Flows"])
+async def set_flow_notif_prefs(
+    flow_id: str,
+    body: FlowNotifPrefRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        prefs = flow_notif_pref_store.set(
+            flow_id, current_user["email"], body.events, body.channels
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        **prefs,
+        "allowed_events": sorted(_NOTIF_EVENTS),
+        "allowed_channels": sorted(_NOTIF_CHANNELS),
+    }
+
+
+@v1.get("/flows/{flow_id}/notification-prefs", tags=["Flows"])
+async def get_flow_notif_prefs(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    prefs = flow_notif_pref_store.get(flow_id, current_user["email"])
+    if prefs is None:
+        raise HTTPException(status_code=404, detail="No notification preferences set")
+    return {
+        **prefs,
+        "allowed_events": sorted(_NOTIF_EVENTS),
+        "allowed_channels": sorted(_NOTIF_CHANNELS),
+    }
+
+
+@v1.delete("/flows/{flow_id}/notification-prefs", tags=["Flows"])
+async def delete_flow_notif_prefs(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_notif_pref_store.delete(flow_id, current_user["email"])
+    if not removed:
+        raise HTTPException(status_code=404, detail="No notification preferences set")
+    return {"deleted": True, "flow_id": flow_id}
 
 
 # ---------------------------------------------------------------------------
