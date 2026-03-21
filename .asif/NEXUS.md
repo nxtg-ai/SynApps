@@ -54,6 +54,21 @@
 | N-42 | Execution Replay | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 | N-43 | Workflow Diff — Version Compare | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 | N-44 | Node Performance Profiler | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-45 | Marketplace Analytics — Ratings & Trending | MARKETPLACE | SHIPPED | P1 | 2026-03-19 |
+| N-46 | Marketplace Review System — Stars + Reviews + Reports | MARKETPLACE | SHIPPED | P1 | 2026-03-19 |
+| N-47 | Marketplace Revenue System — Credit Ledger + Payouts | MARKETPLACE | SHIPPED | P1 | 2026-03-19 |
+| N-48 | Template Wizard — Guided No-Code Builder | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-49 | SLA Tracking — Execution Time Policies + Violations | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-50 | Webhook Debugger — Live Payload Inspector + Retry | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-51 | Marketplace Featured — Admin-Curated Hero Section | MARKETPLACE | SHIPPED | P1 | 2026-03-19 |
+| N-52 | Versioned Rollback — One-Click Rollback + Audit Log | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-53 | Marketplace Search Engine — Full-Text + Autocomplete | MARKETPLACE | SHIPPED | P1 | 2026-03-19 |
+| N-54 | Publisher Analytics Dashboard — KPIs + Growth Trend | MARKETPLACE | SHIPPED | P1 | 2026-03-19 |
+| N-55 | Execution Cost Calculator — Pre-Run Cost Estimation | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-56 | Workflow Test Runner — Regression Tests + CI Exit Code | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-57 | Execution Dashboard — Admin Kill/Pause/Resume Controls | EXECUTION | SHIPPED | P1 | 2026-03-19 |
+| N-58 | Onboarding Wizard — 5-Step Guided Setup | PLATFORM | SHIPPED | P1 | 2026-03-19 |
+| N-59 | Multi-User Workflow Collaboration — Presence + Locking | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
