@@ -194,6 +194,15 @@ const WorkflowSecretsPage = React.lazy(
 const ConnectorProbePage = React.lazy(
   () => import('./pages/ConnectorProbePage/ConnectorProbePage'),
 );
+const WorkflowTestRunnerPage = React.lazy(
+  () => import('./pages/WorkflowTestRunnerPage/WorkflowTestRunnerPage'),
+);
+const OAuthInspectorPage = React.lazy(
+  () => import('./pages/OAuthInspectorPage/OAuthInspectorPage'),
+);
+const CollabLocksPage = React.lazy(
+  () => import('./pages/CollabLocksPage/CollabLocksPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -813,6 +822,30 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ConnectorProbePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflow-test-runner"
+            element={
+              <ProtectedRoute>
+                <WorkflowTestRunnerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/oauth-inspector"
+            element={
+              <ProtectedRoute>
+                <OAuthInspectorPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/collab-locks"
+            element={
+              <ProtectedRoute>
+                <CollabLocksPage />
               </ProtectedRoute>
             }
           />
