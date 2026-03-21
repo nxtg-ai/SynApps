@@ -69,6 +69,7 @@
 | N-57 | Execution Dashboard — Admin Kill/Pause/Resume Controls | EXECUTION | SHIPPED | P1 | 2026-03-19 |
 | N-58 | Onboarding Wizard — 5-Step Guided Setup | PLATFORM | SHIPPED | P1 | 2026-03-19 |
 | N-59 | Multi-User Workflow Collaboration — Presence + Locking | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-60 | Workflow Marketplace Plugin System — Third-Party Nodes | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
@@ -2369,4 +2370,67 @@ Also: fixed 3 `test_faultline_compliance.py` tests using hardcoded relative path
 ---
 
 > Last updated: 2026-03-20 (Wolf) — cycle 76 (N-45 through N-59, CI faultline fix, baseline + hook maintenance)
+
+---
+
+## Team Feedback — Cycle 77 (2026-03-20)
+
+### 1. What did I ship since last check-in?
+
+**N-60 Workflow Marketplace Plugin System — shipped in one session.**
+
+| Deliverable | Key Components | Tests Added |
+| --- | --- | --- |
+| `PluginRegistry` | Thread-safe in-memory store: register/unregister/get/list/get_by_node_type/increment_install_count/reset | 12 unit |
+| `PluginManifest` | Pydantic model: name, version, display_name, description, node_type, endpoint_url, config_schema, tags, author, icon_url | — |
+| `DynamicPluginApplet` | HTTP adapter: POSTs payload to plugin endpoint_url, 30s timeout, httpx async client, B904-compliant raises | 4 |
+| Execution engine hook | `Orchestrator.load_applet` fallback: unknown node_type → `plugin_registry.get_by_node_type()` before legacy dynamic import | — |
+| Reserved type guard | Rejects registration of built-in node_types (llm, http_request, code, etc.) with 400 | 2 |
+| 6 REST endpoints | POST/GET/DELETE `/plugins`, GET `/plugins/{id}`, GET `/plugins/{id}/schema`, POST `/plugins/{id}/install` | 14 integration |
+| `PluginManagerPage` | Browse + Register tabs, plugin cards with install button, registration form | 12 frontend |
+
+Backend total: **2,697 passed** (+30 vs N-59). Frontend: **312 passed** (+12).
+NEXUS executive dashboard: N-60 added. Commits: `ba9f4a3`.
+
+---
+
+### 2. What surprised me?
+
+**The new ASIF hook template (`.asif-ci`) silently broke the pre-push gate.** The template replaced the repo's custom monorepo hook (which set `PYTHONPATH=.`) with a generic hook that reads from `.asif-ci`. The `.asif-ci` file used `cd apps/orchestrator && python -m pytest` — but `python` resolves correctly here, and the `PYTHONPATH` was missing. The gate blocked the push with "ASIF CI GATE FAILED" but printed no test output in tail -20 because the entire test collection failed at import time (all 2,697 tests showed as errors, not failures — the grep for "N failed" didn't catch it). Fixed by updating `.asif-ci` to `PYTHONPATH=. python3 -m pytest apps/orchestrator/tests/`.
+
+**B904 is now enforced by ruff in the ASIF config.** All `raise X` inside `except` blocks now require `raise X from err` or `raise X from None`. The plugin implementation had 4 violations. Easy fix but worth flagging — any future code that raises inside except needs this pattern.
+
+**`plugin_registry.get_by_node_type()` requires a linear scan.** With hundreds of plugins this becomes O(n). For the current use case (few plugins, called once per node execution) this is fine, but if the plugin ecosystem grows large, a secondary index `{node_type: plugin_id}` would be needed.
+
+---
+
+### 3. Cross-project signals
+
+**Plugin-as-a-service via HTTP POST is a clean extension pattern.** The `DynamicPluginApplet` → `POST endpoint_url` design means any service (local or remote) can register as a node type with zero code changes to the orchestrator. Faultline's AI scan service, Dx3's data connectors, and any future third-party tools could expose a `/execute` endpoint and register themselves. This is the same approach n8n uses for community nodes.
+
+**Reserved node_type guard prevents runtime conflicts.** Explicitly blocking built-in names at registration time (rather than at execution time) means failures are loud and early. Worth applying the same pattern to any registry that overlaps with built-in identifiers (marketplace listing tags, template IDs, etc.).
+
+**The `PluginManifest.config_schema` field (JSON Schema) creates a self-describing plugin.** If the frontend renders a form from the schema, non-technical users can configure plugins without knowing the data model. The `GET /plugins/{id}/schema` endpoint exposes this. A generic schema-driven form renderer would unlock this for all 60+ N-series feature endpoints.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **N-61: Schema-Driven Node Config UI** — render node configuration forms from `config_schema` (JSON Schema → React form). Unlocks dynamic plugin configuration in the canvas editor without per-plugin frontend code. High leverage: one component serves all 60+ node types.
+2. **N-62: Workflow Import Wizard** — guided UI for importing n8n/Zapier workflows. Backend already exists (N-31 `WorkflowImportService`), but there's no frontend wizard. High user value, low effort.
+3. **N-63: API Key Management UI** — `apps/orchestrator/api_keys/manager.py` exists but there's no frontend page for it. Needed for production users managing multiple integrations.
+4. **N-64: GitHub Actions workflow quality scan** — the `--cov=.` vs `--cov=apps/orchestrator` ambiguity (raised in cycle 69) has never been resolved. A one-line CI fix would align reported coverage with actual coverage.
+5. **Merge master → main** — `origin/main` is 5+ weeks behind. Either archive main or merge master into it so the default branch matches current state.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**`origin/main` is 5+ weeks stale.** The GitHub default branch (`main`) is at cycle 71 (2026-03-15, commit `9c7e42a`). `master` has 60+ new commits. New contributors or GitHub links will land on stale code. Request a directive: (a) merge master → main and set master as default, (b) set master as default without merging, or (c) archive main. No action taken pending decision.
+
+**CoS response delivery** — three consecutive check-in messages claimed CoS had responded to cycle 75 TQs, but no new content appeared on any branch. Possible causes: (a) CoS edited NEXUS locally but didn't push, (b) responses were sent via a different channel (Slack/email) not reflected in git, (c) automated message that fires on a schedule regardless of actual CoS activity. No blocker, but flagging for awareness. If responses exist elsewhere, please copy them into NEXUS and push.
+
+---
+
+> Last updated: 2026-03-20 (Wolf) — cycle 77 (N-60 Plugin System, .asif-ci fix, NEXUS feedback)
 
