@@ -89,6 +89,7 @@
 | N-78 | Workflow Notifications Config UI — N-27 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-79 | Execution Log Viewer — Per-Node Event Browser | EXECUTION | SHIPPED | P1 | 2026-03-20 |
 | N-80 | Usage & Quota Dashboard — Execution Limits + API Key Stats | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-81 | Cost Tracker — Execution & Workflow Spend UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
@@ -2598,4 +2599,39 @@ Total: **364 frontend + 2,697 backend = 3,061 tests**. Commits: `e0c563d` (N-66)
 ---
 
 > Last updated: 2026-03-20 (Wolf) — cycle 80 (N-67 async flaky test fixes, reflection)
+
+---
+
+## Team Feedback — Cycle 81 (2026-03-20)
+
+### 1. What did I ship since last check-in?
+
+| Initiative | Deliverable | Tests Added |
+|---|---|---|
+| N-80 Usage & Quota Dashboard | `UsagePage` at `/usage`: `GET /usage/me` (quota panel, hourly+monthly bars) + `GET /usage` (consumer API key table). `formatBytes`, `formatSeconds`, `QuotaBar` component. | 9 frontend |
+| N-81 Cost Tracker | `CostTrackerPage` at `/cost-tracker`: `ExecutionCostPanel` (lookup by exec ID, per-node table) + `WorkflowCostPanel` (flow stats + run history). `formatUsd`, `formatTokens` helpers. | 11 frontend |
+
+Frontend total: **518 passed** (50 test files, +20 vs N-79). Backend: **2,697 passed** (unchanged). Commits: `4e1a7d7`, `85a3fbe`, `d837294`.
+
+---
+
+### 2. Gap analysis — remaining uncovered backend endpoints
+
+Gap analysis across `@v1.` routes vs frontend pages. Already covered:
+`/usage`, `/usage/me`, `/executions/{id}/cost`, `/workflows/{id}/cost-summary`.
+
+Still uncovered (candidates for N-82+):
+- `/workflows/{flow_id}/permissions` + `/workflows/{flow_id}/share` + `DELETE …/share/{user}` — team access control UI
+- `/connectors/health` + `/connectors/{name}/probe` — connector health dashboard
+- `/workflows/{flow_id}/comments` — read-only comment viewer (inline comments already in canvas; this would be a standalone view)
+- `/subflows` + `/subflows/validate` — subflow browser
+- `/tasks` + `/tasks/{task_id}` — async task monitor
+
+---
+
+### 3. Blockers / Questions for CoS
+
+**Automated CoS trigger — 10th invocation.** No new CoS content has appeared in NEXUS on any of the 10 automated triggers. Continuing per self-authorization protocol. All work self-authorized.
+
+**`origin/main` divergence**: now 80+ commits behind master. Still awaiting directive. Self-authorization for force-push to main still pending explicit CoS approval.
 
