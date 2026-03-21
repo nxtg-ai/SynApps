@@ -10558,6 +10558,77 @@ flow_bookmark_store = FlowBookmarkStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowSnapshotStore — N-157 Flow Snapshots
+# ---------------------------------------------------------------------------
+
+
+class FlowSnapshotStore:
+    """Stores point-in-time snapshots of a flow's nodes/edges.
+
+    Snapshots let users capture and optionally restore the canvas state
+    without creating a full semver version (cf. FlowChangelogStore for
+    text notes, workflow_version_store for semver releases).
+
+    Limits: 50 snapshots per flow, oldest entry auto-evicted when full.
+    """
+
+    MAX_SNAPSHOTS = 50
+
+    def __init__(self) -> None:
+        self._store: dict[str, list[dict[str, Any]]] = {}  # flow_id → snapshots
+        self._lock = threading.Lock()
+
+    def add(
+        self,
+        flow_id: str,
+        label: str,
+        nodes: list[Any],
+        edges: list[Any],
+        author: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            snaps = self._store.setdefault(flow_id, [])
+            if len(snaps) >= self.MAX_SNAPSHOTS:
+                snaps.pop(0)
+            snap: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "flow_id": flow_id,
+                "label": label,
+                "nodes": nodes,
+                "edges": edges,
+                "author": author,
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            snaps.append(snap)
+            return snap.copy()
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [s.copy() for s in reversed(self._store.get(flow_id, []))]
+
+    def get(self, flow_id: str, snapshot_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            for s in self._store.get(flow_id, []):
+                if s["id"] == snapshot_id:
+                    return s.copy()
+            return None
+
+    def delete(self, flow_id: str, snapshot_id: str) -> bool:
+        with self._lock:
+            snaps = self._store.get(flow_id, [])
+            before = len(snaps)
+            self._store[flow_id] = [s for s in snaps if s["id"] != snapshot_id]
+            return len(self._store[flow_id]) < before
+
+    def reset(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+flow_snapshot_store = FlowSnapshotStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -17782,6 +17853,108 @@ async def delete_bookmark(
     if not removed:
         raise HTTPException(status_code=404, detail="Bookmark not found")
     return {"deleted": True, "bookmark_id": bm_id}
+
+
+# ---------------------------------------------------------------------------
+# N-157 Flow Snapshots — POST/GET /flows/{id}/snapshots
+#                        GET    /flows/{id}/snapshots/{snap_id}
+#                        DELETE /flows/{id}/snapshots/{snap_id}
+#                        POST   /flows/{id}/snapshots/{snap_id}/restore
+# ---------------------------------------------------------------------------
+
+
+class FlowSnapshotRequest(BaseModel):
+    label: str = Field(..., min_length=1, max_length=200, description="Human-readable snapshot label")
+    nodes: list[Any] = Field(default_factory=list)
+    edges: list[Any] = Field(default_factory=list)
+
+
+@v1.post("/flows/{flow_id}/snapshots", status_code=201, tags=["Flows"])
+async def create_flow_snapshot(
+    flow_id: str,
+    body: FlowSnapshotRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Capture a point-in-time snapshot of a flow's canvas state."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    author = current_user.get("email", "anonymous@local")
+    snap = flow_snapshot_store.add(flow_id, body.label, body.nodes, body.edges, author)
+    return snap
+
+
+@v1.get("/flows/{flow_id}/snapshots", tags=["Flows"])
+async def list_flow_snapshots(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List all snapshots for a flow, newest first."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    items = flow_snapshot_store.list(flow_id)
+    return {"flow_id": flow_id, "total": len(items), "items": items}
+
+
+@v1.get("/flows/{flow_id}/snapshots/{snapshot_id}", tags=["Flows"])
+async def get_flow_snapshot(
+    flow_id: str,
+    snapshot_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Retrieve a single snapshot including its full nodes/edges payload."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    snap = flow_snapshot_store.get(flow_id, snapshot_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return snap
+
+
+@v1.delete("/flows/{flow_id}/snapshots/{snapshot_id}", tags=["Flows"])
+async def delete_flow_snapshot(
+    flow_id: str,
+    snapshot_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete a snapshot permanently."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_snapshot_store.delete(flow_id, snapshot_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"deleted": True, "snapshot_id": snapshot_id}
+
+
+@v1.post("/flows/{flow_id}/snapshots/{snapshot_id}/restore", tags=["Flows"])
+async def restore_flow_snapshot(
+    flow_id: str,
+    snapshot_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Restore a flow to the state captured in a snapshot.
+
+    Writes the snapshot's nodes and edges back to the flow record.
+    Returns the snapshot metadata; the caller should refresh the canvas.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    snap = flow_snapshot_store.get(flow_id, snapshot_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    existing = await FlowRepository.get_by_id(flow_id)
+    flow_data: dict[str, Any] = {
+        "id": flow_id,
+        "name": existing.get("name", "Unnamed Flow") if existing else "Unnamed Flow",
+        "nodes": snap["nodes"],
+        "edges": snap["edges"],
+    }
+    await FlowRepository.save(flow_data)
+    return {"restored": True, "snapshot_id": snapshot_id, "label": snap["label"]}
 
 
 # ---------------------------------------------------------------------------

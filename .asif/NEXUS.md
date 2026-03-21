@@ -165,6 +165,7 @@
 | N-154 | Flow Annotations — POST/GET /flows/{id}/annotations + PATCH/DELETE per annotation (hex color, canvas x/y) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-155 | Flow Dependencies — POST/GET/DELETE /flows/{id}/dependencies + GET /dependents (DAG, cycle detection) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-156 | Flow Bookmarks — POST/GET /flows/{id}/bookmarks + DELETE /flows/{id}/bookmarks/{bm_id} (user-scoped) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-157 | Flow Snapshots — POST/GET /flows/{id}/snapshots + GET/DELETE/{snap_id} + POST/{snap_id}/restore | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
