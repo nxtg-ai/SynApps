@@ -1668,6 +1668,11 @@ class WebhookTriggerRegistry:
         with self._lock:
             return self._triggers.pop(trigger_id, None) is not None
 
+    def reset(self) -> None:
+        """Clear all registered triggers (test teardown helper)."""
+        with self._lock:
+            self._triggers.clear()
+
     # ------------------------------------------------------------------
     # Signature verification
     # ------------------------------------------------------------------

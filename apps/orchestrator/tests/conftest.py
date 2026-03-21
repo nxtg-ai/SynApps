@@ -4,23 +4,46 @@ import pytest
 
 import apps.orchestrator.db as db_module
 from apps.orchestrator.main import (
+    activity_feed_store,
+    admin_key_registry,
+    alert_rule_store,
     audit_log_store,
+    auth_code_store,
     collaboration_activity_store,
+    connector_health,
+    cost_tracker_store,
     credit_ledger,
+    debug_session_store,
     execution_dashboard_store,
+    execution_log_store,
     execution_quota_store,
     featured_store,
     issue_store,
+    marketplace_registry,
+    node_comment_store,
     node_lock_store,
+    notification_store,
+    oauth_client_registry,
     plugin_registry,
     presence_store,
     rating_store,
+    replay_store,
     reply_store,
     review_store,
     rollback_audit_store,
     sla_store,
+    sse_event_bus,
+    subflow_registry,
+    task_queue,
+    template_registry,
     test_suite_store,
     webhook_debug_store,
+    webhook_trigger_registry,
+    workflow_permission_store,
+    workflow_secret_store,
+    workflow_test_store,
+    workflow_variable_store,
+    workflow_version_store,
 )
 from apps.orchestrator.middleware.rate_limiter import (
     TokenBucketRegistry,
@@ -59,48 +82,70 @@ def _reset_rate_limit_counter(monkeypatch):
     )
 
 
+def _reset_all_stores() -> None:
+    """Reset every in-memory singleton store to a clean state."""
+    # Core execution / quota
+    execution_quota_store.reset()
+    execution_log_store.reset()
+    execution_dashboard_store.reset()
+    replay_store.reset()
+    cost_tracker_store.reset()
+    sse_event_bus.reset()
+    # Audit / compliance
+    audit_log_store.reset()
+    rollback_audit_store.reset()
+    # Auth / keys
+    admin_key_registry.reset()
+    auth_code_store.reset()
+    oauth_client_registry.reset()
+    # Workflows: variables, secrets, versions, test, permissions, notifications
+    workflow_variable_store.reset()
+    workflow_secret_store.reset()
+    workflow_version_store.reset()
+    workflow_test_store.reset()
+    workflow_permission_store.reset()
+    notification_store.reset()
+    # Debugging
+    debug_session_store.reset()
+    # Marketplace / publisher
+    marketplace_registry.reset()
+    template_registry.reset()
+    rating_store.reset()
+    review_store.reset()
+    reply_store.reset()
+    issue_store.reset()
+    credit_ledger.reset()
+    featured_store.reset()
+    # Monitoring / SLA / connectors
+    sla_store.reset()
+    alert_rule_store.reset()
+    connector_health.reset()
+    # Collaboration
+    presence_store.reset()
+    node_lock_store.reset()
+    collaboration_activity_store.reset()
+    activity_feed_store.reset()
+    node_comment_store.reset()
+    # Webhooks / triggers / tasks
+    webhook_debug_store.reset()
+    webhook_trigger_registry.reset()
+    task_queue.reset()
+    # Subflows / plugins
+    subflow_registry.reset()
+    plugin_registry.reset()
+    # Suites
+    test_suite_store.reset()
+
+
 @pytest.fixture(autouse=True)
 def _reset_shared_stores():
-    """Reset in-memory stores that accumulate state across the full test suite.
+    """Reset every in-memory store singleton between tests.
 
-    execution_quota_store and audit_log_store are module-level singletons.
-    Without resetting them between tests, quota counts and audit entries from
-    one test bleed into later tests — causing intermittent 429s and stale
-    audit results in webhook/analytics integration tests.
+    Prevents state from one test bleeding into later tests, which is the
+    root cause of intermittent failures (429s, stale audit entries,
+    lingering webhook triggers, debug sessions with dangling tasks, etc.).
     """
-    execution_quota_store.reset()
-    audit_log_store.reset()
-    rating_store.reset()
-    review_store.reset()
-    reply_store.reset()
-    issue_store.reset()
-    credit_ledger.reset()
-    sla_store.reset()
-    webhook_debug_store.reset()
-    featured_store.reset()
-    rollback_audit_store.reset()
-    execution_dashboard_store.reset()
-    test_suite_store.reset()
-    presence_store.reset()
-    node_lock_store.reset()
-    collaboration_activity_store.reset()
-    plugin_registry.reset()
+    _reset_all_stores()
     yield
-    # Post-test cleanup (belt-and-suspenders for any state written during test)
-    execution_quota_store.reset()
-    audit_log_store.reset()
-    featured_store.reset()
-    rating_store.reset()
-    review_store.reset()
-    reply_store.reset()
-    issue_store.reset()
-    credit_ledger.reset()
-    sla_store.reset()
-    webhook_debug_store.reset()
-    execution_dashboard_store.reset()
-    test_suite_store.reset()
-    rollback_audit_store.reset()
-    presence_store.reset()
-    node_lock_store.reset()
-    collaboration_activity_store.reset()
-    plugin_registry.reset()
+    # Belt-and-suspenders: clean up anything written during the test too.
+    _reset_all_stores()

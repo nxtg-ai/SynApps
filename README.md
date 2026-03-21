@@ -157,6 +157,7 @@ All 44 shipped N-series initiatives — the complete SynApps v1.0 roadmap:
 | N-42 | Execution Replay | EXECUTION | Re-run any past execution with original inputs; full replay chain tracking — `POST /executions/:id/replay`, `GET /executions/:id/replay-history` |
 | N-43 | Workflow Diff — Version Compare | PLATFORM | Compare two workflow snapshots: added/removed/modified nodes + edges, version history store — `POST /workflows/:id/diff`, `GET /workflows/:id/version-history` |
 | N-44 | Node Performance Profiler | PLATFORM | Per-node avg/p50/p95/p99 timing across all runs, bottleneck detection per execution — `GET /workflows/:id/profile`, `GET /executions/:id/profile` |
+| N-45–N-114 | Frontend Coverage Sprint | PLATFORM | 70+ React pages covering every backend endpoint: marketplace, SLA, OAuth2, audit trail, collaboration, monitoring, cost tracking, replay, subflows, plugins, and more — full UI surface for all 212 API routes |
 
 ## Tech Stack
 
@@ -202,7 +203,7 @@ See [DEPLOY.md](docs/DEPLOY.md) for the complete self-hosted deployment guide.
 
 ## Testing
 
-**2,451 tests** (2,329 backend + 122 frontend unit) — all passing.
+**3,633 tests** (2,697 backend + 936 frontend unit) — all passing.
 
 ### Backend
 
