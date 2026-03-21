@@ -10150,6 +10150,79 @@ flow_rate_limit_store = FlowRateLimitStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowChangelogStore — N-152 Flow Changelog
+# ---------------------------------------------------------------------------
+
+_CHANGELOG_ENTRY_TYPES = frozenset({"note", "fix", "improvement", "breaking", "deployment"})
+
+
+class FlowChangelogStore:
+    """Append-only log of user-authored changelog entries per flow.
+
+    Each entry has: id, flow_id, author, type, message, created_at (epoch float).
+    Entries are returned newest-first. Capacity is capped at 500 per flow.
+    """
+
+    MAX_ENTRIES = 500
+
+    def __init__(self) -> None:
+        self._entries: dict[str, list[dict[str, Any]]] = {}  # flow_id → [entry, ...]
+        self._lock = threading.Lock()
+
+    def add(
+        self,
+        flow_id: str,
+        author: str,
+        message: str,
+        entry_type: str = "note",
+    ) -> dict[str, Any]:
+        with self._lock:
+            entries = self._entries.setdefault(flow_id, [])
+            if len(entries) >= self.MAX_ENTRIES:
+                raise ValueError(
+                    f"Changelog capacity ({self.MAX_ENTRIES}) reached for this flow"
+                )
+            entry: dict[str, Any] = {
+                "id": uuid.uuid4().hex,
+                "flow_id": flow_id,
+                "author": author,
+                "type": entry_type,
+                "message": message,
+                "created_at": time.time(),
+            }
+            entries.append(entry)
+            return entry.copy()
+
+    def list(
+        self,
+        flow_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            entries = list(reversed(self._entries.get(flow_id, [])))
+            return [e.copy() for e in entries[offset : offset + limit]]
+
+    def delete(self, flow_id: str, entry_id: str) -> bool:
+        with self._lock:
+            entries = self._entries.get(flow_id, [])
+            before = len(entries)
+            self._entries[flow_id] = [e for e in entries if e["id"] != entry_id]
+            return len(self._entries[flow_id]) < before
+
+    def total(self, flow_id: str) -> int:
+        with self._lock:
+            return len(self._entries.get(flow_id, []))
+
+    def reset(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+
+flow_changelog_store = FlowChangelogStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -16928,6 +17001,88 @@ async def delete_flow_rate_limit(
     if not removed:
         raise HTTPException(status_code=404, detail="No rate limit set for this flow")
     return _rate_limit_response(flow_id)
+
+
+# ---------------------------------------------------------------------------
+# N-152 Flow Changelog — POST/GET /flows/{id}/changelog
+#                        DELETE /flows/{id}/changelog/{entry_id}
+# ---------------------------------------------------------------------------
+
+
+class FlowChangelogAddRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000, description="Changelog entry text.")
+    type: str = Field(
+        "note",
+        pattern=r"^(note|fix|improvement|breaking|deployment)$",
+        description="Entry type.",
+    )
+
+
+def _fmt_entry(e: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **e,
+        "created_at": datetime.fromtimestamp(e["created_at"], tz=UTC).isoformat(),
+    }
+
+
+@v1.post("/flows/{flow_id}/changelog", status_code=201, tags=["Flows"])
+async def add_changelog_entry(
+    flow_id: str,
+    body: FlowChangelogAddRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Append a user-authored changelog entry to *flow_id*.
+
+    Valid types: ``note``, ``fix``, ``improvement``, ``breaking``, ``deployment``.
+    Returns 422 when the flow's changelog is full (500 entries).
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    author = current_user.get("email", "anonymous@local")
+    try:
+        entry = flow_changelog_store.add(flow_id, author, body.message, body.type)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _fmt_entry(entry)
+
+
+@v1.get("/flows/{flow_id}/changelog", tags=["Flows"])
+async def list_changelog_entries(
+    flow_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """List changelog entries for *flow_id* (newest-first, paginated)."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entries = flow_changelog_store.list(flow_id, limit=limit, offset=offset)
+    return {
+        "flow_id": flow_id,
+        "total": flow_changelog_store.total(flow_id),
+        "items": [_fmt_entry(e) for e in entries],
+    }
+
+
+@v1.delete("/flows/{flow_id}/changelog/{entry_id}", tags=["Flows"])
+async def delete_changelog_entry(
+    flow_id: str,
+    entry_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Delete a single changelog entry.
+
+    Returns 404 if the flow or the entry does not exist.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_changelog_store.delete(flow_id, entry_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Changelog entry not found")
+    return {"deleted": True, "entry_id": entry_id}
 
 
 # ---------------------------------------------------------------------------

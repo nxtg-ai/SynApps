@@ -160,6 +160,7 @@
 | N-149 | Flow Expiry — GET/PUT/DELETE /flows/{id}/expiry; GET /flows/{id} returns 410 when expired | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-150 | Flow Aliases — GET/PUT/DELETE /flows/{id}/alias + GET /flows/by-alias/{slug} (unique slugs, 409 on conflict) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-151 | Flow Rate Limiting — GET/PUT/DELETE /flows/{id}/rate-limit; POST /runs returns 429 when exceeded | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-152 | Flow Changelog — POST/GET /flows/{id}/changelog + DELETE /flows/{id}/changelog/{entry_id} | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
