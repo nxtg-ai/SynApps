@@ -161,6 +161,9 @@ const FlowVersionsPage = React.lazy(
 const ServerInfoPage = React.lazy(
   () => import('./pages/ServerInfoPage/ServerInfoPage'),
 );
+const ManagedKeysPage = React.lazy(
+  () => import('./pages/ManagedKeysPage/ManagedKeysPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -676,6 +679,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ServerInfoPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/managed-keys"
+            element={
+              <ProtectedRoute>
+                <ManagedKeysPage />
               </ProtectedRoute>
             }
           />

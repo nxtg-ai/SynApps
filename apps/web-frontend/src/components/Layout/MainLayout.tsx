@@ -116,6 +116,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/templates-manager', icon: '📦', label: 'Templates' },
     { path: '/flow-versions', icon: '🕰', label: 'Flow Versions' },
     { path: '/server-info', icon: '🖥', label: 'Server Info' },
+    { path: '/managed-keys', icon: '🗝', label: 'Managed Keys' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
