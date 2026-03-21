@@ -84,6 +84,11 @@
 | N-73 | Workflow Step-Through Debugger UI — Breakpoints + Live Polling | EXECUTION | SHIPPED | P1 | 2026-03-20 |
 | N-74 | Workflow Variables & Secrets Manager UI — N-26 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-75 | Audit Trail Viewer — Compliance Log UI — N-30 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-76 | Workflow Schedules Manager UI — Cron CRUD — N-28 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-77 | Dead Letter Queue Viewer — Failed Run Replay UI | EXECUTION | SHIPPED | P1 | 2026-03-20 |
+| N-78 | Workflow Notifications Config UI — N-27 frontend | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-79 | Execution Log Viewer — Per-Node Event Browser | EXECUTION | SHIPPED | P1 | 2026-03-20 |
+| N-80 | Usage & Quota Dashboard — Execution Limits + API Key Stats | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 
