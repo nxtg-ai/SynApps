@@ -173,6 +173,9 @@ const MarketplaceReviewsPage = React.lazy(
 const WebhookRegistryPage = React.lazy(
   () => import('./pages/WebhookRegistryPage/WebhookRegistryPage'),
 );
+const TemplateToolsPage = React.lazy(
+  () => import('./pages/TemplateToolsPage/TemplateToolsPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -720,6 +723,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <WebhookRegistryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/template-tools"
+            element={
+              <ProtectedRoute>
+                <TemplateToolsPage />
               </ProtectedRoute>
             }
           />

@@ -120,6 +120,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/admin-keys', icon: '🔑', label: 'Admin Keys' },
     { path: '/marketplace-reviews', icon: '⭐', label: 'Mkt Reviews' },
     { path: '/webhook-registry', icon: '📡', label: 'Webhook Registry' },
+    { path: '/template-tools', icon: '🔧', label: 'Template Tools' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

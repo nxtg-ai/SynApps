@@ -111,6 +111,7 @@
 | N-100 | Admin Keys — Master-Key-Protected Admin API Key Registry | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-101 | Marketplace Reviews & Ratings UI — Rate, Review, Reply, Report | MARKETPLACE | SHIPPED | P1 | 2026-03-21 |
 | N-102 | Outgoing Webhook Registry — Register, List, Delete delivery webhooks | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-103 | Template Tools — Validate, Fetch by Semver, Rollback, Run Async + Poll | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
