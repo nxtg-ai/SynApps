@@ -378,6 +378,12 @@ class TestSmokePipelineViaReceiveEndpoint:
             )
             assert resp.status_code == 401
 
+            # Let the background execution task resolve (or fail) before DB closes.
+            # Without this yield the async task hits sqlite3.ProgrammingError on DB
+            # teardown and can corrupt shared event-loop state for subsequent tests.
+            import time
+            time.sleep(0.05)
+
     def test_receive_deleted_trigger_returns_error(self, tmp_path):
         """Receiving on a deleted trigger must not start the flow."""
         with TestClient(app) as client:
