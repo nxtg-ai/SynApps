@@ -9433,6 +9433,54 @@ flow_description_store = FlowDescriptionStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowArchiveStore — N-135 Flow Archiving
+# ---------------------------------------------------------------------------
+
+
+class FlowArchiveStore:
+    """Tracks archived (soft-deleted) flows.
+
+    Archived flows are hidden from normal listings but remain in the DB.
+    Users can restore them at any time via DELETE /flows/{id}/archive.
+    """
+
+    def __init__(self) -> None:
+        self._archived: dict[str, float] = {}  # flow_id → archived_at (epoch)
+        self._lock = threading.Lock()
+
+    def archive(self, flow_id: str) -> float:
+        """Mark flow as archived. Returns the archived_at timestamp."""
+        ts = time.time()
+        with self._lock:
+            self._archived[flow_id] = ts
+        return ts
+
+    def restore(self, flow_id: str) -> bool:
+        """Remove archive mark. Returns True if it was archived, False otherwise."""
+        with self._lock:
+            return self._archived.pop(flow_id, None) is not None
+
+    def is_archived(self, flow_id: str) -> bool:
+        with self._lock:
+            return flow_id in self._archived
+
+    def archived_at(self, flow_id: str) -> float | None:
+        with self._lock:
+            return self._archived.get(flow_id)
+
+    def all_archived_ids(self) -> set[str]:
+        with self._lock:
+            return set(self._archived)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._archived.clear()
+
+
+flow_archive_store = FlowArchiveStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -14616,15 +14664,22 @@ async def create_flow(
 async def list_flows(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    archived: bool = Query(False, description="If true, return only archived flows. Default returns only non-archived flows."),
     current_user: dict[str, Any] = Depends(get_authenticated_user),
 ):
-    """List all flows with pagination."""
+    """List flows with pagination.
+
+    - Default (archived=false): only non-archived flows.
+    - archived=true: only archived flows.
+    """
     flows = await FlowRepository.get_all()
     migrated_flows: list[dict[str, Any]] = []
     for flow in flows:
         migrated_flow = await Orchestrator.auto_migrate_legacy_nodes(flow, persist=True)
         if isinstance(migrated_flow, dict):
-            migrated_flows.append(migrated_flow)
+            is_archived = flow_archive_store.is_archived(migrated_flow["id"])
+            if is_archived == archived:
+                migrated_flows.append(migrated_flow)
     return paginate(migrated_flows, page, page_size)
 
 
@@ -15153,6 +15208,47 @@ async def set_flow_description(
         raise HTTPException(status_code=404, detail="Flow not found")
     flow_description_store.set(flow_id, body.description)
     return {"flow_id": flow_id, "description": flow_description_store.get(flow_id)}
+
+
+# ---------------------------------------------------------------------------
+# N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
+# ---------------------------------------------------------------------------
+
+
+@v1.post("/flows/{flow_id}/archive", tags=["Flows"])
+async def archive_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Soft-delete a flow by archiving it.
+
+    Archived flows are excluded from GET /flows by default.
+    Use GET /flows?archived=true to list only archived flows.
+    Restore with DELETE /flows/{id}/archive.
+    """
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if flow_archive_store.is_archived(flow_id):
+        raise HTTPException(status_code=409, detail="Flow is already archived")
+    ts = flow_archive_store.archive(flow_id)
+    archived_at = datetime.fromtimestamp(ts, tz=UTC).isoformat()
+    return {"flow_id": flow_id, "archived": True, "archived_at": archived_at}
+
+
+@v1.delete("/flows/{flow_id}/archive", tags=["Flows"])
+async def restore_flow(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+):
+    """Restore an archived flow, making it visible in normal listings again."""
+    flow = await FlowRepository.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    restored = flow_archive_store.restore(flow_id)
+    if not restored:
+        raise HTTPException(status_code=409, detail="Flow is not archived")
+    return {"flow_id": flow_id, "archived": False}
 
 
 async def _run_flow_impl(

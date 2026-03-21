@@ -143,6 +143,7 @@
 | N-132 | Flow Search — GET /api/v1/flows/search?q=&tag= (name substring + tag AND filter) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-133 | Flow Favorites — POST/DELETE /flows/{id}/favorite + GET /flows/favorites (per-user) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-134 | Flow Descriptions — GET/PUT /flows/{id}/description (4000-char, Pydantic-validated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-135 | Flow Archiving — POST/DELETE /flows/{id}/archive + GET /flows?archived= (soft-delete/restore) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
