@@ -19443,6 +19443,7 @@ async def start_debug_session(
         flow_id=flow_id,
         breakpoints=body.breakpoints,
     )
+    initial_status = session.status  # capture before background task can mutate it
 
     asyncio.create_task(
         _run_flow_debug(
@@ -19464,7 +19465,7 @@ async def start_debug_session(
     return {
         "session_id": session.session_id,
         "run_id": run_id,
-        "status": session.status,
+        "status": initial_status,
         "breakpoints": sorted(session.breakpoints),
     }
 

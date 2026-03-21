@@ -123,6 +123,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/template-tools', icon: '🔧', label: 'Template Tools' },
     { path: '/node-comments', icon: '💬', label: 'Node Comments' },
     { path: '/portfolio', icon: '🗂️', label: 'Portfolio' },
+    { path: '/flow-testing', icon: '🧪', label: 'Flow Testing' },
+    { path: '/debug-session', icon: '🔍', label: 'Debug Session' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
