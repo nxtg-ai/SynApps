@@ -117,6 +117,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/flow-versions', icon: '🕰', label: 'Flow Versions' },
     { path: '/server-info', icon: '🖥', label: 'Server Info' },
     { path: '/managed-keys', icon: '🗝', label: 'Managed Keys' },
+    { path: '/admin-keys', icon: '🔑', label: 'Admin Keys' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
