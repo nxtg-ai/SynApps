@@ -2,7 +2,7 @@
  * MainLayout component
  * Provides consistent layout with sidebar navigation and header
  */
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationCenter from '../Notifications/NotificationCenter';
 import { useAuthStore } from '../../stores/authStore';
@@ -16,11 +16,36 @@ interface MainLayoutProps {
   actions?: ReactNode;
 }
 
+function useOnboardingIncomplete(): boolean {
+  const [incomplete, setIncomplete] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('synapps_onboarding');
+      if (!raw) {
+        setIncomplete(false);
+        return;
+      }
+      const progress = JSON.parse(raw);
+      if (progress && Array.isArray(progress.completed) && !progress.completed.every(Boolean)) {
+        setIncomplete(true);
+      } else {
+        setIncomplete(false);
+      }
+    } catch {
+      setIncomplete(false);
+    }
+  }, []);
+
+  return incomplete;
+}
+
 const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const showResumeSetup = useOnboardingIncomplete();
 
   const handleLogout = async () => {
     const refreshToken =
@@ -69,6 +94,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
         </div>
 
         <nav className="nav-menu">
+          {showResumeSetup && (
+            <Link
+              to="/onboarding"
+              className="nav-item"
+              style={{ color: '#818cf8' }}
+            >
+              <span className="nav-icon">{'\uD83D\uDE80'}</span>
+              <span className="nav-label">Resume Setup</span>
+            </Link>
+          )}
           {navItems.map((item) => (
             <Link
               key={item.path}

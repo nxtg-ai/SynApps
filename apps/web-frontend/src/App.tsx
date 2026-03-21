@@ -9,6 +9,7 @@ import {
   Navigate,
   Link,
   useLocation,
+  useNavigate,
 } from 'react-router-dom';
 import webSocketService from './services/WebSocketService';
 import { Button } from './components/ui/button';
@@ -55,11 +56,50 @@ const ExecutionDashboardPage = React.lazy(
 const TestRunnerPage = React.lazy(
   () => import('./pages/TestRunnerPage/TestRunnerPage'),
 );
+const OnboardingPage = React.lazy(
+  () => import('./pages/OnboardingPage/OnboardingPage'),
+);
+
+/**
+ * Check whether the onboarding wizard should auto-trigger for new users.
+ * Redirects to /onboarding if the user is authenticated and has not completed setup.
+ */
+function useOnboardingRedirect(): void {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    // Only redirect from dashboard (entry point after login)
+    if (location.pathname !== '/dashboard') return;
+
+    try {
+      const raw = localStorage.getItem('synapps_onboarding');
+      if (!raw) {
+        // First visit — send to onboarding
+        navigate('/onboarding', { replace: true });
+        return;
+      }
+      const progress = JSON.parse(raw);
+      if (progress && !progress.completed?.every(Boolean)) {
+        // Incomplete onboarding — do not force redirect, let the "Resume Setup"
+        // link in MainLayout handle it. Only redirect on very first visit.
+      }
+    } catch {
+      // corrupt data — treat as new user
+      navigate('/onboarding', { replace: true });
+    }
+  }, [isAuthenticated, isLoading, location.pathname, navigate]);
+}
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const showShortcut = isAuthenticated && location.pathname !== '/dashboard';
+
+  useOnboardingRedirect();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-900">
@@ -82,6 +122,7 @@ const AppRoutes: React.FC = () => {
       >
         <Routes>
           {/* Public routes — no auth required */}
+          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/pricing" element={<PricingPage />} />
 
           {/* Guest-only routes */}

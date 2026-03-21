@@ -335,6 +335,21 @@ class ApiService {
   }
 
   /**
+   * Update an existing flow's nodes and edges via PUT.
+   */
+  public async updateFlow(
+    flowId: string,
+    data: {
+      name?: string;
+      nodes: Array<{ id: string; type: string; position: { x: number; y: number }; data: Record<string, any> }>;
+      edges: Array<{ id: string; source: string; target: string }>;
+    },
+  ): Promise<Record<string, any>> {
+    const response = await this.api.put(`/flows/${flowId}`, data);
+    return response.data;
+  }
+
+  /**
    * Execute a flow with the given input payload.
    */
   public async executeFlow(
