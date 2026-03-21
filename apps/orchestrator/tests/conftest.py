@@ -34,6 +34,7 @@ from apps.orchestrator.main import (
     flow_description_store,
     flow_edit_lock_store,
     flow_environment_store,
+    flow_error_alert_store,
     flow_expiry_store,
     flow_favorite_store,
     flow_group_store,
@@ -214,6 +215,7 @@ def _reset_all_stores() -> None:
     flow_retry_policy_store.reset()
     flow_timeout_store.reset()
     flow_approval_store.reset()
+    flow_error_alert_store.reset()
     flow_run_retention_store.reset()
     flow_trigger_config_store.reset()
     flow_version_lock_store.reset()

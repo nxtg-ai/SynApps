@@ -185,6 +185,7 @@
 | N-174 | Flow Approval Workflow — POST/GET/DELETE /flows/{id}/approval/{request,approve,reject} (pending/approved/rejected lifecycle) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-175 | Flow Trigger Configuration — PUT/GET/DELETE /flows/{id}/trigger-config (manual/webhook/schedule/event/api) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-176 | Flow Run History Retention — PUT/GET/DELETE /flows/{id}/run-retention (retain_days 1-365, max_runs) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-177 | Flow Error Alert Recipients — PUT/GET/DELETE /flows/{id}/error-alerts (emails + slack_channels, max 20 each) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 

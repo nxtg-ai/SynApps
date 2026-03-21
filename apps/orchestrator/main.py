@@ -11890,6 +11890,52 @@ class FlowRunRetentionStore:
 
 flow_run_retention_store = FlowRunRetentionStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowErrorAlertStore — N-177 Flow Error Alert Recipients
+# ---------------------------------------------------------------------------
+
+
+class FlowErrorAlertStore:
+    """Store error alert recipients for a flow."""
+
+    _MAX_RECIPIENTS: int = 20
+
+    def __init__(self) -> None:
+        self._alerts: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, emails: list[str], slack_channels: list[str]) -> dict[str, Any]:
+        if len(emails) > self._MAX_RECIPIENTS:
+            raise ValueError(f"emails exceeds maximum of {self._MAX_RECIPIENTS}")
+        if len(slack_channels) > self._MAX_RECIPIENTS:
+            raise ValueError(f"slack_channels exceeds maximum of {self._MAX_RECIPIENTS}")
+        with self._lock:
+            self._alerts[flow_id] = {
+                "emails": list(emails),
+                "slack_channels": list(slack_channels),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._alerts[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._alerts.get(flow_id)
+            if rec is None:
+                return None
+            return {"flow_id": flow_id, **rec}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._alerts.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._alerts.clear()
+
+
+flow_error_alert_store = FlowErrorAlertStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -20511,6 +20557,60 @@ async def delete_flow_run_retention(
     deleted = flow_run_retention_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No retention policy for this flow")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-177 Flow Error Alert Recipients — PUT/GET/DELETE /flows/{id}/error-alerts
+# ---------------------------------------------------------------------------
+
+
+class FlowErrorAlertBody(BaseModel):
+    emails: list[str] = Field(default_factory=list)
+    slack_channels: list[str] = Field(default_factory=list)
+
+
+@v1.put("/flows/{flow_id}/error-alerts", tags=["Flows"])
+async def set_flow_error_alerts(
+    flow_id: str,
+    body: FlowErrorAlertBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_error_alert_store.set(flow_id, body.emails, body.slack_channels)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/error-alerts", tags=["Flows"])
+async def get_flow_error_alerts(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_error_alert_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No error alert config for this flow")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/error-alerts", tags=["Flows"])
+async def delete_flow_error_alerts(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_error_alert_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No error alert config for this flow")
     return {"deleted": True, "flow_id": flow_id}
 
 
