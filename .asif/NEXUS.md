@@ -94,6 +94,10 @@
 | N-83 | Connectors Health Dashboard — Probe & Status UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 | N-84 | Subflows Browser — Cycle Validator UI | EXECUTION | SHIPPED | P1 | 2026-03-20 |
 | N-85 | Workflow Activity — Comments & Feed Viewer | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-86 | Run Trace — Trace, Diff & Re-run UI | EXECUTION | SHIPPED | P1 | 2026-03-20 |
+| N-87 | Quota Manager — API Key Quota Administration UI | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-88 | Failed Request Debugger — Inspect & Replay Failed Requests | PLATFORM | SHIPPED | P1 | 2026-03-20 |
+| N-89 | Webhook Triggers Manager — Register/List/Delete Triggers | PLATFORM | SHIPPED | P1 | 2026-03-20 |
 
 ---
 

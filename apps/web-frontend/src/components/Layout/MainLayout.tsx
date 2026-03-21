@@ -107,6 +107,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/quota-manager', icon: '📊', label: 'Quota Manager' },
     { path: '/failed-requests', icon: '🚨', label: 'Failed Requests' },
     { path: '/webhook-triggers', icon: '🎣', label: 'Webhook Triggers' },
+    { path: '/execution-replay', icon: '🔁', label: 'Exec Replay' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
