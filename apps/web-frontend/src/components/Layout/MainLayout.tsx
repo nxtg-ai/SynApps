@@ -104,6 +104,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title, actions }) => 
     { path: '/subflows', icon: '🔀', label: 'Subflows' },
     { path: '/workflow-activity', icon: '💬', label: 'Activity' },
     { path: '/run-trace', icon: '🔬', label: 'Run Trace' },
+    { path: '/quota-manager', icon: '📊', label: 'Quota Manager' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 

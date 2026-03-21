@@ -125,6 +125,9 @@ const WorkflowActivityPage = React.lazy(
 const RunTracePage = React.lazy(
   () => import('./pages/RunTracePage/RunTracePage'),
 );
+const QuotaManagerPage = React.lazy(
+  () => import('./pages/QuotaManagerPage/QuotaManagerPage'),
+);
 
 /**
  * Check whether the onboarding wizard should auto-trigger for new users.
@@ -544,6 +547,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <RunTracePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quota-manager"
+            element={
+              <ProtectedRoute>
+                <QuotaManagerPage />
               </ProtectedRoute>
             }
           />
