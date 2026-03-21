@@ -12037,6 +12037,63 @@ class FlowResourceLimitStore:
 
 flow_resource_limit_store = FlowResourceLimitStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowAclStore — N-180 Flow Access Control List
+# ---------------------------------------------------------------------------
+
+_ACL_PERMISSIONS: frozenset[str] = frozenset(["read", "write", "execute", "admin"])
+
+
+class FlowAclStore:
+    """Store per-user ACL entries for a flow."""
+
+    def __init__(self) -> None:
+        self._acls: dict[str, dict[str, dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def grant(self, flow_id: str, user: str, permissions: list[str]) -> dict[str, Any]:
+        invalid = set(permissions) - _ACL_PERMISSIONS
+        if invalid:
+            raise ValueError(f"invalid permissions: {sorted(invalid)}")
+        with self._lock:
+            if flow_id not in self._acls:
+                self._acls[flow_id] = {}
+            self._acls[flow_id][user] = {
+                "permissions": sorted(set(permissions)),
+                "granted_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, "user": user, **self._acls[flow_id][user]}
+
+    def revoke(self, flow_id: str, user: str) -> bool:
+        with self._lock:
+            flow_acl = self._acls.get(flow_id)
+            if flow_acl is None:
+                return False
+            return flow_acl.pop(user, None) is not None
+
+    def get(self, flow_id: str, user: str) -> dict[str, Any] | None:
+        with self._lock:
+            flow_acl = self._acls.get(flow_id, {})
+            entry = flow_acl.get(user)
+            if entry is None:
+                return None
+            return {"flow_id": flow_id, "user": user, **entry}
+
+    def list_entries(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                {"flow_id": flow_id, "user": u, **e}
+                for u, e in self._acls.get(flow_id, {}).items()
+            ]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._acls.clear()
+
+
+flow_acl_store = FlowAclStore()
+
 # ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
@@ -20824,6 +20881,74 @@ async def delete_flow_resource_limits(
     if not deleted:
         raise HTTPException(status_code=404, detail="No resource limits for this flow")
     return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-180 Flow ACL — POST/GET/DELETE /flows/{id}/acl/{user}  +  GET /flows/{id}/acl
+# ---------------------------------------------------------------------------
+
+
+class FlowAclGrantBody(BaseModel):
+    permissions: list[str] = Field(default_factory=list)
+
+
+@v1.post("/flows/{flow_id}/acl/{user}", tags=["Flows"])
+async def grant_flow_acl(
+    flow_id: str,
+    user: str,
+    body: FlowAclGrantBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        entry = flow_acl_store.grant(flow_id, user, body.permissions)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return entry
+
+
+@v1.get("/flows/{flow_id}/acl", tags=["Flows"])
+async def list_flow_acl(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entries = flow_acl_store.list_entries(flow_id)
+    return {"flow_id": flow_id, "entries": entries}
+
+
+@v1.get("/flows/{flow_id}/acl/{user}", tags=["Flows"])
+async def get_flow_acl_user(
+    flow_id: str,
+    user: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entry = flow_acl_store.get(flow_id, user)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="ACL entry not found")
+    return entry
+
+
+@v1.delete("/flows/{flow_id}/acl/{user}", tags=["Flows"])
+async def revoke_flow_acl(
+    flow_id: str,
+    user: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_acl_store.revoke(flow_id, user)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="ACL entry not found")
+    return {"deleted": True, "flow_id": flow_id, "user": user}
 
 
 # ---------------------------------------------------------------------------
