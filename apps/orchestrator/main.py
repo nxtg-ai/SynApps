@@ -11602,6 +11602,61 @@ flow_cost_config_store = FlowCostConfigStore()
 
 
 # ---------------------------------------------------------------------------
+# FlowVisibilityStore — N-172 Flow Visibility
+# ---------------------------------------------------------------------------
+
+_VISIBILITY_LEVELS: frozenset[str] = frozenset(["private", "internal", "public"])
+
+
+class FlowVisibilityStore:
+    """Stores per-flow visibility setting.
+
+    Levels:
+      private  — visible only to the flow owner
+      internal — visible to all authenticated users in the organization
+      public   — visible to anyone (including unauthenticated users)
+
+    Enforcement is downstream. New flows default to "private" (not stored
+    until explicitly set).
+    """
+
+    def __init__(self) -> None:
+        self._visibility: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, level: str) -> dict[str, Any]:
+        if level not in _VISIBILITY_LEVELS:
+            raise ValueError(f"Invalid visibility level: {level!r}")
+        with self._lock:
+            self._visibility[flow_id] = {
+                "visibility": level,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            return {"flow_id": flow_id, **self._visibility[flow_id]}
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            entry = self._visibility.get(flow_id)
+            if entry is None:
+                return None
+            return {"flow_id": flow_id, **entry}
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            if flow_id not in self._visibility:
+                return False
+            del self._visibility[flow_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._visibility.clear()
+
+
+flow_visibility_store = FlowVisibilityStore()
+
+
+# ---------------------------------------------------------------------------
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -19918,6 +19973,59 @@ async def delete_flow_cost_config(
     removed = flow_cost_config_store.delete(flow_id)
     if not removed:
         raise HTTPException(status_code=404, detail="No cost config set")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# ---------------------------------------------------------------------------
+# N-172 Flow Visibility — PUT/GET/DELETE /flows/{id}/visibility
+# ---------------------------------------------------------------------------
+
+
+class FlowVisibilityRequest(BaseModel):
+    visibility: str
+
+
+@v1.put("/flows/{flow_id}/visibility", tags=["Flows"])
+async def set_flow_visibility(
+    flow_id: str,
+    body: FlowVisibilityRequest,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        result = flow_visibility_store.set(flow_id, body.visibility)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {**result, "allowed_levels": sorted(_VISIBILITY_LEVELS)}
+
+
+@v1.get("/flows/{flow_id}/visibility", tags=["Flows"])
+async def get_flow_visibility(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    entry = flow_visibility_store.get(flow_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No visibility set")
+    return {**entry, "allowed_levels": sorted(_VISIBILITY_LEVELS)}
+
+
+@v1.delete("/flows/{flow_id}/visibility", tags=["Flows"])
+async def delete_flow_visibility(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    removed = flow_visibility_store.delete(flow_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No visibility set")
     return {"deleted": True, "flow_id": flow_id}
 
 

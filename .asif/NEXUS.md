@@ -180,6 +180,7 @@
 | N-169 | Flow Output Schema — PUT/GET/DELETE /flows/{id}/output-schema (JSON Schema output contract) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-170 | Flow Contact Info — PUT/GET/DELETE /flows/{id}/contact (name, email, slack_handle, team) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-171 | Flow Cost Estimate Config — PUT/GET/DELETE /flows/{id}/cost-config (cost_per_run, currency, billing_note) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-172 | Flow Visibility — PUT/GET/DELETE /flows/{id}/visibility (private/internal/public) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
