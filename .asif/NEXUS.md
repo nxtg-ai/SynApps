@@ -205,6 +205,7 @@
 | N-194 | Flow Webhook Signing — PUT/GET/DELETE /flows/{id}/webhook-signing (secret min 8 chars, algorithm sha256/sha512, enabled) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-195 | Flow Audit Export — POST/GET /flows/{id}/audit-export[/{job_id}] (format json/csv, from_ts/to_ts, status pending, max 20 jobs) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-196 | Flow Collaborator Roles — PUT/GET/DELETE /flows/{id}/collaborator-roles/{user_id} (viewer/editor/admin, max 50 per flow) | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-197 | Flow Input Mask — PUT/GET/DELETE /flows/{id}/input-mask (rules dict field→mask_type, types: full/partial/hash/redact, max 50 rules) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -3082,4 +3083,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-21 (cycle 92) — N-174–N-196 shipped (23 features); 4,040 backend tests; CI green; OpenAPI spec fixed
+> Last updated: 2026-03-21 (cycle 92) — N-174–N-197 shipped (24 features); 4,063 backend tests; CI green; OpenAPI spec fixed

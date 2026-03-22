@@ -49,6 +49,7 @@ from apps.orchestrator.main import (
     flow_feature_flag_store,
     flow_geo_restriction_store,
     flow_group_store,
+    flow_input_mask_store,
     flow_input_schema_store,
     flow_input_validation_store,
     flow_ip_allowlist_store,
@@ -233,6 +234,7 @@ def _reset_all_stores() -> None:
     flow_concurrency_store.reset()
     flow_contact_store.reset()
     flow_cost_config_store.reset()
+    flow_input_mask_store.reset()
     flow_input_schema_store.reset()
     flow_output_schema_store.reset()
     flow_retry_policy_store.reset()

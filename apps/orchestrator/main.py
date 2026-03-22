@@ -12947,6 +12947,64 @@ class FlowCollaboratorRoleStore:
 
 flow_collaborator_role_store = FlowCollaboratorRoleStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowInputMaskStore — N-197 Flow Input Mask
+# ---------------------------------------------------------------------------
+
+
+class FlowInputMaskStore:
+    """Per-flow input field masking rules (field_name → mask_type)."""
+
+    _ALLOWED_MASKS: frozenset[str] = frozenset(
+        {"full", "partial", "hash", "redact"}
+    )
+    _MAX_RULES: int = 50
+
+    def __init__(self) -> None:
+        self._masks: dict[str, dict[str, Any]] = {}  # flow_id → {rules, updated_at}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        rules: dict[str, str],
+        enabled: bool,
+    ) -> dict[str, Any]:
+        for field, mask in rules.items():
+            if mask not in self._ALLOWED_MASKS:
+                raise ValueError(
+                    f"mask type '{mask}' for field '{field}' must be one of "
+                    f"{sorted(self._ALLOWED_MASKS)}"
+                )
+        if len(rules) > self._MAX_RULES:
+            raise ValueError(f"Maximum {self._MAX_RULES} masking rules per flow")
+        with self._lock:
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "rules": rules,
+                "enabled": enabled,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._masks[flow_id] = record
+            return record.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._masks.get(flow_id)
+            return rec.copy() if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._masks.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._masks.clear()
+
+
+flow_input_mask_store = FlowInputMaskStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22800,6 +22858,59 @@ async def delete_flow_collaborator_role(
     if not deleted:
         raise HTTPException(status_code=404, detail="Collaborator role not found")
     return {"deleted": True, "user_id": user_id, "flow_id": flow_id}
+
+
+# N-197 Flow Input Mask — PUT/GET/DELETE /flows/{id}/input-mask
+# ---------------------------------------------------------------------------
+
+
+class FlowInputMaskBody(BaseModel):
+    rules: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+@v1.put("/flows/{flow_id}/input-mask", tags=["Flows"])
+async def set_flow_input_mask(
+    flow_id: str,
+    body: FlowInputMaskBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_input_mask_store.set(flow_id, body.rules, body.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/input-mask", tags=["Flows"])
+async def get_flow_input_mask(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_input_mask_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No input mask configured")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/input-mask", tags=["Flows"])
+async def delete_flow_input_mask(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_input_mask_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No input mask configured")
+    return {"deleted": True, "flow_id": flow_id}
 
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
