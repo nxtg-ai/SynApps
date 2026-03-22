@@ -8,10 +8,10 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    WorkflowAssertionEngine,
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import WorkflowAssertionEngine
+from apps.orchestrator.stores import (
     WorkflowTestStore,
-    app,
     audit_log_store,
     workflow_permission_store,
     workflow_test_store,

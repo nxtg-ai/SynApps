@@ -21,9 +21,9 @@ from apps.orchestrator.main import (
     AppletMessage,
     Orchestrator,
     app,
-    webhook_trigger_registry,
 )
 from apps.orchestrator.repositories import WorkflowRunRepository
+from apps.orchestrator.stores import webhook_trigger_registry
 
 # ---------------------------------------------------------------------------
 # Smoke flow definition: webhook_trigger → LLM → http_request → end

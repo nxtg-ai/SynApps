@@ -3,35 +3,39 @@ Request body models and shared base classes for SynApps Orchestrator.
 
 Extracted from main.py (M-1 router decomposition Step 2).
 """
+import logging
 import math
-import statistics
 import time
 from datetime import UTC, datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from typing import Any, Literal
 
 import httpx
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from apps.orchestrator.helpers import (
+    MARKETPLACE_CATEGORIES,
+)
 from apps.orchestrator.models import (
     APIKeyCreateRequestModel,
     AuthLoginRequestModel,
     AuthRefreshRequestModel,
     AuthRegisterRequestModel,
 )
+from apps.orchestrator.repositories import WorkflowRunRepository
 from apps.orchestrator.stores import (
     FlowDescriptionStore,
     FlowShareStore,
-    execution_log_store,
-    marketplace_registry,
-    featured_store,
     credit_ledger,
+    execution_log_store,
+    featured_store,
+    marketplace_registry,
     rating_store,
-    review_store,
     reply_store,
+    review_store,
 )
-from apps.orchestrator.helpers import KNOWN_NODE_TYPES, MARKETPLACE_CATEGORIES, HISTORY_VALID_STATUSES, _WORKFLOW_PATTERNS
-from apps.orchestrator.repositories import WorkflowRunRepository
+
 
 def paginate(items: list, page: int, page_size: int) -> dict:
     """Apply offset-based pagination to a list of items."""
@@ -190,9 +194,10 @@ class RollbackRequest(BaseModel):
 import hmac
 import os
 import re
-from fastapi import Header, HTTPException
-from apps.orchestrator.webhooks.manager import WEBHOOK_EVENTS
 
+from fastapi import Header, HTTPException
+
+from apps.orchestrator.webhooks.manager import WEBHOOK_EVENTS
 
 SYNAPPS_MASTER_KEY = os.environ.get("SYNAPPS_MASTER_KEY", "")
 ADMIN_KEY_SCOPES = frozenset({"read", "write", "admin"})

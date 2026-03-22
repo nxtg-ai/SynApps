@@ -8,9 +8,9 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     ReplayStore,
-    app,
     execution_log_store,
     replay_store,
 )

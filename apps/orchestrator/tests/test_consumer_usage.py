@@ -19,11 +19,11 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     ConsumerUsageTracker,
     _month_start_ts,
     _next_month_start_ts,
-    app,
     usage_tracker,
 )
 
@@ -361,7 +361,7 @@ class TestQuotaMonthlyReset:
         # Simulate month boundary crossing by adjusting _month_start
         t._month_start = time.time() - 1  # pretend last reset was 1 second ago
         # Force a new month start by mocking _month_start_ts
-        with patch("apps.orchestrator.main._month_start_ts", return_value=time.time() + 1):
+        with patch("apps.orchestrator.stores._month_start_ts", return_value=time.time() + 1):
             usage = t.get_usage("key-1")
         # After reset, usage should be None (cleared)
         assert usage is None
@@ -374,7 +374,7 @@ class TestQuotaMonthlyReset:
 
         # Simulate month boundary
         t._month_start = time.time() - 1
-        with patch("apps.orchestrator.main._month_start_ts", return_value=time.time() + 1):
+        with patch("apps.orchestrator.stores._month_start_ts", return_value=time.time() + 1):
             # Quota should still be set after usage is cleared
             assert t.get_quota("key-1") == 100
 

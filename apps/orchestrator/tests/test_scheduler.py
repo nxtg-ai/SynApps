@@ -16,8 +16,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from apps.orchestrator.helpers import KNOWN_NODE_TYPES
 from apps.orchestrator.main import (
-    KNOWN_NODE_TYPES,
     AppletMessage,
     SchedulerNodeApplet,
     SchedulerRegistry,

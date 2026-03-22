@@ -14,10 +14,10 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     AuthorizationCodeStore,
     OAuthClientRegistry,
-    app,
     auth_code_store,
     oauth_client_registry,
 )

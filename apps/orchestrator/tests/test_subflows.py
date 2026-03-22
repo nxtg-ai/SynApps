@@ -14,8 +14,10 @@ from apps.orchestrator.main import (
     AppletMessage,
     FlowRepository,
     SubflowApplet,
-    SubflowRegistry,
     app,
+)
+from apps.orchestrator.stores import (
+    SubflowRegistry,
     subflow_registry,
 )
 

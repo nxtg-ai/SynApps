@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import WorkflowHealthService
+from apps.orchestrator.stores import (
     AlertEngine,
     AlertRuleStore,
-    WorkflowHealthService,
     alert_rule_store,
-    app,
     audit_log_store,
     sse_event_bus,
     workflow_permission_store,

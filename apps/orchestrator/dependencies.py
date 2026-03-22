@@ -19,15 +19,21 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Header, HTTPException
 from sqlalchemy import select
 
+from apps.orchestrator.api_keys.manager import api_key_manager
 from apps.orchestrator.db import get_db_session
 from apps.orchestrator.models import (
     AuthTokenResponseModel,
+)
+from apps.orchestrator.models import (
     RefreshToken as AuthRefreshToken,
+)
+from apps.orchestrator.models import (
     User as AuthUser,
+)
+from apps.orchestrator.models import (
     UserAPIKey as AuthUserAPIKey,
 )
 from apps.orchestrator.stores import admin_key_registry
-from apps.orchestrator.api_keys.manager import api_key_manager
 
 logger = logging.getLogger("orchestrator")
 

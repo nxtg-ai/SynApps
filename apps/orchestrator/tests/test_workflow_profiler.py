@@ -16,11 +16,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    WorkflowProfilerService,
+from apps.orchestrator.helpers import _diff_workflows
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import WorkflowProfilerService
+from apps.orchestrator.stores import (
     WorkflowVersionStore,
-    _diff_workflows,
-    app,
     execution_log_store,
     workflow_version_store,
 )

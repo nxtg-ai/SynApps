@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 from apps.orchestrator.main import (
     _check_flow_permission,
     app,
-    workflow_permission_store,
 )
+from apps.orchestrator.stores import workflow_permission_store
 
 # ---------------------------------------------------------------------------
 # Fixtures

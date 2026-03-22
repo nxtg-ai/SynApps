@@ -9,9 +9,9 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     ExecutionQuotaStore,
-    app,
     audit_log_store,
     execution_quota_store,
     workflow_permission_store,

@@ -14,9 +14,11 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
     DynamicPluginApplet,
+    app,
+)
+from apps.orchestrator.stores import (
     PluginManifest,
     PluginRegistry,
-    app,
     plugin_registry,
 )
 

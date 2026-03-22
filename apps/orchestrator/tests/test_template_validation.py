@@ -3,7 +3,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import app, validate_template
+from apps.orchestrator.helpers import validate_template
+from apps.orchestrator.main import app
 
 
 @pytest.fixture

@@ -13,11 +13,11 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     IssueStore,
     MarketplaceRegistry,
     ReplyStore,
-    app,
     issue_store,
     marketplace_registry,
     rating_store,

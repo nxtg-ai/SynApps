@@ -20,8 +20,10 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
     NotificationService,
-    NotificationStore,
     app,
+)
+from apps.orchestrator.stores import (
+    NotificationStore,
     notification_store,
 )
 

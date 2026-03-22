@@ -25,13 +25,11 @@ import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
-from collections import deque
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 # Load environment variables: .env takes priority, falls back to .env.development
 from dotenv import load_dotenv
@@ -51,13 +49,9 @@ from croniter import croniter as CronIter
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import (
     APIRouter,
-    Body,
-    Depends,
     FastAPI,
-    Form,
     Header,
     HTTPException,
-    Query,
     Request,
     WebSocket,
     WebSocketDisconnect,
@@ -67,7 +61,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
-from sse_starlette.sse import EventSourceResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from apps.orchestrator.db import close_db_connections, get_db_session, init_db
@@ -76,8 +69,6 @@ from apps.orchestrator.models import (
     SUPPORTED_LLM_PROVIDERS,
     SUPPORTED_MEMORY_BACKENDS,
     APIKeyCreateRequestModel,
-    APIKeyCreateResponseModel,
-    APIKeyResponseModel,
     AuthLoginRequestModel,
     AuthRefreshRequestModel,
     AuthRegisterRequestModel,
@@ -103,7 +94,6 @@ from apps.orchestrator.models import (
     MemorySearchResultModel,
     MergeNodeConfigModel,
     TransformNodeConfigModel,
-    UserProfileModel,
 )
 from apps.orchestrator.models import (
     RefreshToken as AuthRefreshToken,
@@ -115,238 +105,31 @@ from apps.orchestrator.models import (
     UserAPIKey as AuthUserAPIKey,
 )
 from apps.orchestrator.repositories import FlowRepository, WorkflowRunRepository
-
 from apps.orchestrator.stores import (
-    ActivityFeedStore,
-    AdminKeyRegistry,
-    AlertEngine,
-    AlertRuleStore,
-    AuditLogStore,
-    AuthorizationCodeStore,
-    CollaborationActivityStore,
     ConnectorError,
-    ConnectorHealthTracker,
     ConnectorStatus,
-    ConsumerUsageTracker,
-    CostTrackerStore,
-    CreditLedger,
-    DebugSession,
-    DebugSessionStore,
-    DeprecationRegistry,
     ErrorCategory,
-    ExecutionDashboardStore,
-    ExecutionLogStore,
-    ExecutionQuotaStore,
-    FailedRequestStore,
-    FeaturedStore,
-    FlowAccessLogStore,
-    FlowAclStore,
-    FlowAliasStore,
-    FlowAllowedOriginsStore,
-    FlowAnnotationStore,
-    FlowApprovalStore,
-    FlowArchiveStore,
-    FlowAuditExportStore,
-    FlowBookmarkStore,
-    FlowCachingConfigStore,
-    FlowChangelogStore,
-    FlowCircuitBreakerStore,
-    FlowCollaboratorRoleStore,
-    FlowCollaboratorStore,
-    FlowConcurrencyStore,
-    FlowContactStore,
-    FlowCostConfigStore,
-    FlowCustomDomainStore,
-    FlowCustomFieldStore,
-    FlowDataClassificationStore,
-    FlowDataRetentionStore,
-    FlowDependencyStore,
-    FlowDescriptionStore,
-    FlowEditLockStore,
-    FlowEnvironmentStore,
-    FlowErrorAlertStore,
-    FlowExecutionHookStore,
-    FlowExecutionModeStore,
-    FlowExpiryStore,
-    FlowFavoriteStore,
-    FlowFeatureFlagStore,
-    FlowGeoRestrictionStore,
-    FlowGroupStore,
-    FlowInputMaskStore,
-    FlowInputSchemaStore,
-    FlowInputValidationStore,
-    FlowIpAllowlistStore,
-    FlowLabelStore,
-    FlowMaintenanceWindowStore,
-    FlowMetadataStore,
-    FlowNotifPrefStore,
-    FlowNotificationChannelStore,
-    FlowObservabilityConfigStore,
-    FlowOutputDestinationStore,
-    FlowOutputSchemaStore,
-    FlowOutputTransformStore,
-    FlowPinStore,
-    FlowPriorityStore,
-    FlowRateLimitStore,
-    FlowReactionStore,
-    FlowResourceLimitStore,
-    FlowRetryPolicyStore,
-    FlowRunPresetStore,
-    FlowRunRetentionStore,
-    FlowScheduleStore,
-    FlowShareStore,
-    FlowSnapshotStore,
-    FlowTagStore,
-    FlowTimeoutStore,
-    FlowTriggerConfigStore,
-    FlowVersionLockStore,
-    FlowVisibilityStore,
-    FlowWatchStore,
-    FlowWebhookSigningStore,
-    FlowWebhookStore,
-    IssueStore,
-    MarketplaceRegistry,
-    NodeCommentStore,
-    NodeLockStore,
-    NotificationStore,
-    OAuthClientRegistry,
-    ExecutionCostRecord,
-    PluginManifest,
-    PluginRegistry,
-    PresenceStore,
-    RatingStore,
-    ReplayStore,
-    ReplyStore,
     RetryPolicy,
-    ReviewStore,
-    RollbackAuditStore,
-    SLAStore,
-    SSEEventBus,
     SchedulerService,
-    SubflowRegistry,
-    TaskQueue,
-    TemplateRegistry,
-    TestSuiteStore,
-    WebhookDebugStore,
     WebhookTriggerRegistry,
-    WorkflowPermissionStore,
-    WorkflowSecretStore,
-    WorkflowTestStore,
-    WorkflowVariableStore,
-    WorkflowVersionStore,
-    _FAILED_REQUEST_CAP,
-    _SENSITIVE_HEADERS,
-    _month_start_ts,
-    _next_month_start_ts,
     activity_feed_store,
     admin_key_registry,
-    alert_engine,
-    alert_rule_store,
-    audit_log_store,
-    auth_code_store,
-    collaboration_activity_store,
     connector_health,
-    usage_tracker,
     cost_tracker_store,
-    credit_ledger,
-    debug_session_store,
     deprecation_registry,
     execution_dashboard_store,
     execution_log_store,
-    execution_quota_store,
     failed_request_store,
-    featured_store,
-    flow_access_log_store,
-    flow_acl_store,
-    flow_alias_store,
-    flow_allowed_origins_store,
-    flow_annotation_store,
-    flow_approval_store,
-    flow_archive_store,
-    flow_audit_export_store,
-    flow_bookmark_store,
-    flow_caching_config_store,
-    flow_changelog_store,
-    flow_circuit_breaker_store,
-    flow_collaborator_role_store,
-    flow_collaborator_store,
-    flow_concurrency_store,
-    flow_contact_store,
-    flow_cost_config_store,
-    flow_custom_domain_store,
-    flow_custom_field_store,
-    flow_data_classification_store,
-    flow_data_retention_store,
-    flow_dependency_store,
-    flow_description_store,
-    flow_edit_lock_store,
-    flow_environment_store,
-    flow_error_alert_store,
-    flow_execution_hook_store,
-    flow_execution_mode_store,
-    flow_expiry_store,
-    flow_favorite_store,
-    flow_feature_flag_store,
-    flow_geo_restriction_store,
-    flow_group_store,
-    flow_input_mask_store,
-    flow_input_schema_store,
-    flow_input_validation_store,
-    flow_ip_allowlist_store,
-    flow_label_store,
-    flow_maintenance_window_store,
-    flow_metadata_store,
-    flow_notif_pref_store,
-    flow_notification_channel_store,
-    flow_observability_config_store,
-    flow_output_destination_store,
-    flow_output_schema_store,
-    flow_output_transform_store,
-    flow_pin_store,
-    flow_priority_store,
-    flow_rate_limit_store,
-    flow_reaction_store,
-    flow_resource_limit_store,
-    flow_retry_policy_store,
-    flow_run_preset_store,
-    flow_run_retention_store,
-    flow_schedule_store,
-    flow_share_store,
-    flow_snapshot_store,
-    flow_tag_store,
-    flow_timeout_store,
-    flow_trigger_config_store,
-    flow_version_lock_store,
-    flow_visibility_store,
-    flow_watch_store,
-    flow_webhook_signing_store,
-    flow_webhook_store,
-    issue_store,
-    marketplace_registry,
-    node_comment_store,
-    node_lock_store,
     notification_store,
-    oauth_client_registry,
     plugin_registry,
-    presence_store,
-    rating_store,
-    replay_store,
-    reply_store,
-    review_store,
-    rollback_audit_store,
     sla_store,
     sse_event_bus,
     subflow_registry,
-    task_queue,
-    template_registry,
-    test_suite_store,
-    webhook_debug_store,
+    usage_tracker,
     webhook_trigger_registry,
     workflow_permission_store,
     workflow_secret_store,
-    workflow_test_store,
     workflow_variable_store,
-    workflow_version_store,
 )
 
 try:
@@ -1119,7 +902,6 @@ async def probe_all_connectors() -> list[dict[str, Any]]:
 # ============================================================
 
 from apps.orchestrator.webhooks.manager import (
-    WEBHOOK_EVENTS,
     WebhookManager,
     emit_webhook_event,
 )
@@ -1182,8 +964,11 @@ async def emit_event(event: str, data: dict[str, Any]) -> None:
 def _init_webhook_trigger_registry() -> None:
     """Re-initialise webhook_trigger_registry with Fernet encryption."""
     global webhook_trigger_registry
+    import apps.orchestrator.stores as _stores
     enc, dec = _get_fernet_encrypt()
     webhook_trigger_registry = WebhookTriggerRegistry(encrypt_fn=enc, decrypt_fn=dec)
+    # Keep stores module in sync so conftest.py resets the correct instance
+    _stores.webhook_trigger_registry = webhook_trigger_registry
 
 
 # ============================================================
@@ -7647,7 +7432,6 @@ SCHEDULER_CREDENTIAL_FIELDS = frozenset(
 
 def _compute_next_run(cron_expr: str, base: "datetime | None" = None) -> str:
     """Return ISO-8601 string of the next scheduled run time for a cron expression."""
-    from datetime import UTC  # noqa: PLC0415
     from datetime import datetime as _dt
 
     now = base or _dt.now(UTC)
@@ -7676,7 +7460,6 @@ class SchedulerRegistry:
         enabled: bool = True,
     ) -> dict[str, Any]:
         """Validate cron expression and register a new schedule."""
-        from datetime import UTC  # noqa: PLC0415
         from datetime import datetime as _dt
 
         next_run = _compute_next_run(cron_expr)  # raises ValueError if invalid
@@ -7725,7 +7508,6 @@ class SchedulerRegistry:
 
     def get_due(self) -> "list[dict[str, Any]]":
         """Return enabled schedules whose next_run is in the past."""
-        from datetime import UTC  # noqa: PLC0415
         from datetime import datetime as _dt
 
         now_iso = _dt.now(UTC).replace(tzinfo=None).isoformat()
@@ -7792,7 +7574,6 @@ class DeadLetterQueue:
         error_details: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Add a failed run to the DLQ."""
-        from datetime import UTC  # noqa: PLC0415
         from datetime import datetime as _dt
 
         entry_id = str(uuid.uuid4())
@@ -9183,7 +8964,6 @@ class FlowVersionRegistry:
 
     def snapshot(self, flow_id: str, flow_data: dict[str, Any]) -> dict[str, Any]:
         """Snapshot the current state of a flow before it is overwritten."""
-        from datetime import UTC  # noqa: PLC0415
         from datetime import datetime as _dt  # noqa: PLC0415
 
         version_id = str(uuid.uuid4())
@@ -11232,58 +11012,47 @@ v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 # Re-export symbols that tests import directly from main.py
 # These were moved to helpers.py / request_models.py during M-1 decomposition.
 from apps.orchestrator.helpers import (  # noqa: E402
-    KNOWN_NODE_TYPES,
-    MARKETPLACE_CATEGORIES,
-    HISTORY_VALID_STATUSES,
-    _WORKFLOW_PATTERNS,
-    _bump_patch,
-    _build_run_diff,
-    _check_flow_permission,
     _diff_flow_snapshots,
-    _diff_workflows,
     _estimate_node_cost,
     _extract_trace_from_run,
     _finalize_execution_trace,
-    _load_yaml_template,
-    _match_description_to_node,
-    _match_output,
     _new_execution_trace,
-    _parse_semver,
-    _score_node_suggestions,
-    _scrub_node_credentials,
     _seed_marketplace_listings,
     _trace_value,
-    _user_color,
-    paginate,
-    validate_template,
 )
 from apps.orchestrator.request_models import (  # noqa: E402
-    AnalyticsService,
-    CostCalculator,
     DynamicPluginApplet,
-    MarketplaceSearchEngine,
-    PublisherAnalyticsService,
-    TrendingService,
-    WorkflowAnalyticsDashboard,
-    WorkflowAssertionEngine,
-    WorkflowHealthService,
-    WorkflowProfilerService,
 )
-
+from apps.orchestrator.routers import (
+    admin as admin_router,
+)
 
 # ============================================================
 # Import sub-routers (M-1 decomposition)
 # ============================================================
 from apps.orchestrator.routers import (
     auth as auth_router,
-    monitoring as monitoring_router,
-    marketplace as marketplace_router,
-    webhooks as webhooks_router,
-    admin as admin_router,
+)
+from apps.orchestrator.routers import (
     collaboration as collaboration_router,
+)
+from apps.orchestrator.routers import (
     execution as execution_router,
-    flows as flows_router,
+)
+from apps.orchestrator.routers import (
     flow_config as flow_config_router,
+)
+from apps.orchestrator.routers import (
+    flows as flows_router,
+)
+from apps.orchestrator.routers import (
+    marketplace as marketplace_router,
+)
+from apps.orchestrator.routers import (
+    monitoring as monitoring_router,
+)
+from apps.orchestrator.routers import (
+    webhooks as webhooks_router,
 )
 
 v1.include_router(auth_router.router)
@@ -11327,6 +11096,7 @@ flow_config_router.flow_version_registry = flow_version_registry
 
 # Also populate Orchestrator in helpers module (used by helper functions)
 import apps.orchestrator.helpers as _helpers_mod  # noqa: E402
+
 _helpers_mod.Orchestrator = Orchestrator
 
 # Include versioned router

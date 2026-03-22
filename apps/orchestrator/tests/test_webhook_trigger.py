@@ -20,13 +20,15 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from apps.orchestrator.helpers import KNOWN_NODE_TYPES
 from apps.orchestrator.main import (
-    KNOWN_NODE_TYPES,
     AppletMessage,
     WebhookTriggerNodeApplet,
-    WebhookTriggerRegistry,
     app,
     applet_registry,
+)
+from apps.orchestrator.stores import (
+    WebhookTriggerRegistry,
     webhook_trigger_registry,
 )
 

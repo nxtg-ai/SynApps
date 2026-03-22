@@ -16,8 +16,10 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
     AppletMessage,
-    ExecutionLogStore,
     app,
+)
+from apps.orchestrator.stores import (
+    ExecutionLogStore,
     execution_log_store,
 )
 

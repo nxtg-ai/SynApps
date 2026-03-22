@@ -3,10 +3,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     _bump_patch,
     _parse_semver,
-    app,
     template_registry,
 )
 

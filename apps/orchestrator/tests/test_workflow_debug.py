@@ -21,9 +21,11 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
     AppletMessage,
+    app,
+)
+from apps.orchestrator.stores import (
     DebugSession,
     DebugSessionStore,
-    app,
     audit_log_store,
     debug_session_store,
     workflow_permission_store,

@@ -16,10 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     _SENSITIVE_HEADERS,
     FailedRequestStore,
-    app,
     failed_request_store,
 )
 

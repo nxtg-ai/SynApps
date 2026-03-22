@@ -17,12 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.helpers import (
     _WORKFLOW_PATTERNS,
     _match_description_to_node,
     _score_node_suggestions,
-    app,
 )
+from apps.orchestrator.main import app
 
 # ---------------------------------------------------------------------------
 # Helpers

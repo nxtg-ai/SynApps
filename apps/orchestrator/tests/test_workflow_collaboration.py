@@ -12,12 +12,12 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.helpers import _user_color
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     CollaborationActivityStore,
     NodeLockStore,
     PresenceStore,
-    _user_color,
-    app,
 )
 
 # ---------------------------------------------------------------------------

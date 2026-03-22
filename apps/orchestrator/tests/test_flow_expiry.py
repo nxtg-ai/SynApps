@@ -20,7 +20,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import app, flow_expiry_store
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import flow_expiry_store
 
 # ---------------------------------------------------------------------------
 # Helpers

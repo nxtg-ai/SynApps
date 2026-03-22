@@ -17,9 +17,9 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from apps.orchestrator.db import close_db_connections, init_db
+from apps.orchestrator.helpers import KNOWN_NODE_TYPES
 from apps.orchestrator.main import (
     ERROR_HANDLER_NODE_TYPE,
-    KNOWN_NODE_TYPES,
     AppletMessage,
     DeadLetterQueue,
     ErrorHandlerNodeApplet,

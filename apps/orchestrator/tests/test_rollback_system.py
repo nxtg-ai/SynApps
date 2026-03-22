@@ -16,10 +16,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    RollbackAuditStore,
-    app,
-)
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import RollbackAuditStore
 
 # ---------------------------------------------------------------------------
 # Helpers

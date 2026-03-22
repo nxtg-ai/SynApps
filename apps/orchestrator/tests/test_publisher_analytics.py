@@ -15,9 +15,9 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    PublisherAnalyticsService,
-    app,
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import PublisherAnalyticsService
+from apps.orchestrator.stores import (
     credit_ledger,
     featured_store,
     marketplace_registry,

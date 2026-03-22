@@ -24,7 +24,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import FlowShareStore, app
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import FlowShareStore, flow_share_store
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -176,8 +177,6 @@ class TestGetSharedFlow:
             )
             share_token = share_resp.json()["token"]
             # Monkey-patch expires_at to the past
-            from apps.orchestrator.main import flow_share_store
-
             with flow_share_store._lock:
                 flow_share_store._tokens[share_token]["expires_at"] = time.time() - 1
             resp = client.get(f"/api/v1/flows/shared/{share_token}")

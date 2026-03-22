@@ -3,7 +3,11 @@ import importlib
 import pytest
 
 import apps.orchestrator.db as db_module
-from apps.orchestrator.main import (
+from apps.orchestrator.middleware.rate_limiter import (
+    TokenBucketRegistry,
+    _SlidingWindowCounter,
+)
+from apps.orchestrator.stores import (
     activity_feed_store,
     admin_key_registry,
     alert_rule_store,
@@ -109,10 +113,6 @@ from apps.orchestrator.main import (
     workflow_test_store,
     workflow_variable_store,
     workflow_version_store,
-)
-from apps.orchestrator.middleware.rate_limiter import (
-    TokenBucketRegistry,
-    _SlidingWindowCounter,
 )
 
 

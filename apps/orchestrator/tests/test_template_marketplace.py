@@ -3,13 +3,13 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.helpers import (
     MARKETPLACE_CATEGORIES,
     _load_yaml_template,
     _scrub_node_credentials,
-    app,
-    template_registry,
 )
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import template_registry
 
 
 @pytest.fixture

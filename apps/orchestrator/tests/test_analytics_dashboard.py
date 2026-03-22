@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    WorkflowAnalyticsDashboard,
-    app,
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import WorkflowAnalyticsDashboard
+from apps.orchestrator.stores import (
     audit_log_store,
     cost_tracker_store,
     execution_log_store,

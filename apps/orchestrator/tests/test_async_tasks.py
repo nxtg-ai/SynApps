@@ -5,7 +5,9 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import _load_yaml_template, app, task_queue
+from apps.orchestrator.helpers import _load_yaml_template
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import task_queue
 
 
 @pytest.fixture

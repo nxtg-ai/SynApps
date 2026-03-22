@@ -22,6 +22,8 @@ from fastapi.testclient import TestClient
 from apps.orchestrator.main import (
     AppletMessage,
     app,
+)
+from apps.orchestrator.stores import (
     marketplace_registry,
     notification_store,
     webhook_trigger_registry,

@@ -7,9 +7,9 @@ autocomplete endpoint integration, and scoring behavior.
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    MarketplaceSearchEngine,
-    app,
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import MarketplaceSearchEngine
+from apps.orchestrator.stores import (
     marketplace_registry,
     rating_store,
 )

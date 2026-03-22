@@ -13,9 +13,9 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     ExecutionDashboardStore,
-    app,
     execution_dashboard_store,
 )
 

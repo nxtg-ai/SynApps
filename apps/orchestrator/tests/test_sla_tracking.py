@@ -9,9 +9,9 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     SLAStore,
-    app,
     sla_store,
 )
 

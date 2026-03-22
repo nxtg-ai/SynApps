@@ -16,8 +16,8 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    app,
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import (
     marketplace_registry,
     workflow_secret_store,
     workflow_variable_store,

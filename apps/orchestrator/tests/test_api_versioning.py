@@ -17,8 +17,10 @@ from apps.orchestrator.main import (
     API_SUPPORTED_VERSIONS,
     API_VERSION,
     API_VERSION_DATE,
-    DeprecationRegistry,
     app,
+)
+from apps.orchestrator.stores import (
+    DeprecationRegistry,
     deprecation_registry,
 )
 

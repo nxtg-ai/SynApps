@@ -35,9 +35,9 @@ from apps.orchestrator.main import (
     _health_cache,
     _maybe_emit_status_change,
     app,
-    connector_health,
     webhook_registry,
 )
+from apps.orchestrator.stores import connector_health
 from apps.orchestrator.webhooks.manager import (
     WEBHOOK_DELIVERY_TIMEOUT,
     WEBHOOK_EVENTS,

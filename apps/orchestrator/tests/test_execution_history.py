@@ -5,7 +5,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import HISTORY_VALID_STATUSES, app
+from apps.orchestrator.helpers import HISTORY_VALID_STATUSES
+from apps.orchestrator.main import app
 from apps.orchestrator.repositories import FlowRepository, WorkflowRunRepository
 
 

@@ -19,11 +19,13 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
     AppletMessage,
-    WorkflowSecretStore,
-    WorkflowVariableStore,
     _mask_secrets,
     _resolve_template,
     app,
+)
+from apps.orchestrator.stores import (
+    WorkflowSecretStore,
+    WorkflowVariableStore,
     workflow_secret_store,
     workflow_variable_store,
 )

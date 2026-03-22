@@ -10,7 +10,8 @@ Covers:
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import CostCalculator, app
+from apps.orchestrator.main import app
+from apps.orchestrator.request_models import CostCalculator
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 

@@ -16,7 +16,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import FlowDescriptionStore, app
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import FlowDescriptionStore
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 
 from apps.orchestrator.main import (
     ADMIN_KEY_SCOPES,
-    admin_key_registry,
     app,
 )
+from apps.orchestrator.stores import admin_key_registry
 
 MASTER_KEY = "test-master-key-secret"
 

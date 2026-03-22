@@ -22,12 +22,14 @@ import pytest
 from apps.orchestrator.main import (
     CONNECTOR_RETRY_POLICIES,
     DEFAULT_RETRY_POLICY,
-    ConnectorError,
-    ErrorCategory,
-    RetryPolicy,
     classify_error,
     execute_with_retry,
     get_retry_policy,
+)
+from apps.orchestrator.stores import (
+    ConnectorError,
+    ErrorCategory,
+    RetryPolicy,
 )
 
 # ---------------------------------------------------------------------------

@@ -10,11 +10,9 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import (
-    TestSuiteStore,
-    _match_output,
-    app,
-)
+from apps.orchestrator.helpers import _match_output
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import TestSuiteStore
 
 # ---------------------------------------------------------------------------
 # Helpers

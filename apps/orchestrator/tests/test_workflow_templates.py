@@ -14,7 +14,8 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import app, marketplace_registry
+from apps.orchestrator.main import app
+from apps.orchestrator.stores import marketplace_registry
 
 # ---------------------------------------------------------------------------
 # Repo root — used for locating YAML files
@@ -40,7 +41,7 @@ def _reset_and_reseed_marketplace():
     """Reset registry before each test, then reseed to simulate fresh startup."""
     marketplace_registry.reset()
     # Import the seed function and re-run it so the registry has built-in listings.
-    from apps.orchestrator.main import _seed_marketplace_listings
+    from apps.orchestrator.helpers import _seed_marketplace_listings
 
     _seed_marketplace_listings()
     yield
@@ -165,7 +166,7 @@ class TestMarketplaceSeeding:
 
     def test_seed_is_idempotent(self):
         """Calling _seed_marketplace_listings twice must not create duplicates."""
-        from apps.orchestrator.main import _seed_marketplace_listings
+        from apps.orchestrator.helpers import _seed_marketplace_listings
 
         _seed_marketplace_listings()  # second call
         with marketplace_registry._lock:

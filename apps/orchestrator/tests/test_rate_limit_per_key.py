@@ -5,11 +5,12 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.orchestrator.main import admin_key_registry, app
+from apps.orchestrator.main import app
 from apps.orchestrator.middleware.rate_limiter import (
     _identify_client,
     _SlidingWindowCounter,
 )
+from apps.orchestrator.stores import admin_key_registry
 
 MASTER_KEY = "test-master-key-secret"
 
