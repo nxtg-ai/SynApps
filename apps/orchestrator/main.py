@@ -12786,6 +12786,51 @@ class FlowCustomDomainStore:
 
 flow_custom_domain_store = FlowCustomDomainStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowWebhookSigningStore — N-194 Flow Webhook Signing
+# ---------------------------------------------------------------------------
+
+
+class FlowWebhookSigningStore:
+    """Per-flow HMAC signing configuration for outbound webhooks."""
+
+    _ALLOWED_ALGOS: frozenset[str] = frozenset({"sha256", "sha512"})
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, secret: str, algorithm: str, enabled: bool) -> dict[str, Any]:
+        if algorithm not in self._ALLOWED_ALGOS:
+            raise ValueError(f"algorithm must be one of {sorted(self._ALLOWED_ALGOS)}")
+        with self._lock:
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "secret": secret,
+                "algorithm": algorithm,
+                "enabled": enabled,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._configs[flow_id] = record
+            return record.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._configs.get(flow_id)
+            return rec.copy() if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._configs.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_webhook_signing_store = FlowWebhookSigningStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22436,6 +22481,70 @@ async def delete_flow_custom_domain(
     deleted = flow_custom_domain_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No custom domain configured")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# N-194 Flow Webhook Signing — PUT/GET/DELETE /flows/{id}/webhook-signing
+# ---------------------------------------------------------------------------
+
+
+class FlowWebhookSigningBody(BaseModel):
+    secret: str = Field(..., min_length=8, max_length=512)
+    algorithm: str = Field(default="sha256")
+    enabled: bool = True
+
+    @field_validator("algorithm")
+    @classmethod
+    def validate_algorithm(cls, v: str) -> str:
+        allowed = {"sha256", "sha512"}
+        if v not in allowed:
+            raise ValueError(f"algorithm must be one of {sorted(allowed)}")
+        return v
+
+
+@v1.put("/flows/{flow_id}/webhook-signing", tags=["Flows"])
+async def set_flow_webhook_signing(
+    flow_id: str,
+    body: FlowWebhookSigningBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_webhook_signing_store.set(
+            flow_id, body.secret, body.algorithm, body.enabled
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/webhook-signing", tags=["Flows"])
+async def get_flow_webhook_signing(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_webhook_signing_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No webhook signing configured")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/webhook-signing", tags=["Flows"])
+async def delete_flow_webhook_signing(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_webhook_signing_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No webhook signing configured")
     return {"deleted": True, "flow_id": flow_id}
 
 
