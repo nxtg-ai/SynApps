@@ -13005,6 +13005,59 @@ class FlowInputMaskStore:
 
 flow_input_mask_store = FlowInputMaskStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowOutputTransformStore — N-198 Flow Output Transform
+# ---------------------------------------------------------------------------
+
+
+class FlowOutputTransformStore:
+    """Per-flow output transformation configuration."""
+
+    _ALLOWED_FORMATS: frozenset[str] = frozenset({"json", "xml", "csv", "text"})
+
+    def __init__(self) -> None:
+        self._transforms: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        expression: str,
+        output_format: str,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        if output_format not in self._ALLOWED_FORMATS:
+            raise ValueError(
+                f"output_format must be one of {sorted(self._ALLOWED_FORMATS)}"
+            )
+        with self._lock:
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "expression": expression,
+                "output_format": output_format,
+                "enabled": enabled,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._transforms[flow_id] = record
+            return record.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._transforms.get(flow_id)
+            return rec.copy() if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._transforms.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._transforms.clear()
+
+
+flow_output_transform_store = FlowOutputTransformStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22910,6 +22963,69 @@ async def delete_flow_input_mask(
     deleted = flow_input_mask_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No input mask configured")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# N-198 Flow Output Transform — PUT/GET/DELETE /flows/{id}/output-transform
+# ---------------------------------------------------------------------------
+
+
+class FlowOutputTransformBody(BaseModel):
+    expression: str = Field(..., min_length=1, max_length=2048)
+    output_format: str = Field(default="json")
+    enabled: bool = True
+
+    @field_validator("output_format")
+    @classmethod
+    def validate_output_format(cls, v: str) -> str:
+        allowed = {"json", "xml", "csv", "text"}
+        if v not in allowed:
+            raise ValueError(f"output_format must be one of {sorted(allowed)}")
+        return v
+
+
+@v1.put("/flows/{flow_id}/output-transform", tags=["Flows"])
+async def set_flow_output_transform(
+    flow_id: str,
+    body: FlowOutputTransformBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow_output_transform_store.set(
+        flow_id=flow_id,
+        expression=body.expression,
+        output_format=body.output_format,
+        enabled=body.enabled,
+    )
+
+
+@v1.get("/flows/{flow_id}/output-transform", tags=["Flows"])
+async def get_flow_output_transform(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_output_transform_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No output transform configured")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/output-transform", tags=["Flows"])
+async def delete_flow_output_transform(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_output_transform_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No output transform configured")
     return {"deleted": True, "flow_id": flow_id}
 
 

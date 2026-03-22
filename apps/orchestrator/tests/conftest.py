@@ -61,6 +61,7 @@ from apps.orchestrator.main import (
     flow_observability_config_store,
     flow_output_destination_store,
     flow_output_schema_store,
+    flow_output_transform_store,
     flow_pin_store,
     flow_priority_store,
     flow_rate_limit_store,
@@ -237,6 +238,7 @@ def _reset_all_stores() -> None:
     flow_input_mask_store.reset()
     flow_input_schema_store.reset()
     flow_output_schema_store.reset()
+    flow_output_transform_store.reset()
     flow_retry_policy_store.reset()
     flow_timeout_store.reset()
     flow_approval_store.reset()

@@ -2,7 +2,6 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SynApps Orchestrator",
-    "description": "Visual AI workflow builder API. Connect specialized AI agent nodes, execute workflows in real-time, and manage LLM provider integrations. Authenticate via JWT bearer tokens or API keys.",
     "version": "1.0.0"
   },
   "paths": {
@@ -22884,6 +22883,243 @@
         }
       }
     },
+    "/api/v1/flows/{flow_id}/output-transform": {
+      "put": {
+        "tags": [
+          "v1",
+          "Flows"
+        ],
+        "summary": "Set Flow Output Transform",
+        "operationId": "set_flow_output_transform_api_v1_flows__flow_id__output_transform_put",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlowOutputTransformBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Set Flow Output Transform Api V1 Flows  Flow Id  Output Transform Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "v1",
+          "Flows"
+        ],
+        "summary": "Get Flow Output Transform",
+        "operationId": "get_flow_output_transform_api_v1_flows__flow_id__output_transform_get",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Flow Output Transform Api V1 Flows  Flow Id  Output Transform Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "v1",
+          "Flows"
+        ],
+        "summary": "Delete Flow Output Transform",
+        "operationId": "delete_flow_output_transform_api_v1_flows__flow_id__output_transform_delete",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Flow Output Transform Api V1 Flows  Flow Id  Output Transform Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/flows/{flow_id}/archive": {
       "post": {
         "tags": [
@@ -35150,6 +35386,31 @@
         ],
         "title": "FlowOutputSchemaRequest"
       },
+      "FlowOutputTransformBody": {
+        "properties": {
+          "expression": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Expression"
+          },
+          "output_format": {
+            "type": "string",
+            "title": "Output Format",
+            "default": "json"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "expression"
+        ],
+        "title": "FlowOutputTransformBody"
+      },
       "FlowPriorityRequest": {
         "properties": {
           "priority": {
@@ -37047,35 +37308,5 @@
         "title": "_SetQuotaRequest"
       }
     }
-  },
-  "tags": [
-    {
-      "name": "Auth",
-      "description": "Registration, login, token refresh, API key management."
-    },
-    {
-      "name": "Flows",
-      "description": "Create, list, update, delete, import, and export workflows."
-    },
-    {
-      "name": "Runs",
-      "description": "Execute workflows and inspect run results, traces, and diffs."
-    },
-    {
-      "name": "Providers",
-      "description": "LLM and image generation provider registries."
-    },
-    {
-      "name": "Applets",
-      "description": "Node type catalog (registered applet metadata)."
-    },
-    {
-      "name": "Dashboard",
-      "description": "Portfolio health, template status, provider overview."
-    },
-    {
-      "name": "Health",
-      "description": "Service health checks."
-    }
-  ]
+  }
 }
