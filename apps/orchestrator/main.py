@@ -12670,6 +12670,67 @@ class FlowFeatureFlagStore:
 
 flow_feature_flag_store = FlowFeatureFlagStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowExecutionHookStore — N-192 Flow Execution Hooks
+# ---------------------------------------------------------------------------
+
+
+class FlowExecutionHookStore:
+    """Per-flow pre/post execution hooks (webhook URLs or inline scripts)."""
+
+    _MAX_HOOKS: int = 20
+
+    def __init__(self) -> None:
+        self._hooks: dict[str, dict[str, dict[str, Any]]] = {}  # flow_id → hook_id → record
+        self._lock = threading.Lock()
+
+    def add(
+        self,
+        flow_id: str,
+        hook_type: str,
+        url: str,
+        event: str,
+        enabled: bool,
+        headers: dict[str, str],
+    ) -> dict[str, Any]:
+        with self._lock:
+            flow_hooks = self._hooks.setdefault(flow_id, {})
+            if len(flow_hooks) >= self._MAX_HOOKS:
+                raise ValueError(f"Maximum {self._MAX_HOOKS} hooks per flow")
+            hook_id = str(uuid.uuid4())
+            record: dict[str, Any] = {
+                "hook_id": hook_id,
+                "flow_id": flow_id,
+                "hook_type": hook_type,
+                "url": url,
+                "event": event,
+                "enabled": enabled,
+                "headers": headers,
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            flow_hooks[hook_id] = record
+            return record.copy()
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [r.copy() for r in self._hooks.get(flow_id, {}).values()]
+
+    def get(self, flow_id: str, hook_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return (self._hooks.get(flow_id, {}).get(hook_id) or {}).copy() or None
+
+    def delete(self, flow_id: str, hook_id: str) -> bool:
+        with self._lock:
+            return self._hooks.get(flow_id, {}).pop(hook_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._hooks.clear()
+
+
+flow_execution_hook_store = FlowExecutionHookStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22183,6 +22244,92 @@ async def delete_flow_feature_flag(
     if not deleted:
         raise HTTPException(status_code=404, detail="Feature flag not found")
     return {"deleted": True, "flag_name": flag_name, "flow_id": flow_id}
+
+
+# N-192 Flow Execution Hooks — POST/GET/DELETE /flows/{id}/execution-hooks/{hook_id}
+# ---------------------------------------------------------------------------
+
+
+class FlowExecutionHookBody(BaseModel):
+    hook_type: str = Field(..., description="pre_execution | post_execution | on_error")
+    url: str = Field(..., min_length=1, max_length=2048)
+    event: str = Field(default="", max_length=100)
+    enabled: bool = True
+    headers: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("hook_type")
+    @classmethod
+    def validate_hook_type(cls, v: str) -> str:
+        allowed = {"pre_execution", "post_execution", "on_error"}
+        if v not in allowed:
+            raise ValueError(f"hook_type must be one of {sorted(allowed)}")
+        return v
+
+
+@v1.post("/flows/{flow_id}/execution-hooks", tags=["Flows"], status_code=201)
+async def add_flow_execution_hook(
+    flow_id: str,
+    body: FlowExecutionHookBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_execution_hook_store.add(
+            flow_id,
+            body.hook_type,
+            body.url,
+            body.event,
+            body.enabled,
+            body.headers,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/execution-hooks", tags=["Flows"])
+async def list_flow_execution_hooks(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    hooks = flow_execution_hook_store.list(flow_id)
+    return {"flow_id": flow_id, "hooks": hooks, "total": len(hooks)}
+
+
+@v1.get("/flows/{flow_id}/execution-hooks/{hook_id}", tags=["Flows"])
+async def get_flow_execution_hook(
+    flow_id: str,
+    hook_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_execution_hook_store.get(flow_id, hook_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Execution hook not found")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/execution-hooks/{hook_id}", tags=["Flows"])
+async def delete_flow_execution_hook(
+    flow_id: str,
+    hook_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_execution_hook_store.delete(flow_id, hook_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Execution hook not found")
+    return {"deleted": True, "hook_id": hook_id, "flow_id": flow_id}
+
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
