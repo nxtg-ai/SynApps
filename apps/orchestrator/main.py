@@ -13107,6 +13107,54 @@ class FlowDataRetentionStore:
 flow_data_retention_store = FlowDataRetentionStore()
 
 
+# FlowAllowedOriginsStore — N-200 Flow Allowed Origins
+# ---------------------------------------------------------------------------
+
+
+class FlowAllowedOriginsStore:
+    """Per-flow allowed origins (CORS-style) configuration."""
+
+    _MAX_ORIGINS: int = 50
+
+    def __init__(self) -> None:
+        self._configs: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        origins: list[str],
+        enabled: bool,
+    ) -> dict[str, Any]:
+        if len(origins) > self._MAX_ORIGINS:
+            raise ValueError(f"Too many origins; maximum is {self._MAX_ORIGINS}")
+        with self._lock:
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "origins": list(origins),
+                "enabled": enabled,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._configs[flow_id] = record
+            return record.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._configs.get(flow_id)
+            return rec.copy() if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._configs.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._configs.clear()
+
+
+flow_allowed_origins_store = FlowAllowedOriginsStore()
+
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -23132,6 +23180,62 @@ async def delete_flow_data_retention(
     deleted = flow_data_retention_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No data retention policy configured")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# N-200 Flow Allowed Origins — PUT/GET/DELETE /flows/{id}/allowed-origins
+# ---------------------------------------------------------------------------
+
+
+class FlowAllowedOriginsBody(BaseModel):
+    origins: list[str] = Field(default_factory=list, max_length=50)
+    enabled: bool = True
+
+
+@v1.put("/flows/{flow_id}/allowed-origins", tags=["Flows"])
+async def set_flow_allowed_origins(
+    flow_id: str,
+    body: FlowAllowedOriginsBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        return flow_allowed_origins_store.set(
+            flow_id=flow_id,
+            origins=body.origins,
+            enabled=body.enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@v1.get("/flows/{flow_id}/allowed-origins", tags=["Flows"])
+async def get_flow_allowed_origins(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_allowed_origins_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No allowed origins configured")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/allowed-origins", tags=["Flows"])
+async def delete_flow_allowed_origins(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_allowed_origins_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No allowed origins configured")
     return {"deleted": True, "flow_id": flow_id}
 
 

@@ -208,6 +208,7 @@
 | N-197 | Flow Input Mask — PUT/GET/DELETE /flows/{id}/input-mask (rules dict field→mask_type, types: full/partial/hash/redact, max 50 rules) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-198 | Flow Output Transform — PUT/GET/DELETE /flows/{id}/output-transform (expression string, output_format json/xml/csv/text, enabled) | SECURITY | SHIPPED | P1 | 2026-03-21 |
 | N-199 | Flow Data Retention Policy — PUT/GET/DELETE /flows/{id}/data-retention (retention_days 1-3650, delete_on_expiry, anonymize_on_expiry, enabled) | SECURITY | SHIPPED | P1 | 2026-03-21 |
+| N-200 | Flow Allowed Origins — PUT/GET/DELETE /flows/{id}/allowed-origins (origins list, max 50, enabled) — FINAL config endpoint; pivoting to M-series | SECURITY | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -3085,4 +3086,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-21 (cycle 93) — N-198–N-199 shipped; 4,106 backend tests; CI green
+> Last updated: 2026-03-21 (cycle 94) — N-198–N-200 shipped (final config endpoints); pivoting to M-1 main.py router split per CoS directive; 4,124 backend tests; CI green (1 known flaky)
