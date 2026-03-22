@@ -199,6 +199,7 @@
 | N-188 | Flow IP Allowlist — PUT/GET/DELETE /flows/{id}/ip-allowlist (enabled, cidrs CIDR list, max 100, deduplicated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-189 | Flow Data Classification — PUT/GET/DELETE /flows/{id}/data-classification (level: public/internal/confidential/restricted, pii_flag) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-190 | Flow Notification Channels — POST/GET/DELETE /flows/{id}/notification-channels/{channel_id} (email/slack/webhook/pagerduty, events) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-191 | Flow Feature Flags — PUT/GET/DELETE /flows/{id}/feature-flags/{flag_name} (enabled, rollout_percentage 0-100, description, max 50 per flow) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -3076,4 +3077,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-21 (cycle 92) — N-174–N-190 shipped (17 features); 3,906 backend tests; CI green; OpenAPI spec fixed
+> Last updated: 2026-03-21 (cycle 92) — N-174–N-191 shipped (18 features); 3,932 backend tests; CI green; OpenAPI spec fixed

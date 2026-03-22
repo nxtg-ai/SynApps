@@ -12607,6 +12607,69 @@ class FlowNotificationChannelStore:
 
 flow_notification_channel_store = FlowNotificationChannelStore()
 
+
+
+# ---------------------------------------------------------------------------
+# FlowFeatureFlagStore — N-191 Flow Feature Flags
+# ---------------------------------------------------------------------------
+
+
+class FlowFeatureFlagStore:
+    _MAX_FLAGS: int = 50
+
+    def __init__(self) -> None:
+        self._flags: dict[str, dict[str, dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        flag_name: str,
+        enabled: bool,
+        rollout_percentage: int,
+        description: str,
+    ) -> dict[str, Any]:
+        if not (0 <= rollout_percentage <= 100):
+            raise ValueError("rollout_percentage must be 0-100")
+        with self._lock:
+            flow_flags = self._flags.setdefault(flow_id, {})
+            if flag_name not in flow_flags and len(flow_flags) >= self._MAX_FLAGS:
+                raise ValueError(f"max {self._MAX_FLAGS} feature flags per flow exceeded")
+            record: dict[str, Any] = {
+                "flag_name": flag_name,
+                "flow_id": flow_id,
+                "enabled": enabled,
+                "rollout_percentage": rollout_percentage,
+                "description": description,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            flow_flags[flag_name] = record
+            return dict(record)
+
+    def get(self, flow_id: str, flag_name: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._flags.get(flow_id, {}).get(flag_name)
+            return dict(rec) if rec else None
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(v) for v in self._flags.get(flow_id, {}).values()]
+
+    def delete(self, flow_id: str, flag_name: str) -> bool:
+        with self._lock:
+            flow_flags = self._flags.get(flow_id, {})
+            if flag_name not in flow_flags:
+                return False
+            del flow_flags[flag_name]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._flags.clear()
+
+
+flow_feature_flag_store = FlowFeatureFlagStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22044,6 +22107,82 @@ async def delete_flow_notification_channel(
     if not deleted:
         raise HTTPException(status_code=404, detail="Channel not found")
     return {"deleted": True, "channel_id": channel_id, "flow_id": flow_id}
+
+
+
+# ---------------------------------------------------------------------------
+# N-191 Flow Feature Flags — PUT/GET/DELETE /flows/{id}/feature-flags/{flag_name}
+# ---------------------------------------------------------------------------
+
+
+class FlowFeatureFlagBody(BaseModel):
+    enabled: bool = True
+    rollout_percentage: int = Field(default=100, ge=0, le=100)
+    description: str = Field(default="", max_length=500)
+
+
+@v1.put("/flows/{flow_id}/feature-flags/{flag_name}", tags=["Flows"])
+async def set_flow_feature_flag(
+    flow_id: str,
+    flag_name: str,
+    body: FlowFeatureFlagBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_feature_flag_store.set(
+            flow_id=flow_id,
+            flag_name=flag_name,
+            enabled=body.enabled,
+            rollout_percentage=body.rollout_percentage,
+            description=body.description,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/feature-flags", tags=["Flows"])
+async def list_flow_feature_flags(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> list:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow_feature_flag_store.list(flow_id)
+
+
+@v1.get("/flows/{flow_id}/feature-flags/{flag_name}", tags=["Flows"])
+async def get_flow_feature_flag(
+    flow_id: str,
+    flag_name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_feature_flag_store.get(flow_id, flag_name)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Feature flag not found")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/feature-flags/{flag_name}", tags=["Flows"])
+async def delete_flow_feature_flag(
+    flow_id: str,
+    flag_name: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_feature_flag_store.delete(flow_id, flag_name)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Feature flag not found")
+    return {"deleted": True, "flag_name": flag_name, "flow_id": flow_id}
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
