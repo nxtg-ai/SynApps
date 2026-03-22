@@ -521,12 +521,12 @@ class TestDebugEndpoints:
 
             with (
                 patch(
-                    "apps.orchestrator.main.FlowRepository.get_by_id",
+                    "apps.orchestrator.repositories.FlowRepository.get_by_id",
                     new_callable=AsyncMock,
                     return_value=flow,
                 ),
                 patch(
-                    "apps.orchestrator.main.WorkflowRunRepository.save",
+                    "apps.orchestrator.repositories.WorkflowRunRepository.save",
                     new_callable=AsyncMock,
                     return_value=None,
                 ),

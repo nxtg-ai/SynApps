@@ -497,7 +497,7 @@ class TestKeyRotatedEvent:
                 key_id = create_resp.json()["id"]
 
                 with patch(
-                    "apps.orchestrator.main.emit_event", new_callable=AsyncMock
+                    "apps.orchestrator.routers.admin.emit_event", new_callable=AsyncMock
                 ) as mock_emit:
                     resp = client.post(
                         f"/api/v1/managed-keys/{key_id}/rotate",
