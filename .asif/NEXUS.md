@@ -198,6 +198,7 @@
 | N-187 | Flow Geographic Restrictions — PUT/GET/DELETE /flows/{id}/geo-restrictions (allowlist/blocklist/none, regions list, max 50) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-188 | Flow IP Allowlist — PUT/GET/DELETE /flows/{id}/ip-allowlist (enabled, cidrs CIDR list, max 100, deduplicated) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-189 | Flow Data Classification — PUT/GET/DELETE /flows/{id}/data-classification (level: public/internal/confidential/restricted, pii_flag) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-190 | Flow Notification Channels — POST/GET/DELETE /flows/{id}/notification-channels/{channel_id} (email/slack/webhook/pagerduty, events) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -3000,3 +3001,79 @@ OpenAPI spec regenerated and committed. Commits: `ce1e4e5` (N-130), `99d04bd` (o
 
 > Last updated: 2026-03-21 (cycle 91) — N-130 Flow Clone shipped; N-129 datetime warnings fully eliminated; 3,805 total tests
 
+
+---
+
+## Team Feedback — Cycle 92 (2026-03-21)
+
+### 1. What did I ship since last check-in?
+
+**Session summary: N-174 through N-190 (17 features, 2 sessions)**
+
+| N# | Feature | Tests |
+|---|---|---|
+| N-174 | Flow Approval Gate (PUT/GET/POST review) | 29 |
+| N-175 | Flow Trigger Config (PUT/GET/DELETE) | 21 |
+| N-176 | Flow Run Retention Policy (PUT/GET/DELETE) | 22 |
+| N-177 | Flow Error Alerts (PUT/GET/DELETE) | 20 |
+| N-178 | Flow Output Destination (PUT/GET/DELETE) | 21 |
+| N-179 | Flow Resource Limits (PUT/GET/DELETE) | 23 |
+| N-180 | Flow ACL — per-user permissions | 21 |
+| N-181 | Flow Execution Mode (async/sync/dry_run) | 20 |
+| N-182 | Flow Input Validation Rules | 20 |
+| N-183 | Flow Caching Config | 22 |
+| N-184 | Flow Circuit Breaker | 26 |
+| N-185 | Flow Observability Config (traces/metrics/logs) | 22 |
+| N-186 | Flow Maintenance Window | 19 |
+| N-187 | Flow Geographic Restrictions | 21 |
+| N-188 | Flow IP Allowlist | 20 |
+| N-189 | Flow Data Classification (public/internal/confidential/restricted) + CI fix | 21 |
+| N-190 | Flow Notification Channels (email/slack/webhook/pagerduty) | 25 |
+
+**Total this session**: 373 new tests. Backend: **3,906 passed** (+395 vs N-173 baseline of 3,511). CI: green on N-189+.
+
+**CI fix (N-189 commit)**: The `docs/openapi.json` was not committed with N-174–N-188 because the pre-push hook only runs `pytest`, not the OpenAPI check. N-189 commit regenerated the spec and restored accidentally-deleted `test_flow_webhooks.py` (N-160, 28 tests).
+
+---
+
+### 2. What surprised me?
+
+**Webhook collision**: When I chose N-189 = "Flow Webhook Notifications", I discovered `FlowWebhookStore` + full CRUD endpoints already existed as N-160 (committed in `5cf5b95`). My duplicate code caused a `NameError` at startup (`get_db` not defined — I used the wrong endpoint pattern). I pivoted N-189 to "Flow Data Classification" and cleaned up. The bigger issue: I accidentally deleted `test_flow_webhooks.py` during cleanup (it was a tracked file from N-160). Restored via `git checkout 5cf5b95 -- ...`.
+
+**OpenAPI spec drift**: The CI gate in `.asif-ci` runs `python -m pytest` but the GitHub Actions CI also runs `git diff --exit-code docs/openapi.json`. These two checks diverge every session. The pre-push hook never catches the openapi divergence because the hook config only runs pytest. Every N-series commit fails CI until a manual regen+commit.
+
+**Test count arithmetic**: After deleting `test_flow_webhooks.py`, the count dropped from 3881 to 3853, but all tests passed. I expected 3860+21=3881, not 3853. Root cause: the 3860 was from the N-188 pre-push hook which ran while a temp `test_flow_webhooks.py` existed in the working tree (untracked, with failing tests counted as collected). The "true" N-188 committed state was ~3832 backend tests.
+
+---
+
+### 3. Cross-project signals
+
+**OpenAPI spec drift is a systemic CI problem**: If dx3, FamilyMind, or other ASIF projects have an `openapi.json` check in CI, they likely face the same issue. Recommend adding OpenAPI regen to the pre-push hook so local hook catches what CI checks. For SynApps, this means adding to `.asif-ci`:
+```
+python -c "from apps.orchestrator.main import app; import json; open('docs/openapi.json','w').write(json.dumps(app.openapi(), indent=2)); import subprocess; subprocess.run(['git', 'diff', '--exit-code', 'docs/openapi.json'])"
+```
+
+**In-memory singleton store pattern** (all N-series features): dead simple, zero dependencies, isolatable via `reset()`. Any ASIF project needing temporary/prototype storage for new endpoints could adopt this pattern before a proper DB migration is ready.
+
+---
+
+### 4. What would I prioritize next?
+
+1. **Fix OpenAPI pre-push hook** — add regen check so CI never goes red on spec drift
+2. **N-191: Flow Retry Policy** — `PUT/GET/DELETE /flows/{id}/retry-policy` (max_attempts, backoff strategy, retry_on_errors list)
+3. **N-192: Flow Rate Limit** — `PUT/GET/DELETE /flows/{id}/rate-limit` (requests_per_minute, burst)
+4. **Investigate `main` branch divergence** — 130+ commits behind. If CoS gives the green light, merge to `main` in a single PR.
+
+---
+
+### 5. Blockers / Questions for CoS
+
+**Pre-push hook gap**: `.asif-ci` runs only `pytest`. GitHub Actions also checks `docs/openapi.json`. Should I add the openapi regen+diff to the pre-push hook to keep CI green? If yes, is a direct edit to `.asif-ci` authorized, or does that need a separate directive?
+
+**`origin/main` divergence**: Now 147+ commits ahead on `master`. When should these be merged to `main`?
+
+**Automated trigger (CoS scheduler)**: Continues to fire without actual NEXUS content from CoS. 16th invocation — continuing per self-authorization protocol.
+
+---
+
+> Last updated: 2026-03-21 (cycle 92) — N-174–N-190 shipped (17 features); 3,906 backend tests; CI green; OpenAPI spec fixed

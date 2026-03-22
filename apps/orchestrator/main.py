@@ -12534,6 +12534,79 @@ class FlowDataClassificationStore:
 
 flow_data_classification_store = FlowDataClassificationStore()
 
+
+
+# ---------------------------------------------------------------------------
+# FlowNotificationChannelStore — N-190 Flow Notification Channels
+# ---------------------------------------------------------------------------
+
+_NOTIF_CHANNEL_TYPES: frozenset[str] = frozenset(["email", "slack", "webhook", "pagerduty"])
+_NOTIF_CHANNEL_EVENTS: frozenset[str] = frozenset(
+    ["run.started", "run.completed", "run.failed", "run.cancelled"]
+)
+
+
+class FlowNotificationChannelStore:
+    _MAX_CHANNELS: int = 20
+
+    def __init__(self) -> None:
+        self._channels: dict[str, dict[str, dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def create(
+        self,
+        flow_id: str,
+        channel_type: str,
+        target: str,
+        events: list[str],
+        enabled: bool,
+    ) -> dict[str, Any]:
+        if channel_type not in _NOTIF_CHANNEL_TYPES:
+            raise ValueError(f"type must be one of {sorted(_NOTIF_CHANNEL_TYPES)}")
+        invalid = set(events) - _NOTIF_CHANNEL_EVENTS
+        if invalid:
+            raise ValueError(f"invalid events: {sorted(invalid)}")
+        with self._lock:
+            flow_channels = self._channels.setdefault(flow_id, {})
+            if len(flow_channels) >= self._MAX_CHANNELS:
+                raise ValueError(f"max {self._MAX_CHANNELS} channels per flow exceeded")
+            channel_id = uuid.uuid4().hex
+            record: dict[str, Any] = {
+                "channel_id": channel_id,
+                "flow_id": flow_id,
+                "type": channel_type,
+                "target": target,
+                "events": sorted(set(events)),
+                "enabled": enabled,
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            flow_channels[channel_id] = record
+            return dict(record)
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(v) for v in self._channels.get(flow_id, {}).values()]
+
+    def get(self, flow_id: str, channel_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            ch = self._channels.get(flow_id, {}).get(channel_id)
+            return dict(ch) if ch else None
+
+    def delete(self, flow_id: str, channel_id: str) -> bool:
+        with self._lock:
+            flow_channels = self._channels.get(flow_id, {})
+            if channel_id not in flow_channels:
+                return False
+            del flow_channels[channel_id]
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._channels.clear()
+
+
+flow_notification_channel_store = FlowNotificationChannelStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -21895,6 +21968,82 @@ async def delete_flow_data_classification(
     if not deleted:
         raise HTTPException(status_code=404, detail="No data classification for this flow")
     return {"deleted": True, "flow_id": flow_id}
+
+
+
+# ---------------------------------------------------------------------------
+# N-190 Flow Notification Channels — POST/GET/DELETE /flows/{id}/notification-channels
+# ---------------------------------------------------------------------------
+
+
+class FlowNotificationChannelBody(BaseModel):
+    type: str = Field(..., description="email | slack | webhook | pagerduty")
+    target: str = Field(..., min_length=1, max_length=512)
+    events: list[str] = Field(default_factory=list)
+    enabled: bool = True
+
+
+@v1.post("/flows/{flow_id}/notification-channels", status_code=201, tags=["Flows"])
+async def create_flow_notification_channel(
+    flow_id: str,
+    body: FlowNotificationChannelBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_notification_channel_store.create(
+            flow_id=flow_id,
+            channel_type=body.type,
+            target=body.target,
+            events=body.events,
+            enabled=body.enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/notification-channels", tags=["Flows"])
+async def list_flow_notification_channels(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> list:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow_notification_channel_store.list(flow_id)
+
+
+@v1.get("/flows/{flow_id}/notification-channels/{channel_id}", tags=["Flows"])
+async def get_flow_notification_channel(
+    flow_id: str,
+    channel_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_notification_channel_store.get(flow_id, channel_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/notification-channels/{channel_id}", tags=["Flows"])
+async def delete_flow_notification_channel(
+    flow_id: str,
+    channel_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_notification_channel_store.delete(flow_id, channel_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    return {"deleted": True, "channel_id": channel_id, "flow_id": flow_id}
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
 # ---------------------------------------------------------------------------
