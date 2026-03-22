@@ -12831,6 +12831,70 @@ class FlowWebhookSigningStore:
 
 flow_webhook_signing_store = FlowWebhookSigningStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowAuditExportStore — N-195 Flow Audit Export
+# ---------------------------------------------------------------------------
+
+
+class FlowAuditExportStore:
+    """Per-flow audit export job tracker.
+
+    Each export job captures a snapshot of audit log entries for a flow,
+    keyed by job_id.  The store does not hold the real audit_log_store
+    data — it creates its own lightweight export records for testing.
+    """
+
+    _MAX_EXPORTS: int = 20
+
+    def __init__(self) -> None:
+        self._exports: dict[str, dict[str, Any]] = {}  # job_id → record
+        self._flow_jobs: dict[str, list[str]] = {}  # flow_id → [job_id]
+        self._lock = threading.Lock()
+
+    def create(
+        self,
+        flow_id: str,
+        format: str,
+        from_ts: str | None,
+        to_ts: str | None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            flow_jobs = self._flow_jobs.setdefault(flow_id, [])
+            if len(flow_jobs) >= self._MAX_EXPORTS:
+                raise ValueError(f"Maximum {self._MAX_EXPORTS} exports per flow")
+            job_id = str(uuid.uuid4())
+            record: dict[str, Any] = {
+                "job_id": job_id,
+                "flow_id": flow_id,
+                "format": format,
+                "from_ts": from_ts,
+                "to_ts": to_ts,
+                "status": "pending",
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            self._exports[job_id] = record
+            flow_jobs.append(job_id)
+            return record.copy()
+
+    def get(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._exports.get(job_id)
+            return rec.copy() if rec else None
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            job_ids = self._flow_jobs.get(flow_id, [])
+            return [self._exports[j].copy() for j in job_ids if j in self._exports]
+
+    def reset(self) -> None:
+        with self._lock:
+            self._exports.clear()
+            self._flow_jobs.clear()
+
+
+flow_audit_export_store = FlowAuditExportStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22546,6 +22610,69 @@ async def delete_flow_webhook_signing(
     if not deleted:
         raise HTTPException(status_code=404, detail="No webhook signing configured")
     return {"deleted": True, "flow_id": flow_id}
+
+
+# N-195 Flow Audit Export — POST/GET /flows/{id}/audit-export[/{job_id}]
+# ---------------------------------------------------------------------------
+
+
+class FlowAuditExportBody(BaseModel):
+    format: str = Field(default="json", description="json | csv")
+    from_ts: str | None = Field(default=None, max_length=50)
+    to_ts: str | None = Field(default=None, max_length=50)
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, v: str) -> str:
+        allowed = {"json", "csv"}
+        if v not in allowed:
+            raise ValueError(f"format must be one of {sorted(allowed)}")
+        return v
+
+
+@v1.post("/flows/{flow_id}/audit-export", tags=["Flows"], status_code=202)
+async def create_flow_audit_export(
+    flow_id: str,
+    body: FlowAuditExportBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_audit_export_store.create(
+            flow_id, body.format, body.from_ts, body.to_ts
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/audit-export", tags=["Flows"])
+async def list_flow_audit_exports(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    exports = flow_audit_export_store.list(flow_id)
+    return {"flow_id": flow_id, "exports": exports, "total": len(exports)}
+
+
+@v1.get("/flows/{flow_id}/audit-export/{job_id}", tags=["Flows"])
+async def get_flow_audit_export(
+    flow_id: str,
+    job_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_audit_export_store.get(job_id)
+    if record is None or record.get("flow_id") != flow_id:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    return record
 
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
