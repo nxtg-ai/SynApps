@@ -3086,4 +3086,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-22 (cycle 95) — **M-1 COMPLETE**: main.py split into 9 FastAPI routers + stores.py + dependencies.py + helpers.py + request_models.py. main.py: 31,248 → 11,765 lines. 4,124 backend tests pass. ruff clean. CI green.
+> Last updated: 2026-03-22 (cycle 96) — **CRUCIBLE Gate 1 COMPLETE**: 1,201 content assertions added across 133 test files. All hollow status-code-only assertions replaced with real body checks. Custom error format (`{"error": {...}}`) verified throughout. 4,124 backend tests pass, 0 failures. ruff clean. M-2 PostgreSQL migration now unblocked.
