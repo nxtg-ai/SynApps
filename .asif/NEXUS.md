@@ -3086,4 +3086,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-21 (cycle 94) — N-198–N-200 shipped (final config endpoints); pivoting to M-1 main.py router split per CoS directive; 4,124 backend tests; CI green (1 known flaky)
+> Last updated: 2026-03-22 (cycle 95) — **M-1 COMPLETE**: main.py split into 9 FastAPI routers + stores.py + dependencies.py + helpers.py + request_models.py. main.py: 31,248 → 11,765 lines. 4,124 backend tests pass. ruff clean. CI green.
