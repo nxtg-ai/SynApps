@@ -13058,6 +13058,55 @@ class FlowOutputTransformStore:
 
 flow_output_transform_store = FlowOutputTransformStore()
 
+
+# FlowDataRetentionStore — N-199 Flow Data Retention Policy
+# ---------------------------------------------------------------------------
+
+
+class FlowDataRetentionStore:
+    """Per-flow data retention policy configuration."""
+
+    def __init__(self) -> None:
+        self._policies: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def set(
+        self,
+        flow_id: str,
+        retention_days: int,
+        delete_on_expiry: bool,
+        anonymize_on_expiry: bool,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        with self._lock:
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "retention_days": retention_days,
+                "delete_on_expiry": delete_on_expiry,
+                "anonymize_on_expiry": anonymize_on_expiry,
+                "enabled": enabled,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._policies[flow_id] = record
+            return record.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._policies.get(flow_id)
+            return rec.copy() if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            return self._policies.pop(flow_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._policies.clear()
+
+
+flow_data_retention_store = FlowDataRetentionStore()
+
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -23026,6 +23075,63 @@ async def delete_flow_output_transform(
     deleted = flow_output_transform_store.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="No output transform configured")
+    return {"deleted": True, "flow_id": flow_id}
+
+
+# N-199 Flow Data Retention Policy — PUT/GET/DELETE /flows/{id}/data-retention
+# ---------------------------------------------------------------------------
+
+
+class FlowDataRetentionBody(BaseModel):
+    retention_days: int = Field(..., ge=1, le=3650)
+    delete_on_expiry: bool = False
+    anonymize_on_expiry: bool = False
+    enabled: bool = True
+
+
+@v1.put("/flows/{flow_id}/data-retention", tags=["Flows"])
+async def set_flow_data_retention(
+    flow_id: str,
+    body: FlowDataRetentionBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow_data_retention_store.set(
+        flow_id=flow_id,
+        retention_days=body.retention_days,
+        delete_on_expiry=body.delete_on_expiry,
+        anonymize_on_expiry=body.anonymize_on_expiry,
+        enabled=body.enabled,
+    )
+
+
+@v1.get("/flows/{flow_id}/data-retention", tags=["Flows"])
+async def get_flow_data_retention(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_data_retention_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No data retention policy configured")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/data-retention", tags=["Flows"])
+async def delete_flow_data_retention(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict[str, Any]:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_data_retention_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No data retention policy configured")
     return {"deleted": True, "flow_id": flow_id}
 
 
