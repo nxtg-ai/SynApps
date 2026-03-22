@@ -93,6 +93,8 @@ class TestFlowApprovalRequest:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_request_status_is_pending(self):
         with TestClient(app) as client:
@@ -153,6 +155,7 @@ class TestFlowApprovalRequest:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_request_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -163,6 +166,7 @@ class TestFlowApprovalRequest:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_request_requires_auth(self):
         with TestClient(app) as client:
@@ -173,6 +177,7 @@ class TestFlowApprovalRequest:
                 json={},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +197,8 @@ class TestFlowApprovalApprove:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_approve_status_is_approved(self):
         with TestClient(app) as client:
@@ -230,6 +237,7 @@ class TestFlowApprovalApprove:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_approve_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -240,6 +248,7 @@ class TestFlowApprovalApprove:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_approve_requires_auth(self):
         with TestClient(app) as client:
@@ -251,6 +260,7 @@ class TestFlowApprovalApprove:
                 json={},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +280,8 @@ class TestFlowApprovalReject:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_reject_status_is_rejected(self):
         with TestClient(app) as client:
@@ -305,6 +317,7 @@ class TestFlowApprovalReject:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_reject_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -315,6 +328,7 @@ class TestFlowApprovalReject:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_reject_requires_auth(self):
         with TestClient(app) as client:
@@ -326,6 +340,7 @@ class TestFlowApprovalReject:
                 json={},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -349,12 +364,14 @@ class TestFlowApprovalGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/approval", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/approval", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -363,6 +380,7 @@ class TestFlowApprovalGet:
             _request_approval(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/approval")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +407,7 @@ class TestFlowApprovalDelete:
             client.delete(f"/api/v1/flows/{flow_id}/approval", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/approval", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_record(self):
         with TestClient(app) as client:
@@ -396,6 +415,7 @@ class TestFlowApprovalDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/approval", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -404,6 +424,7 @@ class TestFlowApprovalDelete:
                 "/api/v1/flows/nonexistent/approval", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -412,3 +433,4 @@ class TestFlowApprovalDelete:
             _request_approval(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/approval")
         assert resp.status_code == 401
+        assert "error" in resp.json()

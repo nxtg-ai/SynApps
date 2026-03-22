@@ -73,6 +73,8 @@ class TestSaveAsTemplate:
             flow_id = _create_flow(client, token)
             resp = _save(client, token, flow_id)
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["id"] == flow_id
 
     def test_response_shape(self):
         with TestClient(app) as client:
@@ -161,6 +163,7 @@ class TestSaveAsTemplate:
             _save(client, token, flow_id, version="1.5.0")
             resp = _save(client, token, flow_id, version="1.5.0")
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_invalid_semver_409(self):
         with TestClient(app) as client:
@@ -168,6 +171,7 @@ class TestSaveAsTemplate:
             flow_id = _create_flow(client, token)
             resp = _save(client, token, flow_id, version="not-a-semver")
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -177,6 +181,7 @@ class TestSaveAsTemplate:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_requires_auth(self):
         with TestClient(app) as client:
@@ -184,3 +189,4 @@ class TestSaveAsTemplate:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/save-as-template")
         assert resp.status_code == 401
+        assert "error" in resp.json()

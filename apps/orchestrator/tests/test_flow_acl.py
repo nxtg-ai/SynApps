@@ -87,6 +87,8 @@ class TestFlowAclPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_grant_response_shape(self):
         with TestClient(app) as client:
@@ -138,6 +140,7 @@ class TestFlowAclPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_grant_replaces_existing(self):
         with TestClient(app) as client:
@@ -160,6 +163,7 @@ class TestFlowAclPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_grant_requires_auth(self):
         with TestClient(app) as client:
@@ -170,6 +174,7 @@ class TestFlowAclPost:
                 json={"permissions": ["read"]},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +207,7 @@ class TestFlowAclList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/acl", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_requires_auth(self):
         with TestClient(app) as client:
@@ -209,6 +215,7 @@ class TestFlowAclList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/acl")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +243,7 @@ class TestFlowAclGetUser:
                 f"/api/v1/flows/{flow_id}/acl/nobody@test.com", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_user_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -244,6 +252,7 @@ class TestFlowAclGetUser:
                 "/api/v1/flows/nonexistent/acl/user@test.com", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_user_requires_auth(self):
         with TestClient(app) as client:
@@ -252,6 +261,7 @@ class TestFlowAclGetUser:
             _grant(client, token, flow_id, "henry@test.com", ["read"])
             resp = client.get(f"/api/v1/flows/{flow_id}/acl/henry@test.com")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +293,7 @@ class TestFlowAclDelete:
                 f"/api/v1/flows/{flow_id}/acl/julia@test.com", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_not_granted(self):
         with TestClient(app) as client:
@@ -292,6 +303,7 @@ class TestFlowAclDelete:
                 f"/api/v1/flows/{flow_id}/acl/nobody@test.com", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -300,6 +312,7 @@ class TestFlowAclDelete:
                 "/api/v1/flows/nonexistent/acl/user@test.com", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -308,3 +321,4 @@ class TestFlowAclDelete:
             _grant(client, token, flow_id, "kyle@test.com", ["read"])
             resp = client.delete(f"/api/v1/flows/{flow_id}/acl/kyle@test.com")
         assert resp.status_code == 401
+        assert "error" in resp.json()

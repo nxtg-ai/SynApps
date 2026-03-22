@@ -214,10 +214,12 @@ class TestGetBySemverEndpoint:
     def test_fetch_template_not_found(self, client):
         resp = client.get("/api/v1/templates/nonexistent/by-semver")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_fetch_invalid_semver_rejected(self, client):
         resp = client.get("/api/v1/templates/my-template/by-semver?version=bad")
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -251,10 +253,12 @@ class TestRollbackEndpoint:
     def test_rollback_missing_version_param(self, client):
         resp = client.put("/api/v1/templates/my-template/rollback")
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_rollback_invalid_semver_rejected(self, client):
         resp = client.put("/api/v1/templates/my-template/rollback?version=bad")
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_rollback_latest_reflects_rollback(self, client):
         client.post("/api/v1/templates/import", json=SAMPLE)
@@ -292,6 +296,7 @@ class TestImportWithSemver:
     def test_import_invalid_semver_422(self, client):
         resp = client.post("/api/v1/templates/import", json={**SAMPLE, "version": "xyz"})
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

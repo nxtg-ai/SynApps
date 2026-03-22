@@ -315,6 +315,7 @@ class TestDebugEndpoints:
                     headers={"Authorization": f"Bearer {token}"},
                 )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     # -----------------------------------------------------------------------
     # GET /debug/{session_id}
@@ -347,6 +348,7 @@ class TestDebugEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_debug_session_requires_auth(self):
         """GET /debug/{id} without credentials returns 401 once a user exists in the DB.
@@ -361,6 +363,7 @@ class TestDebugEndpoints:
             _register(client)
             resp = client.get(f"/api/v1/debug/{session.session_id}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     # -----------------------------------------------------------------------
     # POST /debug/{session_id}/continue
@@ -389,6 +392,7 @@ class TestDebugEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_continue_unpauses_session(self):
         """POST /continue on a paused session should set status to running."""
@@ -422,6 +426,7 @@ class TestDebugEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_skip_sets_skip_flag(self):
         """POST /skip on a paused session should set _skip_flag and signal the event."""
@@ -493,6 +498,7 @@ class TestDebugEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     # -----------------------------------------------------------------------
     # Full debug flow: start → pause at breakpoint → continue → complete

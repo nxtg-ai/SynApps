@@ -227,3 +227,4 @@ def test_provider_health_endpoint_unknown_returns_404(client):
     """GET /api/v1/providers/unknown/health returns 404."""
     resp = client.get("/api/v1/providers/nonexistent-xyz/health")
     assert resp.status_code == 404
+    assert "error" in resp.json()

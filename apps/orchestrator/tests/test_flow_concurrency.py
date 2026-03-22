@@ -83,6 +83,8 @@ class TestFlowConcurrencyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -120,6 +122,8 @@ class TestFlowConcurrencyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_below_lower_bound_422(self):
         with TestClient(app) as client:
@@ -131,6 +135,7 @@ class TestFlowConcurrencyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_above_upper_bound_422(self):
         with TestClient(app) as client:
@@ -142,6 +147,7 @@ class TestFlowConcurrencyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -164,6 +170,7 @@ class TestFlowConcurrencyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -174,6 +181,7 @@ class TestFlowConcurrencyPut:
                 json={"max_concurrent": 5},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -197,12 +205,14 @@ class TestFlowConcurrencyGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/concurrency", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/concurrency", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -211,6 +221,7 @@ class TestFlowConcurrencyGet:
             _set_concurrency(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/concurrency")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +248,7 @@ class TestFlowConcurrencyDelete:
             client.delete(f"/api/v1/flows/{flow_id}/concurrency", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/concurrency", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_limit(self):
         with TestClient(app) as client:
@@ -244,12 +256,14 @@ class TestFlowConcurrencyDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/concurrency", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/concurrency", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -258,3 +272,4 @@ class TestFlowConcurrencyDelete:
             _set_concurrency(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/concurrency")
         assert resp.status_code == 401
+        assert "error" in resp.json()

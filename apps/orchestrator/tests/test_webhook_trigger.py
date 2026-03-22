@@ -198,6 +198,7 @@ class TestWebhookTriggerEndpoints:
             json={"flow_id": "nonexistent-flow"},
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_register_trigger_success(self, client, flow_id):
         resp = client.post(
@@ -267,6 +268,7 @@ class TestWebhookTriggerEndpoints:
     def test_get_trigger_not_found(self, client):
         resp = client.get("/api/v1/webhook-triggers/ghost-id")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_trigger(self, client, flow_id):
         reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
@@ -279,6 +281,7 @@ class TestWebhookTriggerEndpoints:
     def test_delete_trigger_not_found(self, client):
         resp = client.delete("/api/v1/webhook-triggers/no-such-id")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
 
 # ===========================================================================
@@ -293,6 +296,7 @@ class TestWebhookTriggerReceive:
         resp = client.post("/api/v1/webhook-triggers/ghost/receive", json={})
         # verify_signature returns False for unknown trigger
         assert resp.status_code in (401, 404)
+        assert "error" in resp.json()
 
     def test_receive_unsigned_trigger_no_secret(self, client, flow_id):
         reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
@@ -334,6 +338,7 @@ class TestWebhookTriggerReceive:
             headers={"X-Webhook-Signature": "sha256=deadbeef"},
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_receive_without_signature_when_required(self, client, flow_id):
         reg = client.post(
@@ -345,6 +350,7 @@ class TestWebhookTriggerReceive:
             json={"payload": "no-sig"},
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_receive_non_json_body(self, client, flow_id):
         reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
@@ -363,6 +369,8 @@ class TestWebhookTriggerReceive:
             content=b"",
         )
         assert resp.status_code == 202
+        data = resp.json()
+        assert isinstance(data, dict)
 
     def test_receive_array_json_body(self, client, flow_id):
         reg = client.post("/api/v1/webhook-triggers", json={"flow_id": flow_id}).json()
@@ -371,6 +379,8 @@ class TestWebhookTriggerReceive:
             json=[1, 2, 3],
         )
         assert resp.status_code == 202
+        data = resp.json()
+        assert isinstance(data, dict)
 
 
 # ===========================================================================

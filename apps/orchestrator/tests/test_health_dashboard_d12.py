@@ -297,6 +297,8 @@ class TestConnectorsHealthDashboard:
     def test_returns_200(self, client):
         resp = client.get("/api/v1/connectors/health")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_summary_has_down(self, client):
         data = client.get("/api/v1/connectors/health").json()

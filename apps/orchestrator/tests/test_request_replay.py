@@ -373,6 +373,7 @@ class TestReplayRequest:
     def test_replay_not_found(self, client):
         resp = client.post("/api/v1/requests/nonexistent/replay")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_replay_returns_new_response(self, client):
         # Inject a failed request directly
@@ -448,6 +449,7 @@ class TestReplayRequest:
             mock_cls.return_value = mock_client
             resp = client.post("/api/v1/requests/replay-err-001/replay")
             assert resp.status_code == 502
+            assert "error" in resp.json()
 
 
 # ============================================================
@@ -461,6 +463,7 @@ class TestDebugRequest:
     def test_debug_not_found(self, client):
         resp = client.get("/api/v1/requests/nonexistent/debug")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_debug_returns_full_chain(self, client):
         client.get(
@@ -553,6 +556,7 @@ class TestRateLimitExemption:
         for _ in range(40):
             resp = client.get("/api/v1/requests/failed")
             assert resp.status_code != 429
+            assert isinstance(resp.json(), list)
 
     def test_requests_debug_not_rate_limited(self, client):
         """Hitting /requests/{id}/debug should not trigger 429."""
@@ -560,6 +564,7 @@ class TestRateLimitExemption:
             resp = client.get("/api/v1/requests/some-id/debug")
             # 404 is expected (no entry), but not 429
             assert resp.status_code != 429
+            assert "error" in resp.json()
 
 
 # ============================================================

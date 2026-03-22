@@ -80,6 +80,7 @@ class TestFlowLockGet:
             token, _ = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -87,6 +88,7 @@ class TestFlowLockGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/lock")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +103,8 @@ class TestFlowLockPost:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["locked"] is True
 
     def test_lock_response_shape(self):
         with TestClient(app) as client:
@@ -130,12 +134,14 @@ class TestFlowLockPost:
             client.post(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
             resp = client.post(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_lock_404_unknown_flow(self):
         with TestClient(app) as client:
             token, _ = _register(client)
             resp = client.post("/api/v1/flows/nonexistent/lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_lock_requires_auth(self):
         with TestClient(app) as client:
@@ -143,6 +149,7 @@ class TestFlowLockPost:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/lock")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_get_after_lock_shows_locked(self):
         with TestClient(app) as client:
@@ -166,6 +173,8 @@ class TestFlowLockDelete:
             client.post(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["locked"] is False
 
     def test_unlock_response_locked_false(self):
         with TestClient(app) as client:
@@ -182,6 +191,7 @@ class TestFlowLockDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_after_unlock_shows_unlocked(self):
         with TestClient(app) as client:
@@ -197,6 +207,7 @@ class TestFlowLockDelete:
             token, _ = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_unlock_requires_auth(self):
         with TestClient(app) as client:
@@ -205,6 +216,7 @@ class TestFlowLockDelete:
             client.post(f"/api/v1/flows/{flow_id}/lock", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/lock")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +236,7 @@ class TestFlowLockEnforcement:
                 headers=_auth(token),
             )
         assert resp.status_code == 423
+        assert "error" in resp.json()
 
     def test_put_succeeds_after_unlock(self):
         with TestClient(app) as client:
@@ -237,3 +250,5 @@ class TestFlowLockEnforcement:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == flow_id

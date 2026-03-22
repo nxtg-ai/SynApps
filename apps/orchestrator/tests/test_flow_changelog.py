@@ -78,6 +78,8 @@ class TestFlowChangelogPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -117,6 +119,7 @@ class TestFlowChangelogPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_empty_message_422(self):
         with TestClient(app) as client:
@@ -128,6 +131,7 @@ class TestFlowChangelogPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_all_valid_types(self):
         for entry_type in ("note", "fix", "improvement", "breaking", "deployment"):
@@ -140,6 +144,8 @@ class TestFlowChangelogPost:
                     headers=_auth(token),
                 )
             assert resp.status_code == 201, f"type '{entry_type}' should be valid"
+            data = resp.json()
+            assert data["flow_id"] == flow_id
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -150,6 +156,7 @@ class TestFlowChangelogPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -160,6 +167,7 @@ class TestFlowChangelogPost:
                 json={"message": "no auth"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +235,7 @@ class TestFlowChangelogGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/changelog", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -234,6 +243,7 @@ class TestFlowChangelogGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/changelog")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +283,7 @@ class TestFlowChangelogDelete:
                 f"/api/v1/flows/{flow_id}/changelog/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -281,6 +292,7 @@ class TestFlowChangelogDelete:
                 "/api/v1/flows/nonexistent/changelog/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -289,3 +301,4 @@ class TestFlowChangelogDelete:
             entry = _add_entry(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/changelog/{entry['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

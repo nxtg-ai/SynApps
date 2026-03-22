@@ -83,6 +83,8 @@ class TestFlowVisibilityPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -142,6 +144,7 @@ class TestFlowVisibilityPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -164,6 +167,7 @@ class TestFlowVisibilityPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -174,6 +178,7 @@ class TestFlowVisibilityPut:
                 json={"visibility": "private"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -205,12 +210,14 @@ class TestFlowVisibilityGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/visibility", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/visibility", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -219,6 +226,7 @@ class TestFlowVisibilityGet:
             _set_visibility(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/visibility")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +253,7 @@ class TestFlowVisibilityDelete:
             client.delete(f"/api/v1/flows/{flow_id}/visibility", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/visibility", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_visibility(self):
         with TestClient(app) as client:
@@ -252,6 +261,7 @@ class TestFlowVisibilityDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/visibility", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -260,3 +270,4 @@ class TestFlowVisibilityDelete:
             _set_visibility(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/visibility")
         assert resp.status_code == 401
+        assert "error" in resp.json()

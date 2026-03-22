@@ -92,6 +92,8 @@ class TestFlowNotifPrefPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -146,6 +148,7 @@ class TestFlowNotifPrefPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_unknown_channel_422(self):
         with TestClient(app) as client:
@@ -157,6 +160,7 @@ class TestFlowNotifPrefPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -167,6 +171,7 @@ class TestFlowNotifPrefPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -177,6 +182,7 @@ class TestFlowNotifPrefPut:
                 json={"events": {}, "channels": []},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +212,7 @@ class TestFlowNotifPrefGet:
                 f"/api/v1/flows/{flow_id}/notification-prefs", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -214,6 +221,7 @@ class TestFlowNotifPrefGet:
                 "/api/v1/flows/nonexistent/notification-prefs", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -222,6 +230,7 @@ class TestFlowNotifPrefGet:
             _set_prefs(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/notification-prefs")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_get_includes_allowed_lists(self):
         with TestClient(app) as client:
@@ -264,6 +273,7 @@ class TestFlowNotifPrefDelete:
                 f"/api/v1/flows/{flow_id}/notification-prefs", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_prefs(self):
         with TestClient(app) as client:
@@ -273,6 +283,7 @@ class TestFlowNotifPrefDelete:
                 f"/api/v1/flows/{flow_id}/notification-prefs", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -281,6 +292,7 @@ class TestFlowNotifPrefDelete:
                 "/api/v1/flows/nonexistent/notification-prefs", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -289,6 +301,7 @@ class TestFlowNotifPrefDelete:
             _set_prefs(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/notification-prefs")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

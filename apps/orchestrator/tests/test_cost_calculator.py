@@ -138,6 +138,8 @@ class TestEstimateCostEndpoint:
             json={"nodes": [{"id": "n1", "type": "llm"}]},
         )
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_correct_total_for_llm(self, client):
         """Returns correct total_usd for LLM nodes (Gate 2: total > 0)."""
@@ -184,6 +186,7 @@ class TestEstimateCostEndpoint:
             json={"nodes": []},
         )
         assert resp.status_code in (200, 401, 403)
+        assert isinstance(resp.json(), dict)
 
     def test_breakdown_length_matches_nodes(self, client):
         """Breakdown list length matches the number of input nodes."""
@@ -227,17 +230,21 @@ class TestFlowEstimateCostEndpoint:
         )
         resp = client.post(f"/api/v1/flows/{flow_id}/estimate-cost")
         assert resp.status_code == 200
+        data = resp.json()
+        assert "total_usd" in data
 
     def test_returns_404_for_unknown_flow(self, client):
         """Returns 404 when flow does not exist."""
         resp = client.post("/api/v1/flows/nonexistent-flow-xyz/estimate-cost")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_requires_auth(self, client):
         """Endpoint requires authentication (bootstrap allows anonymous)."""
         resp = client.post("/api/v1/flows/any-id/estimate-cost")
         # Should be either 200/404 (bootstrap) or 401/403 (auth enforced)
         assert resp.status_code in (200, 404, 401, 403)
+        assert isinstance(resp.json(), dict)
 
     def test_total_reflects_flow_nodes(self, client):
         """total_usd reflects the flow's actual node types."""

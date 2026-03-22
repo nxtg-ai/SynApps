@@ -81,6 +81,7 @@ class TestFlowExpiryGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/expiry", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -88,6 +89,7 @@ class TestFlowExpiryGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/expiry")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +108,8 @@ class TestFlowExpiryPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_stores_expiry(self):
         with TestClient(app) as client:
@@ -140,6 +144,7 @@ class TestFlowExpiryPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_invalid_datetime_422(self):
         with TestClient(app) as client:
@@ -151,6 +156,7 @@ class TestFlowExpiryPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -161,6 +167,7 @@ class TestFlowExpiryPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -171,6 +178,7 @@ class TestFlowExpiryPut:
                 json={"expires_at": FUTURE_ISO},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +219,7 @@ class TestFlowExpiryDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/expiry", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -219,6 +228,7 @@ class TestFlowExpiryDelete:
                 "/api/v1/flows/nonexistent/expiry", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -231,6 +241,7 @@ class TestFlowExpiryDelete:
             )
             resp = client.delete(f"/api/v1/flows/{flow_id}/expiry")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +261,8 @@ class TestFlowExpiryEnforcement:
             )
             resp = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == flow_id
 
     def test_get_flow_410_when_expired(self):
         """Directly seed the store with a past timestamp to simulate expiry."""
@@ -260,6 +273,7 @@ class TestFlowExpiryEnforcement:
             flow_expiry_store.set(flow_id, time.time() - 1.0)
             resp = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token))
         assert resp.status_code == 410
+        assert "error" in resp.json()
 
     def test_get_flow_ok_after_expiry_cleared(self):
         with TestClient(app) as client:
@@ -269,3 +283,5 @@ class TestFlowExpiryEnforcement:
             client.delete(f"/api/v1/flows/{flow_id}/expiry", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == flow_id

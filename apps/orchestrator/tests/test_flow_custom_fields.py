@@ -96,6 +96,8 @@ class TestFlowCustomFieldDefine:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -121,6 +123,7 @@ class TestFlowCustomFieldDefine:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_unknown_type_422(self):
         with TestClient(app) as client:
@@ -132,6 +135,7 @@ class TestFlowCustomFieldDefine:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_redefine_updates_type(self):
         with TestClient(app) as client:
@@ -154,6 +158,7 @@ class TestFlowCustomFieldDefine:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -164,6 +169,7 @@ class TestFlowCustomFieldDefine:
                 json={"name": "x", "type": "string"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +221,7 @@ class TestFlowCustomFieldList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/custom-fields", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -222,6 +229,7 @@ class TestFlowCustomFieldList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/custom-fields")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +298,7 @@ class TestFlowCustomFieldSetValue:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_set_undefined_field_404(self):
         with TestClient(app) as client:
@@ -301,6 +310,7 @@ class TestFlowCustomFieldSetValue:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_set_requires_auth(self):
         with TestClient(app) as client:
@@ -312,6 +322,7 @@ class TestFlowCustomFieldSetValue:
                 json={"value": "y"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +351,7 @@ class TestFlowCustomFieldGetOne:
                 f"/api/v1/flows/{flow_id}/custom-fields/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_single_requires_auth(self):
         with TestClient(app) as client:
@@ -348,6 +360,7 @@ class TestFlowCustomFieldGetOne:
             _define_field(client, token, flow_id, "x", "string")
             resp = client.get(f"/api/v1/flows/{flow_id}/custom-fields/x")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +400,7 @@ class TestFlowCustomFieldDelete:
                 f"/api/v1/flows/{flow_id}/custom-fields/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -395,6 +409,7 @@ class TestFlowCustomFieldDelete:
                 "/api/v1/flows/nonexistent/custom-fields/x", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -403,3 +418,4 @@ class TestFlowCustomFieldDelete:
             _define_field(client, token, flow_id, "x", "string")
             resp = client.delete(f"/api/v1/flows/{flow_id}/custom-fields/x")
         assert resp.status_code == 401
+        assert "error" in resp.json()

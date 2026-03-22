@@ -90,6 +90,8 @@ class TestFlowBookmarkPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -140,6 +142,7 @@ class TestFlowBookmarkPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -150,6 +153,7 @@ class TestFlowBookmarkPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -160,6 +164,7 @@ class TestFlowBookmarkPost:
                 json={"name": "no-auth"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +221,7 @@ class TestFlowBookmarkGet:
             token, _ = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/bookmarks", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -223,6 +229,7 @@ class TestFlowBookmarkGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/bookmarks")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +268,7 @@ class TestFlowBookmarkDelete:
                 f"/api/v1/flows/{flow_id}/bookmarks/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -269,6 +277,7 @@ class TestFlowBookmarkDelete:
                 "/api/v1/flows/nonexistent/bookmarks/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -277,6 +286,7 @@ class TestFlowBookmarkDelete:
             bm = _add_bookmark(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/bookmarks/{bm['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_other_user_cannot_delete(self):
         """User B cannot delete user A's bookmark."""
@@ -289,3 +299,4 @@ class TestFlowBookmarkDelete:
                 f"/api/v1/flows/{flow_id}/bookmarks/{bm['id']}", headers=_auth(token_b)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()

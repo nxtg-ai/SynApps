@@ -264,6 +264,7 @@ class TestWorkflowVariablesEndpoints:
         with TestClient(app) as client:
             resp = client.get("/api/v1/workflows/nonexistent-flow/variables")
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_get_empty_variables_for_existing_flow(self):
         with TestClient(app) as client:
@@ -320,6 +321,7 @@ class TestWorkflowVariablesEndpoints:
                 json={"x": 1},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
 
 # ===========================================================================
@@ -334,6 +336,7 @@ class TestWorkflowSecretsEndpoints:
         with TestClient(app) as client:
             resp = client.get("/api/v1/workflows/nonexistent-flow/secrets")
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_get_empty_secrets_for_existing_flow(self):
         with TestClient(app) as client:
@@ -391,6 +394,7 @@ class TestWorkflowSecretsEndpoints:
                 json={"k": "v"},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
 
 # ===========================================================================

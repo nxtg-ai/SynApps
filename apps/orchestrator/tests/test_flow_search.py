@@ -184,6 +184,7 @@ class TestFlowSearchAuth:
             _register(client)  # activates auth enforcement (disables anonymous bootstrap)
             resp = client.get("/api/v1/flows/search?q=test")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_search_pagination(self):
         with TestClient(app) as client:

@@ -424,6 +424,7 @@ class TestMonitoringEndpoints:
             _register(client)
             resp = client.get("/api/v1/monitoring/workflows")
         assert resp.status_code in (401, 403)  # Gate 2
+        assert "error" in resp.json()
 
     def test_get_workflows_returns_200_with_auth(self):
         """GET /monitoring/workflows returns 200 with a valid token."""
@@ -480,6 +481,7 @@ class TestMonitoringEndpoints:
                     headers={"Authorization": f"Bearer {token}"},
                 )
         assert resp.status_code == 404  # Gate 2
+        assert "error" in resp.json()
 
     def test_post_alert_creates_rule(self):
         """POST /monitoring/alerts creates a rule and returns 201."""
@@ -505,6 +507,7 @@ class TestMonitoringEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 422  # Gate 2
+        assert "error" in resp.json()
 
     def test_get_alerts_lists_rules(self):
         """GET /monitoring/alerts returns all alert rules."""
@@ -554,6 +557,7 @@ class TestMonitoringEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404  # Gate 2
+        assert "error" in resp.json()
 
     def test_delete_alert_removes_rule(self):
         """DELETE /monitoring/alerts/{id} removes the rule (204) and GET no longer lists it."""
@@ -586,6 +590,7 @@ class TestMonitoringEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404  # Gate 2
+        assert "error" in resp.json()
 
     def test_get_workflows_health_status_field_present(self):
         """Health response includes health_status field for each workflow."""

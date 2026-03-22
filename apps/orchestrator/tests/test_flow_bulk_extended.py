@@ -131,6 +131,7 @@ class TestBulkMove:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_move_requires_auth(self):
         with TestClient(app) as client:
@@ -141,6 +142,7 @@ class TestBulkMove:
                 json={"flow_ids": [f1], "group": "x"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +200,7 @@ class TestBulkPriority:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_bulk_priority_empty_list_422(self):
         with TestClient(app) as client:
@@ -208,6 +211,7 @@ class TestBulkPriority:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_bulk_priority_requires_auth(self):
         with TestClient(app) as client:
@@ -218,3 +222,4 @@ class TestBulkPriority:
                 json={"flow_ids": [f1], "priority": "high"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -364,6 +364,7 @@ class TestNotificationsEndpoints:
         with TestClient(app) as client:
             resp = client.get("/api/v1/workflows/nonexistent-flow/notifications")
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_get_empty_config_for_existing_flow(self):
         with TestClient(app) as client:
@@ -414,6 +415,7 @@ class TestNotificationsEndpoints:
                 json={"on_complete": [{"type": "sms"}]},  # unknown type
             )
             assert resp.status_code == 422  # Gate 2: validation rejects unknown type
+            assert "error" in resp.json()
 
     def test_put_rejects_handler_without_type_field(self):
         with TestClient(app) as client:
@@ -424,6 +426,7 @@ class TestNotificationsEndpoints:
                 json={"on_complete": [{"url": "https://x.com"}]},  # missing type
             )
             assert resp.status_code == 422
+            assert "error" in resp.json()
 
     def test_put_404_for_unknown_flow(self):
         with TestClient(app) as client:
@@ -432,6 +435,7 @@ class TestNotificationsEndpoints:
                 json={"on_complete": [{"type": "slack", "webhook_url": "x"}]},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_put_accepts_all_valid_handler_types(self):
         with TestClient(app) as client:

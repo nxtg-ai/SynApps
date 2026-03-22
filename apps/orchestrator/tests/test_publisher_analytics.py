@@ -206,6 +206,7 @@ class TestPublisherAnalyticsEndpoint:
             _register(client)
             resp = client.get("/api/v1/marketplace/publisher/analytics")
             assert resp.status_code == 401
+            assert "error" in resp.json()
 
     def test_summary_total_listings_reflects_published_templates(self):
         """summary.total_listings reflects how many templates the publisher has."""
@@ -352,6 +353,7 @@ class TestListingAnalyticsEndpoint:
                 headers=_auth_headers(token),
             )
             assert resp.status_code == 403
+            assert "error" in resp.json()
 
     def test_returns_404_for_unknown_listing(self):
         """Returns 404 for a non-existent listing ID."""
@@ -362,6 +364,7 @@ class TestListingAnalyticsEndpoint:
                 headers=_auth_headers(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_recent_reviews_list_present(self):
         """recent_reviews list is present in the detail response."""

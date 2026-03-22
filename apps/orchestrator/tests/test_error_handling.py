@@ -319,6 +319,7 @@ class TestDLQEndpoints:
             "/api/v1/dlq/does-not-exist", headers={"Authorization": f"Bearer {token}"}
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_dlq_entry_success(self, client):
         token = _register_and_login(client)
@@ -334,6 +335,7 @@ class TestDLQEndpoints:
         token = _register_and_login(client)
         resp = client.delete("/api/v1/dlq/ghost-id", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_replay_dlq_entry_not_found(self, client):
         token = _register_and_login(client)
@@ -342,6 +344,7 @@ class TestDLQEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_replay_dlq_entry_no_flow_id_returns_422(self, client):
         token = _register_and_login(client)
@@ -351,6 +354,7 @@ class TestDLQEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_replay_dlq_entry_flow_not_found(self, client):
         token = _register_and_login(client)
@@ -360,6 +364,7 @@ class TestDLQEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_dlq_returns_items_and_total_keys(self, client):
         token = _register_and_login(client)

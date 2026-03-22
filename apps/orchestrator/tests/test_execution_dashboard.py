@@ -184,6 +184,7 @@ class TestAdminEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 403
+            assert "error" in resp.json()
 
     def test_active_executions_200(self) -> None:
         with TestClient(app) as client:
@@ -261,6 +262,7 @@ class TestAdminEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

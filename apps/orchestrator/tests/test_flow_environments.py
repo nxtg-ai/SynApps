@@ -90,6 +90,8 @@ class TestFlowEnvironmentPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -118,6 +120,7 @@ class TestFlowEnvironmentPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_config(self):
         with TestClient(app) as client:
@@ -140,6 +143,7 @@ class TestFlowEnvironmentPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -150,6 +154,7 @@ class TestFlowEnvironmentPut:
                 json={"config": {}},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +202,7 @@ class TestFlowEnvironmentList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/environments", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -204,6 +210,7 @@ class TestFlowEnvironmentList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/environments")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +238,7 @@ class TestFlowEnvironmentGetOne:
                 f"/api/v1/flows/{flow_id}/environments/staging", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_single_requires_auth(self):
         with TestClient(app) as client:
@@ -239,6 +247,7 @@ class TestFlowEnvironmentGetOne:
             _set_env(client, token, flow_id, "development")
             resp = client.get(f"/api/v1/flows/{flow_id}/environments/development")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +296,7 @@ class TestFlowEnvironmentActivate:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_activate_requires_auth(self):
         with TestClient(app) as client:
@@ -295,6 +305,7 @@ class TestFlowEnvironmentActivate:
             _set_env(client, token, flow_id, "staging")
             resp = client.post(f"/api/v1/flows/{flow_id}/environments/staging/activate")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +346,7 @@ class TestFlowEnvironmentDelete:
                 f"/api/v1/flows/{flow_id}/environments/staging", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_invalid_env_name_422(self):
         with TestClient(app) as client:
@@ -344,6 +356,7 @@ class TestFlowEnvironmentDelete:
                 f"/api/v1/flows/{flow_id}/environments/testing", headers=_auth(token)
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -352,6 +365,7 @@ class TestFlowEnvironmentDelete:
                 "/api/v1/flows/nonexistent/environments/staging", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -360,3 +374,4 @@ class TestFlowEnvironmentDelete:
             _set_env(client, token, flow_id, "development")
             resp = client.delete(f"/api/v1/flows/{flow_id}/environments/development")
         assert resp.status_code == 401
+        assert "error" in resp.json()

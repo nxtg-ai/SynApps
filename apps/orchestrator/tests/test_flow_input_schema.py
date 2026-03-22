@@ -96,6 +96,8 @@ class TestFlowInputSchemaPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -170,6 +172,7 @@ class TestFlowInputSchemaPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -180,6 +183,7 @@ class TestFlowInputSchemaPut:
                 json={"schema": {}},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -203,12 +207,14 @@ class TestFlowInputSchemaGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/input-schema", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/input-schema", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -217,6 +223,7 @@ class TestFlowInputSchemaGet:
             _set_schema(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/input-schema")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +250,7 @@ class TestFlowInputSchemaDelete:
             client.delete(f"/api/v1/flows/{flow_id}/input-schema", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/input-schema", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_schema(self):
         with TestClient(app) as client:
@@ -250,6 +258,7 @@ class TestFlowInputSchemaDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/input-schema", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -258,6 +267,7 @@ class TestFlowInputSchemaDelete:
                 "/api/v1/flows/nonexistent/input-schema", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -266,3 +276,4 @@ class TestFlowInputSchemaDelete:
             _set_schema(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/input-schema")
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -261,6 +261,7 @@ def test_register_webhook_invalid_event(client):
         },
     )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 def test_list_webhooks_endpoint(client):
@@ -307,6 +308,7 @@ def test_delete_webhook_not_found(client):
     """DELETE /api/v1/webhooks/nonexistent returns 404."""
     resp = client.delete("/api/v1/webhooks/nonexistent-id")
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 def test_webhook_events_constant():

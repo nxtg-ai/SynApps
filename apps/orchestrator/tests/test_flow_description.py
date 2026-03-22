@@ -74,6 +74,7 @@ class TestFlowDescriptionGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/description", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -81,6 +82,7 @@ class TestFlowDescriptionGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/description")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFlowDescriptionSet:
@@ -94,6 +96,8 @@ class TestFlowDescriptionSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_contains_description(self):
         with TestClient(app) as client:
@@ -176,6 +180,7 @@ class TestFlowDescriptionSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -186,6 +191,7 @@ class TestFlowDescriptionSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -196,3 +202,4 @@ class TestFlowDescriptionSet:
                 json={"description": "x"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()

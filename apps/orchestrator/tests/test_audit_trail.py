@@ -300,6 +300,7 @@ class TestAuditEndpoint:
             _register(client)  # disable anonymous bootstrap
             resp = client.get("/api/v1/audit")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_audit_since_filter(self):
         # Inject a clearly old entry

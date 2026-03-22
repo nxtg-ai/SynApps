@@ -337,6 +337,7 @@ class TestSubflowEndpoints:
             _register(client)  # register a user to disable anonymous bootstrap
             resp = client.get("/api/v1/subflows")
         assert resp.status_code in (401, 403)
+        assert "error" in resp.json()
 
     def test_list_subflows_includes_flag(self):
         """Each entry in GET /subflows carries is_subflow_compatible: true."""

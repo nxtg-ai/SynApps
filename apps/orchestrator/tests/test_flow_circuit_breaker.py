@@ -102,6 +102,8 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -185,6 +187,8 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_max_threshold_allowed(self):
         with TestClient(app) as client:
@@ -196,6 +200,8 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_threshold_zero_422(self):
         with TestClient(app) as client:
@@ -207,6 +213,7 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_threshold_too_large_422(self):
         with TestClient(app) as client:
@@ -218,6 +225,7 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_min_recovery_allowed(self):
         with TestClient(app) as client:
@@ -229,6 +237,8 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_max_recovery_allowed(self):
         with TestClient(app) as client:
@@ -240,6 +250,8 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_recovery_zero_422(self):
         with TestClient(app) as client:
@@ -251,6 +263,7 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -273,6 +286,7 @@ class TestFlowCircuitBreakerPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -283,6 +297,7 @@ class TestFlowCircuitBreakerPut:
                 json={"failure_threshold": 5, "recovery_timeout_s": 30},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -306,12 +321,14 @@ class TestFlowCircuitBreakerGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/circuit-breaker", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/circuit-breaker", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -320,6 +337,7 @@ class TestFlowCircuitBreakerGet:
             _set_cb(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/circuit-breaker")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +366,7 @@ class TestFlowCircuitBreakerDelete:
             client.delete(f"/api/v1/flows/{flow_id}/circuit-breaker", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/circuit-breaker", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_config(self):
         with TestClient(app) as client:
@@ -357,6 +376,7 @@ class TestFlowCircuitBreakerDelete:
                 f"/api/v1/flows/{flow_id}/circuit-breaker", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -365,6 +385,7 @@ class TestFlowCircuitBreakerDelete:
                 "/api/v1/flows/nonexistent/circuit-breaker", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -373,3 +394,4 @@ class TestFlowCircuitBreakerDelete:
             _set_cb(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/circuit-breaker")
         assert resp.status_code == 401
+        assert "error" in resp.json()

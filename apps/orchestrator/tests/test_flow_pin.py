@@ -63,6 +63,8 @@ class TestFlowPin:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["pinned"] is True
 
     def test_pin_response_shape(self):
         with TestClient(app) as client:
@@ -80,12 +82,14 @@ class TestFlowPin:
             client.post(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
             resp = client.post(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_pin_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.post("/api/v1/flows/nonexistent/pin", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_pin_requires_auth(self):
         with TestClient(app) as client:
@@ -93,6 +97,7 @@ class TestFlowPin:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/pin")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +113,8 @@ class TestFlowUnpin:
             client.post(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["pinned"] is False
 
     def test_unpin_response_shape(self):
         with TestClient(app) as client:
@@ -125,12 +132,14 @@ class TestFlowUnpin:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_unpin_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/pin", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_unpin_requires_auth(self):
         with TestClient(app) as client:
@@ -139,6 +148,7 @@ class TestFlowUnpin:
             client.post(f"/api/v1/flows/{flow_id}/pin", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/pin")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -200,3 +210,4 @@ class TestFlowPinnedList:
             _register(client)
             resp = client.get("/api/v1/flows/pinned")
         assert resp.status_code == 401
+        assert "error" in resp.json()

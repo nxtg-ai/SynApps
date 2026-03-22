@@ -298,6 +298,7 @@ class TestDiffEndpoints:
                 json={"v1": {}, "v2": {}},
             )
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_versions_post_requires_auth(self):
         with TestClient(app) as client:
@@ -307,6 +308,7 @@ class TestDiffEndpoints:
                 json={"snapshot": {}, "label": "v1"},
             )
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_diff_identical_workflows_is_identical(self):
         with TestClient(app) as client:
@@ -421,12 +423,14 @@ class TestProfilerEndpoints:
             _register(client)  # ensure non-trivial DB state (disables anonymous bootstrap)
             resp = client.get("/api/v1/workflows/flow-1/profile")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_execution_profile_requires_auth(self):
         with TestClient(app) as client:
             _register(client)  # ensure non-trivial DB state (disables anonymous bootstrap)
             resp = client.get("/api/v1/executions/eid-1/profile")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_workflow_profile_returns_200_with_nodes_list(self):
         run_id = str(uuid.uuid4())
@@ -466,6 +470,7 @@ class TestProfilerEndpoints:
                 headers=_auth(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_execution_profile_returns_bottleneck_node_id(self):
         eid = str(uuid.uuid4())

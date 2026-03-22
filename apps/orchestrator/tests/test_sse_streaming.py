@@ -220,6 +220,7 @@ class TestStreamEndpointAuth:
             _register(client)  # disable anonymous bootstrap
             resp = client.get("/api/v1/executions/some-run/stream")
             assert resp.status_code in (401, 403)  # Gate 2
+            assert "error" in resp.json()
 
     def test_unknown_run_id_returns_404(self):
         with TestClient(app) as client:
@@ -234,6 +235,7 @@ class TestStreamEndpointAuth:
                     headers={"Authorization": f"Bearer {token}"},
                 )
             assert resp.status_code == 404  # Gate 2
+            assert "error" in resp.json()
 
 
 class TestStreamEndpointReplay:

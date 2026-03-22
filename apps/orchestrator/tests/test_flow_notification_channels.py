@@ -99,6 +99,8 @@ class TestFlowNotificationChannelPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -172,6 +174,7 @@ class TestFlowNotificationChannelPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_invalid_event_422(self):
         with TestClient(app) as client:
@@ -183,6 +186,7 @@ class TestFlowNotificationChannelPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_deduplicates_events(self):
         with TestClient(app) as client:
@@ -215,6 +219,7 @@ class TestFlowNotificationChannelPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -225,6 +230,7 @@ class TestFlowNotificationChannelPost:
                 json={"type": "email", "target": "a@b.com"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +268,7 @@ class TestFlowNotificationChannelList:
                 "/api/v1/flows/nonexistent/notification-channels", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_requires_auth(self):
         with TestClient(app) as client:
@@ -269,6 +276,7 @@ class TestFlowNotificationChannelList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/notification-channels")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +305,7 @@ class TestFlowNotificationChannelGet:
                 f"/api/v1/flows/{flow_id}/notification-channels/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -305,6 +314,7 @@ class TestFlowNotificationChannelGet:
                 "/api/v1/flows/nonexistent/notification-channels/any", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -315,6 +325,7 @@ class TestFlowNotificationChannelGet:
                 f"/api/v1/flows/{flow_id}/notification-channels/{created['channel_id']}"
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +361,7 @@ class TestFlowNotificationChannelDelete:
                 f"/api/v1/flows/{flow_id}/notification-channels/{cid}", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_not_found(self):
         with TestClient(app) as client:
@@ -359,6 +371,7 @@ class TestFlowNotificationChannelDelete:
                 f"/api/v1/flows/{flow_id}/notification-channels/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -367,6 +380,7 @@ class TestFlowNotificationChannelDelete:
                 "/api/v1/flows/nonexistent/notification-channels/any", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -377,3 +391,4 @@ class TestFlowNotificationChannelDelete:
                 f"/api/v1/flows/{flow_id}/notification-channels/{created['channel_id']}"
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()

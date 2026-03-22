@@ -87,6 +87,8 @@ class TestFlowCollaboratorPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -112,6 +114,7 @@ class TestFlowCollaboratorPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_updates_existing_role(self):
         with TestClient(app) as client:
@@ -134,6 +137,7 @@ class TestFlowCollaboratorPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -144,6 +148,7 @@ class TestFlowCollaboratorPut:
                 json={"role": "viewer"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +196,7 @@ class TestFlowCollaboratorList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/collaborators", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -198,6 +204,7 @@ class TestFlowCollaboratorList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/collaborators")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +234,7 @@ class TestFlowCollaboratorGetOne:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_single_requires_auth(self):
         with TestClient(app) as client:
@@ -237,6 +245,7 @@ class TestFlowCollaboratorGetOne:
                 f"/api/v1/flows/{flow_id}/collaborators/alice@example.com"
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +288,7 @@ class TestFlowCollaboratorDelete:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -288,6 +298,7 @@ class TestFlowCollaboratorDelete:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -298,6 +309,7 @@ class TestFlowCollaboratorDelete:
                 f"/api/v1/flows/{flow_id}/collaborators/alice@example.com"
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_two_collaborators_different_roles(self):
         with TestClient(app) as client:

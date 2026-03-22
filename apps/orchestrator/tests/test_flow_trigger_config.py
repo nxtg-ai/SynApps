@@ -92,6 +92,8 @@ class TestFlowTriggerConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -173,6 +175,7 @@ class TestFlowTriggerConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -206,6 +209,7 @@ class TestFlowTriggerConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -216,6 +220,7 @@ class TestFlowTriggerConfigPut:
                 json={"trigger_type": "manual"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +244,7 @@ class TestFlowTriggerConfigGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/trigger-config", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -247,6 +253,7 @@ class TestFlowTriggerConfigGet:
                 "/api/v1/flows/nonexistent/trigger-config", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -255,6 +262,7 @@ class TestFlowTriggerConfigGet:
             _set_trigger(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/trigger-config")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +291,7 @@ class TestFlowTriggerConfigDelete:
             client.delete(f"/api/v1/flows/{flow_id}/trigger-config", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/trigger-config", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_config(self):
         with TestClient(app) as client:
@@ -292,6 +301,7 @@ class TestFlowTriggerConfigDelete:
                 f"/api/v1/flows/{flow_id}/trigger-config", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -300,6 +310,7 @@ class TestFlowTriggerConfigDelete:
                 "/api/v1/flows/nonexistent/trigger-config", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -308,3 +319,4 @@ class TestFlowTriggerConfigDelete:
             _set_trigger(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/trigger-config")
         assert resp.status_code == 401
+        assert "error" in resp.json()

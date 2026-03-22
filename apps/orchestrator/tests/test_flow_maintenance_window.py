@@ -91,6 +91,8 @@ class TestFlowMaintenanceWindowPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -161,6 +163,7 @@ class TestFlowMaintenanceWindowPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_active_is_true(self):
         with TestClient(app) as client:
@@ -194,6 +197,7 @@ class TestFlowMaintenanceWindowPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -204,6 +208,7 @@ class TestFlowMaintenanceWindowPut:
                 json={"start": "2026-05-01T00:00:00Z", "end": "2026-05-01T02:00:00Z"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +236,7 @@ class TestFlowMaintenanceWindowGet:
                 f"/api/v1/flows/{flow_id}/maintenance-window", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -239,6 +245,7 @@ class TestFlowMaintenanceWindowGet:
                 "/api/v1/flows/nonexistent/maintenance-window", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -247,6 +254,7 @@ class TestFlowMaintenanceWindowGet:
             _set_window(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/maintenance-window")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +285,7 @@ class TestFlowMaintenanceWindowDelete:
                 f"/api/v1/flows/{flow_id}/maintenance-window", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_window(self):
         with TestClient(app) as client:
@@ -286,6 +295,7 @@ class TestFlowMaintenanceWindowDelete:
                 f"/api/v1/flows/{flow_id}/maintenance-window", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -294,6 +304,7 @@ class TestFlowMaintenanceWindowDelete:
                 "/api/v1/flows/nonexistent/maintenance-window", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -302,3 +313,4 @@ class TestFlowMaintenanceWindowDelete:
             _set_window(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/maintenance-window")
         assert resp.status_code == 401
+        assert "error" in resp.json()

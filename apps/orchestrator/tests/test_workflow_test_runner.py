@@ -256,6 +256,7 @@ class TestTestCaseEndpoints:
                 headers=_auth(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_delete_returns_204(self):
         with TestClient(app) as client:
@@ -282,17 +283,22 @@ class TestTestCaseEndpoints:
                 headers=_auth(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_endpoints_require_auth(self):
         with TestClient(app) as client:
             token = _register(client)
             flow_id = _create_flow(client, token)
             # No auth header
-            assert client.post(
+            r1 = client.post(
                 f"/api/v1/flows/{flow_id}/tests",
                 json={"name": "no auth"},
-            ).status_code in (401, 403)
-            assert client.get(f"/api/v1/flows/{flow_id}/tests").status_code in (401, 403)
+            )
+            assert r1.status_code in (401, 403)
+            assert "error" in r1.json()
+            r2 = client.get(f"/api/v1/flows/{flow_id}/tests")
+            assert r2.status_code in (401, 403)
+            assert "error" in r2.json()
 
     def test_post_validates_name_required(self):
         with TestClient(app) as client:
@@ -304,6 +310,7 @@ class TestTestCaseEndpoints:
                 headers=_auth(token),
             )
             assert resp.status_code == 422
+            assert "error" in resp.json()
 
 
 # ===========================================================================

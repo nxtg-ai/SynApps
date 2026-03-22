@@ -360,6 +360,7 @@ class TestOAuthFlows:
             },
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_token_with_wrong_client_secret(self, client, registered_client):
         """Token endpoint returns 401 when the client_secret is incorrect."""
@@ -372,6 +373,7 @@ class TestOAuthFlows:
             },
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_token_with_invalid_grant_type(self, client, registered_client):
         """Token endpoint returns 400 for an unsupported grant_type."""
@@ -384,6 +386,7 @@ class TestOAuthFlows:
             },
         )
         assert resp.status_code == 400
+        assert "error" in resp.json()
 
     def test_authorize_requires_auth_header(self, client, registered_client):
         """Authorization endpoint returns 401 without a user Bearer token."""
@@ -397,6 +400,7 @@ class TestOAuthFlows:
             },
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_delete_client_endpoint(self, client, auth_headers, registered_client):
         """DELETE /oauth/clients/{id} deactivates a client."""

@@ -151,12 +151,14 @@ class TestFlowGroupCrud:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/group", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/group", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -167,6 +169,7 @@ class TestFlowGroupCrud:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -174,6 +177,7 @@ class TestFlowGroupCrud:
             flow_id = _create_flow(client, token)
             resp = client.put(f"/api/v1/flows/{flow_id}/group", json={"group": "x"})
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +216,7 @@ class TestListGroups:
             _create_flow(client, token)
             resp = client.get("/api/v1/flows/groups")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

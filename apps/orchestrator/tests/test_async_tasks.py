@@ -142,6 +142,7 @@ def test_run_async_unknown_template(client):
         json={"input": {}},
     )
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +180,7 @@ def test_get_task_not_found(client):
     """GET /tasks/{id} returns 404 for unknown task."""
     resp = client.get("/api/v1/tasks/nonexistent-task-id")
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +216,7 @@ def test_list_tasks_invalid_status_filter(client):
     """GET /tasks?status=invalid returns 400."""
     resp = client.get("/api/v1/tasks?status=invalid")
     assert resp.status_code == 400
+    assert "error" in resp.json()
 
 
 def test_list_tasks_empty(client):

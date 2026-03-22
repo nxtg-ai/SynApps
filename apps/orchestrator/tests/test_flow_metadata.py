@@ -77,6 +77,7 @@ class TestFlowMetadataGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/metadata", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -84,6 +85,7 @@ class TestFlowMetadataGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/metadata")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFlowMetadataPut:
@@ -97,6 +99,8 @@ class TestFlowMetadataPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_stores_metadata(self):
         with TestClient(app) as client:
@@ -160,6 +164,7 @@ class TestFlowMetadataPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_key_too_long_422(self):
         long_key = "k" * 101
@@ -172,6 +177,7 @@ class TestFlowMetadataPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -182,6 +188,7 @@ class TestFlowMetadataPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -192,6 +199,7 @@ class TestFlowMetadataPut:
                 json={"metadata": {"k": "v"}},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFlowMetadataPatch:
@@ -238,6 +246,7 @@ class TestFlowMetadataPatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_patch_requires_auth(self):
         with TestClient(app) as client:
@@ -248,6 +257,7 @@ class TestFlowMetadataPatch:
                 json={"metadata": {"k": "v"}},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFlowMetadataDeleteKey:
@@ -287,12 +297,14 @@ class TestFlowMetadataDeleteKey:
                 f"/api/v1/flows/{flow_id}/metadata/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_key_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/metadata/somekey", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_key_requires_auth(self):
         with TestClient(app) as client:
@@ -305,3 +317,4 @@ class TestFlowMetadataDeleteKey:
             )
             resp = client.delete(f"/api/v1/flows/{flow_id}/metadata/k")
         assert resp.status_code == 401
+        assert "error" in resp.json()

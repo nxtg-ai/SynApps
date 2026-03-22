@@ -208,6 +208,8 @@ def test_config_endpoint_returns_200(client):
     """GET /config returns 200."""
     resp = client.get("/api/v1/config")
     assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, (dict, list))
 
 
 def test_config_endpoint_has_expected_keys(client):

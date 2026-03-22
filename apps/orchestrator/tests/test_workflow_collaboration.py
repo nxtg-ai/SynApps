@@ -342,6 +342,8 @@ class TestCollaborationEndpoints:
                 headers=_auth_header(token2),
             )
             assert resp2.status_code == 409
+            data = resp2.json()
+            assert isinstance(data, (dict, list))
 
     def test_release_lock_works(self) -> None:
         with TestClient(app) as client:
@@ -455,3 +457,4 @@ class TestCollaborationEndpoints:
             _register(client)
             resp = client.post("/api/v1/flows/flow-x/collaboration/join")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()

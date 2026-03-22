@@ -111,6 +111,7 @@ class TestReplayEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_replay_requires_auth(self):
         with TestClient(app) as client:
@@ -119,6 +120,7 @@ class TestReplayEndpoints:
                 headers={"Authorization": "Bearer invalid.token.here"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_get_replay_history_requires_auth(self):
         with TestClient(app) as client:
@@ -127,6 +129,7 @@ class TestReplayEndpoints:
                 headers={"Authorization": "Bearer invalid.token.here"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_get_replay_history_empty_when_no_replays(self):
         with TestClient(app) as client:
@@ -156,6 +159,11 @@ class TestReplayEndpoints:
         # In tests, FlowRepository won't have the flow, so we expect 404.
         # This confirms the endpoint reached the flow lookup stage (not the input lookup stage).
         assert resp.status_code in (202, 404)
+        data = resp.json()
+        if resp.status_code == 202:
+            assert data["status"] == "started"
+        else:
+            assert "error" in data
 
     def test_post_replay_contains_original_run_id(self):
         exec_id = f"orig-exec-{uuid.uuid4().hex[:8]}"

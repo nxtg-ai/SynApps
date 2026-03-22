@@ -207,6 +207,7 @@ class TestPluginEndpoints:
         with TestClient(app) as client:
             resp = client.get(f"/api/v1/plugins/{uuid.uuid4()}")
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_delete_plugin_removes_it(self):
         with TestClient(app) as client:
@@ -224,6 +225,7 @@ class TestPluginEndpoints:
             headers = _register_user(client)
             resp = client.delete(f"/api/v1/plugins/{uuid.uuid4()}", headers=headers)
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_get_plugin_schema_returns_config_schema(self):
         with TestClient(app) as client:
@@ -241,6 +243,7 @@ class TestPluginEndpoints:
         with TestClient(app) as client:
             resp = client.get(f"/api/v1/plugins/{uuid.uuid4()}/schema")
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_install_plugin_increments_count(self):
         with TestClient(app) as client:
@@ -261,6 +264,7 @@ class TestPluginEndpoints:
             headers = _register_user(client)
             resp = client.post(f"/api/v1/plugins/{uuid.uuid4()}/install", headers=headers)
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_unauthenticated_post_returns_401(self):
         with TestClient(app) as client:
@@ -269,6 +273,7 @@ class TestPluginEndpoints:
             manifest = _sample_manifest()
             resp = client.post("/api/v1/plugins", json=manifest.model_dump())
             assert resp.status_code == 401
+            assert "error" in resp.json()
 
     def test_unauthenticated_delete_returns_401(self):
         with TestClient(app) as client:
@@ -278,6 +283,7 @@ class TestPluginEndpoints:
             plugin_id = created["plugin_id"]
             resp = client.delete(f"/api/v1/plugins/{plugin_id}")
             assert resp.status_code == 401
+            assert "error" in resp.json()
 
     def test_unauthenticated_install_returns_401(self):
         with TestClient(app) as client:
@@ -287,6 +293,7 @@ class TestPluginEndpoints:
             plugin_id = created["plugin_id"]
             resp = client.post(f"/api/v1/plugins/{plugin_id}/install")
             assert resp.status_code == 401
+            assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -417,3 +424,5 @@ class TestPluginExecution:
             }
             resp = client.post("/api/v1/flows", json=flow_data, headers=headers)
             assert resp.status_code == 201, f"Flow creation failed: {resp.text}"
+            data = resp.json()
+            assert isinstance(data, (dict, list))

@@ -192,6 +192,7 @@ class TestCostEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_cost_requires_auth(self):
         with TestClient(app) as client:
@@ -200,6 +201,7 @@ class TestCostEndpoints:
                 headers={"Authorization": "Bearer invalid.token.here"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_get_cost_summary_200_structure(self):
         cost_tracker_store.record("exec-s1", FLOW_ID, [])
@@ -240,6 +242,7 @@ class TestCostEndpoints:
                 headers={"Authorization": "Bearer invalid.token.here"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_run_count_matches_records(self):
         cost_tracker_store.record("exec-rc1", FLOW_ID, [])
@@ -326,6 +329,8 @@ class TestEstimateCostEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 200  # Gate 2
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_estimate_404_for_unknown_flow(self):
         with TestClient(app) as client:
@@ -336,6 +341,7 @@ class TestEstimateCostEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404  # Gate 2
+        assert "error" in resp.json()
 
     def test_response_has_estimated_usd_field(self):
         with TestClient(app) as client:
@@ -419,3 +425,4 @@ class TestEstimateCostEndpoint:
                 headers={"Authorization": "Bearer invalid.token.here"},
             )
         assert resp.status_code == 401  # Gate 2
+        assert "error" in resp.json()

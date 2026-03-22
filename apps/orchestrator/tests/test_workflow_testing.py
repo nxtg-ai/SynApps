@@ -191,6 +191,8 @@ class TestRunWorkflowTest:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 200  # Gate 2
+            data = resp.json()
+            assert data["workflow_id"] == flow_id
 
     def test_returns_assertion_results(self):
         with TestClient(app) as client:
@@ -264,6 +266,7 @@ class TestRunWorkflowTest:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404  # Gate 2
+            assert "error" in resp.json()
 
     def test_requires_auth(self):
         with TestClient(app) as client:
@@ -274,6 +277,7 @@ class TestRunWorkflowTest:
                 json={"assertions": ["status == success"], "input": {}},
             )
             assert resp.status_code in (401, 403)  # Gate 2
+            assert "error" in resp.json()
 
 
 # ===========================================================================
@@ -291,6 +295,8 @@ class TestGetWorkflowTestHistory:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 200  # Gate 2
+            data = resp.json()
+            assert data["workflow_id"] == flow_id
 
     def test_returns_history_list(self):
         with TestClient(app) as client:
@@ -329,6 +335,7 @@ class TestGetWorkflowTestHistory:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404  # Gate 2
+            assert "error" in resp.json()
 
 
 # ===========================================================================
@@ -347,6 +354,8 @@ class TestTestSuites:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code in (200, 201)  # Gate 2
+            data = resp.json()
+            assert isinstance(data, dict)
 
     def test_save_suite_stores_name(self):
         with TestClient(app) as client:

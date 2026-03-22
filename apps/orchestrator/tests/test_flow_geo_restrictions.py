@@ -92,6 +92,8 @@ class TestFlowGeoRestrictionsPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -151,6 +153,7 @@ class TestFlowGeoRestrictionsPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_stores_regions(self):
         with TestClient(app) as client:
@@ -184,6 +187,7 @@ class TestFlowGeoRestrictionsPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -206,6 +210,7 @@ class TestFlowGeoRestrictionsPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -216,6 +221,7 @@ class TestFlowGeoRestrictionsPut:
                 json={"mode": "none"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +245,7 @@ class TestFlowGeoRestrictionsGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/geo-restrictions", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -247,6 +254,7 @@ class TestFlowGeoRestrictionsGet:
                 "/api/v1/flows/nonexistent/geo-restrictions", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -255,6 +263,7 @@ class TestFlowGeoRestrictionsGet:
             _set_geo(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/geo-restrictions")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +292,7 @@ class TestFlowGeoRestrictionsDelete:
             client.delete(f"/api/v1/flows/{flow_id}/geo-restrictions", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/geo-restrictions", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_restrictions(self):
         with TestClient(app) as client:
@@ -292,6 +302,7 @@ class TestFlowGeoRestrictionsDelete:
                 f"/api/v1/flows/{flow_id}/geo-restrictions", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -300,6 +311,7 @@ class TestFlowGeoRestrictionsDelete:
                 "/api/v1/flows/nonexistent/geo-restrictions", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -308,3 +320,4 @@ class TestFlowGeoRestrictionsDelete:
             _set_geo(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/geo-restrictions")
         assert resp.status_code == 401
+        assert "error" in resp.json()

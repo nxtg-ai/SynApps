@@ -75,6 +75,8 @@ class TestFlowAccessLog:
             flow_id = _create_flow(client, token)
             resp = _get_log(client, token, flow_id)
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_response_shape(self):
         with TestClient(app) as client:
@@ -180,6 +182,7 @@ class TestFlowAccessLog:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_requires_auth(self):
         with TestClient(app) as client:
@@ -187,3 +190,4 @@ class TestFlowAccessLog:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/access-log")
         assert resp.status_code == 401
+        assert "error" in resp.json()

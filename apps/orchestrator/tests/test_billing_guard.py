@@ -91,6 +91,8 @@ def test_billing_guard_pro_tier():
         # Pro should be able to use premium features
         response = client.get("/ai/suggest", headers=headers)
         assert response.status_code == 200
+        data = response.json()
+        assert "suggestion" in data
 
 
 def test_billing_guard_enterprise_tier():
@@ -115,3 +117,5 @@ def test_billing_guard_enterprise_tier():
         # Wait, ENTERPRISE_TIER_MAX_RUNS = -1
         response = client.post("/flows/test-flow/run", json={"nodes": []}, headers=headers)
         assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"

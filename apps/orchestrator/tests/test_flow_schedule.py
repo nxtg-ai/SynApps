@@ -88,6 +88,8 @@ class TestFlowSchedulePut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -116,6 +118,7 @@ class TestFlowSchedulePut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -149,6 +152,7 @@ class TestFlowSchedulePut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -159,6 +163,7 @@ class TestFlowSchedulePut:
                 json={"cron": "0 9 * * *"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -182,12 +187,14 @@ class TestFlowScheduleGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/schedule", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/schedule", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -195,6 +202,7 @@ class TestFlowScheduleGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/schedule")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +259,7 @@ class TestFlowSchedulePatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_patch_404_no_schedule(self):
         with TestClient(app) as client:
@@ -262,6 +271,7 @@ class TestFlowSchedulePatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_patch_requires_auth(self):
         with TestClient(app) as client:
@@ -273,6 +283,7 @@ class TestFlowSchedulePatch:
                 json={"enabled": False},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +309,7 @@ class TestFlowScheduleDelete:
             client.delete(f"/api/v1/flows/{flow_id}/schedule", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/schedule", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_no_schedule(self):
         with TestClient(app) as client:
@@ -305,12 +317,14 @@ class TestFlowScheduleDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/schedule", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/schedule", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -319,3 +333,4 @@ class TestFlowScheduleDelete:
             _set_schedule(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/schedule")
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -183,6 +183,7 @@ def test_import_endpoint_validation(client):
     """POST /templates/import with empty name returns 422."""
     resp = client.post("/api/v1/templates/import", json={"name": "", "nodes": [], "edges": []})
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 def test_import_endpoint_has_metadata(client):
@@ -242,6 +243,7 @@ def test_export_not_found(client):
     """GET /templates/{id}/export returns 404 for unknown template."""
     resp = client.get("/api/v1/templates/nonexistent/export")
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 def test_export_yaml_fallback(client):
@@ -280,6 +282,7 @@ def test_versions_not_found(client):
     """GET /templates/{id}/versions returns 404 for unknown template."""
     resp = client.get("/api/v1/templates/nonexistent/versions")
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -520,6 +523,7 @@ def test_publish_template_invalid_category(client):
         },
     )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 def test_publish_template_all_valid_categories(client):
@@ -596,6 +600,7 @@ def test_publish_template_missing_name(client):
         },
     )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 def test_publish_template_missing_category(client):
@@ -609,6 +614,7 @@ def test_publish_template_missing_category(client):
         },
     )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

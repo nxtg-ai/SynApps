@@ -162,6 +162,7 @@ class TestUsageMeEndpoint:
             _register(client)
             resp = client.get("/api/v1/usage/me")
             assert resp.status_code in (401, 403)  # Gate 2
+            assert "error" in resp.json()
 
     def test_returns_200_with_auth(self):
         with TestClient(app) as client:
@@ -171,6 +172,8 @@ class TestUsageMeEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 200  # Gate 2
+            data = resp.json()
+            assert isinstance(data, (dict, list))
 
     def test_response_contains_usage_fields(self):
         with TestClient(app) as client:
@@ -249,6 +252,8 @@ class TestExecutionQuotaEnforcement:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 202  # Gate 2
+            data = resp.json()
+            assert "run_id" in data
 
     def test_hourly_limit_exceeded_returns_429(self):
         with TestClient(app) as client:
@@ -264,6 +269,7 @@ class TestExecutionQuotaEnforcement:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 429  # Gate 2
+            assert "error" in resp.json()
 
     def test_429_response_has_retry_after_info(self):
         with TestClient(app) as client:

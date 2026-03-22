@@ -105,6 +105,8 @@ class TestFlowExecutionHookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -168,6 +170,7 @@ class TestFlowExecutionHookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_enabled_false(self):
         with TestClient(app) as client:
@@ -223,6 +226,7 @@ class TestFlowExecutionHookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -233,6 +237,7 @@ class TestFlowExecutionHookPost:
                 json={"hook_type": "pre_execution", "url": "https://example.com/hook"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_post_too_many_hooks_422(self):
         with TestClient(app) as client:
@@ -246,6 +251,7 @@ class TestFlowExecutionHookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +287,7 @@ class TestFlowExecutionHookList:
                 "/api/v1/flows/nonexistent/execution-hooks", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_requires_auth(self):
         with TestClient(app) as client:
@@ -288,6 +295,7 @@ class TestFlowExecutionHookList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/execution-hooks")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +324,7 @@ class TestFlowExecutionHookGet:
                 f"/api/v1/flows/{flow_id}/execution-hooks/no-such-hook", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -324,6 +333,7 @@ class TestFlowExecutionHookGet:
                 "/api/v1/flows/nonexistent/execution-hooks/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -333,6 +343,7 @@ class TestFlowExecutionHookGet:
             hook_id = hook["hook_id"]
             resp = client.get(f"/api/v1/flows/{flow_id}/execution-hooks/{hook_id}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +379,7 @@ class TestFlowExecutionHookDelete:
                 f"/api/v1/flows/{flow_id}/execution-hooks/{hook_id}", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_not_found(self):
         with TestClient(app) as client:
@@ -377,6 +389,7 @@ class TestFlowExecutionHookDelete:
                 f"/api/v1/flows/{flow_id}/execution-hooks/no-such-hook", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -385,6 +398,7 @@ class TestFlowExecutionHookDelete:
                 "/api/v1/flows/nonexistent/execution-hooks/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -394,3 +408,4 @@ class TestFlowExecutionHookDelete:
             hook_id = hook["hook_id"]
             resp = client.delete(f"/api/v1/flows/{flow_id}/execution-hooks/{hook_id}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

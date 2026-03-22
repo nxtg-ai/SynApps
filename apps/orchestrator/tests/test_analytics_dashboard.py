@@ -173,6 +173,7 @@ class TestAnalyticsDashboardEndpoint:
             _register(client)
             resp = client.get("/api/v1/analytics/dashboard")
             assert resp.status_code in (401, 403)  # Gate 2
+            assert "error" in resp.json()
 
     def test_returns_200_with_auth(self):
         with TestClient(app) as client:
@@ -183,6 +184,8 @@ class TestAnalyticsDashboardEndpoint:
                     headers={"Authorization": f"Bearer {token}"},
                 )
             assert resp.status_code == 200  # Gate 2
+            data = resp.json()
+            assert isinstance(data, (dict, list))
 
     def test_response_contains_all_sections(self):
         with TestClient(app) as client:
@@ -310,3 +313,4 @@ class TestAnalyticsDashboardExportCsv:
             _register(client)
             resp = client.get("/api/v1/analytics/dashboard/export.csv")
             assert resp.status_code in (401, 403)  # Gate 2
+            assert "error" in resp.json()

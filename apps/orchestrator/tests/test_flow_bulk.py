@@ -111,6 +111,7 @@ class TestBulkArchive:
             fid = _create_flow(client, token)
             resp = client.post("/api/v1/flows/bulk/archive", json={"flow_ids": [fid]})
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_archive_empty_ids_422(self):
         with TestClient(app) as client:
@@ -121,6 +122,7 @@ class TestBulkArchive:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_archive_too_many_ids_422(self):
         with TestClient(app) as client:
@@ -131,6 +133,7 @@ class TestBulkArchive:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +188,7 @@ class TestBulkRestore:
             fid = _create_flow(client, token)
             resp = client.post("/api/v1/flows/bulk/restore", json={"flow_ids": [fid]})
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +222,7 @@ class TestBulkDelete:
             )
             resp = client.get(f"/api/v1/flows/{fid}", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_not_found_fails(self):
         with TestClient(app) as client:
@@ -235,6 +240,7 @@ class TestBulkDelete:
             fid = _create_flow(client, token)
             resp = client.post("/api/v1/flows/bulk/delete", json={"flow_ids": [fid]})
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -286,3 +292,4 @@ class TestBulkTag:
             fid = _create_flow(client, token)
             resp = client.post("/api/v1/flows/bulk/tag", json={"flow_ids": [fid], "tag": "x"})
         assert resp.status_code == 401
+        assert "error" in resp.json()

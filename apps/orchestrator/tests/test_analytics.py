@@ -351,6 +351,8 @@ class TestAnalyticsWorkflowsEndpoint:
     async def test_endpoint_returns_200(self, db, client):
         resp = client.get("/api/v1/analytics/workflows")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     @pytest.mark.asyncio
     async def test_empty_result_structure(self, db, client):
@@ -410,6 +412,8 @@ class TestAnalyticsNodesEndpoint:
     async def test_endpoint_returns_200(self, db, client):
         resp = client.get("/api/v1/analytics/nodes")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     @pytest.mark.asyncio
     async def test_empty_result_structure(self, db, client):

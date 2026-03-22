@@ -92,6 +92,8 @@ class TestFlowDataClassificationPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -162,6 +164,7 @@ class TestFlowDataClassificationPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_pii_flag_true(self):
         with TestClient(app) as client:
@@ -207,6 +210,7 @@ class TestFlowDataClassificationPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -217,6 +221,7 @@ class TestFlowDataClassificationPut:
                 json={"level": "public"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +250,7 @@ class TestFlowDataClassificationGet:
                 f"/api/v1/flows/{flow_id}/data-classification", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -253,6 +259,7 @@ class TestFlowDataClassificationGet:
                 "/api/v1/flows/nonexistent/data-classification", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -261,6 +268,7 @@ class TestFlowDataClassificationGet:
             _set_classification(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/data-classification")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +301,7 @@ class TestFlowDataClassificationDelete:
                 f"/api/v1/flows/{flow_id}/data-classification", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_none_set(self):
         with TestClient(app) as client:
@@ -302,6 +311,7 @@ class TestFlowDataClassificationDelete:
                 f"/api/v1/flows/{flow_id}/data-classification", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -310,6 +320,7 @@ class TestFlowDataClassificationDelete:
                 "/api/v1/flows/nonexistent/data-classification", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -318,3 +329,4 @@ class TestFlowDataClassificationDelete:
             _set_classification(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/data-classification")
         assert resp.status_code == 401
+        assert "error" in resp.json()

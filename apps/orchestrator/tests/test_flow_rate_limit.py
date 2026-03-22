@@ -96,6 +96,7 @@ class TestFlowRateLimitGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/rate-limit", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -103,6 +104,7 @@ class TestFlowRateLimitGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/rate-limit")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +123,8 @@ class TestFlowRateLimitPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_stores_config(self):
         with TestClient(app) as client:
@@ -157,6 +161,7 @@ class TestFlowRateLimitPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_invalid_window_zero_422(self):
         with TestClient(app) as client:
@@ -168,6 +173,7 @@ class TestFlowRateLimitPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -178,6 +184,7 @@ class TestFlowRateLimitPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -188,6 +195,7 @@ class TestFlowRateLimitPut:
                 json={"max_runs": 5, "window_seconds": 60},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -228,12 +236,14 @@ class TestFlowRateLimitDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/rate-limit", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/rate-limit", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -246,6 +256,7 @@ class TestFlowRateLimitDelete:
             )
             resp = client.delete(f"/api/v1/flows/{flow_id}/rate-limit")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

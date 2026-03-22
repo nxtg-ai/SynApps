@@ -155,22 +155,27 @@ class TestV2Router:
     def test_v2_post_501(self, client):
         resp = client.post("/api/v2/flows", json={"name": "test"})
         assert resp.status_code == 501
+        assert "error" in resp.json()
 
     def test_v2_put_501(self, client):
         resp = client.put("/api/v2/flows/123", json={})
         assert resp.status_code == 501
+        assert "error" in resp.json()
 
     def test_v2_delete_501(self, client):
         resp = client.delete("/api/v2/flows/123")
         assert resp.status_code == 501
+        assert "error" in resp.json()
 
     def test_v2_patch_501(self, client):
         resp = client.patch("/api/v2/anything", json={})
         assert resp.status_code == 501
+        assert "error" in resp.json()
 
     def test_v2_nested_path_501(self, client):
         resp = client.get("/api/v2/flows/123/runs/456/trace")
         assert resp.status_code == 501
+        assert "error" in resp.json()
 
     def test_v2_error_includes_current_version(self, client):
         resp = client.get("/api/v2/test")
@@ -252,6 +257,8 @@ class TestVersionEndpoint:
         """Version endpoint should be accessible without authentication."""
         resp = client.get("/api/v1/version")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
 
 # ============================================================

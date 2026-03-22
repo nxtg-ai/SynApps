@@ -97,6 +97,8 @@ class TestFlowAuditExportPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 202
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -148,6 +150,7 @@ class TestFlowAuditExportPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_timestamps_stored(self):
         with TestClient(app) as client:
@@ -197,6 +200,7 @@ class TestFlowAuditExportPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -207,6 +211,7 @@ class TestFlowAuditExportPost:
                 json={"format": "json"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_post_too_many_exports_422(self):
         with TestClient(app) as client:
@@ -220,6 +225,7 @@ class TestFlowAuditExportPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +261,7 @@ class TestFlowAuditExportList:
                 "/api/v1/flows/nonexistent/audit-export", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_requires_auth(self):
         with TestClient(app) as client:
@@ -262,6 +269,7 @@ class TestFlowAuditExportList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/audit-export")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +298,7 @@ class TestFlowAuditExportGet:
                 f"/api/v1/flows/{flow_id}/audit-export/no-such-job", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_wrong_flow(self):
         with TestClient(app) as client:
@@ -302,6 +311,7 @@ class TestFlowAuditExportGet:
                 f"/api/v1/flows/{flow_id_2}/audit-export/{job_id}", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -310,6 +320,7 @@ class TestFlowAuditExportGet:
                 "/api/v1/flows/nonexistent/audit-export/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -319,3 +330,4 @@ class TestFlowAuditExportGet:
             job_id = job["job_id"]
             resp = client.get(f"/api/v1/flows/{flow_id}/audit-export/{job_id}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

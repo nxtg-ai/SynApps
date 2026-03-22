@@ -97,6 +97,8 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -136,6 +138,8 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_max_retries_above_max_422(self):
         with TestClient(app) as client:
@@ -147,6 +151,7 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_delay_zero(self):
         with TestClient(app) as client:
@@ -158,6 +163,8 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_delay_maximum(self):
         with TestClient(app) as client:
@@ -169,6 +176,8 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_delay_above_max_422(self):
         with TestClient(app) as client:
@@ -180,6 +189,7 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_backoff_constant(self):
         with TestClient(app) as client:
@@ -203,6 +213,7 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -225,6 +236,7 @@ class TestFlowRetryPolicyPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -235,6 +247,7 @@ class TestFlowRetryPolicyPut:
                 json={"max_retries": 1, "retry_delay_s": 0, "backoff_multiplier": 1.0},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -259,12 +272,14 @@ class TestFlowRetryPolicyGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/retry-policy", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/retry-policy", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -273,6 +288,7 @@ class TestFlowRetryPolicyGet:
             _set_policy(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/retry-policy")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +315,7 @@ class TestFlowRetryPolicyDelete:
             client.delete(f"/api/v1/flows/{flow_id}/retry-policy", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/retry-policy", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_policy(self):
         with TestClient(app) as client:
@@ -306,6 +323,7 @@ class TestFlowRetryPolicyDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/retry-policy", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -314,3 +332,4 @@ class TestFlowRetryPolicyDelete:
             _set_policy(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/retry-policy")
         assert resp.status_code == 401
+        assert "error" in resp.json()

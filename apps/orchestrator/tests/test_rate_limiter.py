@@ -91,6 +91,8 @@ class TestRateLimiterMiddleware:
         for _ in range(100):
             resp = client.get("/api/v1/health")
             assert resp.status_code == 200
+            data = resp.json()
+            assert isinstance(data, (dict, list))
 
     def test_rate_limit_headers_present(self):
         app = _make_app()

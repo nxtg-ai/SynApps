@@ -173,6 +173,7 @@ class TestCommentEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_get_node_comments_returns_200_with_data(self):
         with TestClient(app) as client:
@@ -246,6 +247,7 @@ class TestCommentEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_post_comment_requires_auth(self):
         with TestClient(app) as client:
@@ -257,6 +259,7 @@ class TestCommentEndpoints:
                 json={"content": "no auth"},
             )
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_post_comment_records_node_commented_activity(self):
         with TestClient(app) as client:
@@ -299,6 +302,7 @@ class TestActivityFeedEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_flow_edit_appears_in_activity(self):
         with TestClient(app) as client:
@@ -363,3 +367,4 @@ class TestActivityFeedEndpoint:
             client.post("/api/v1/flows", json=SAMPLE_FLOW)
             resp = client.get(f"/api/v1/workflows/{FLOW_ID}/activity")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()

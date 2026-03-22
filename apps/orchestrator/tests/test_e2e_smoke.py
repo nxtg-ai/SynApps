@@ -377,6 +377,8 @@ class TestSmokePipelineViaReceiveEndpoint:
                 headers={"X-Webhook-Signature": "sha256=badhex"},
             )
             assert resp.status_code == 401
+            data = resp.json()
+            assert isinstance(data, dict)
 
             # Let the background execution task resolve (or fail) before DB closes.
             # Without this yield the async task hits sqlite3.ProgrammingError on DB
@@ -401,6 +403,7 @@ class TestSmokePipelineViaReceiveEndpoint:
                 json={"event": "ghost"},
             )
             assert resp.status_code in (401, 404)
+            assert "error" in resp.json()
 
     def test_flow_list_after_creation(self, tmp_path):
         """The smoke flow must appear in the flow list after creation."""

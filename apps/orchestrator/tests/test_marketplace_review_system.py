@@ -185,6 +185,7 @@ class TestPublisherReplyEndpoint:
                 json={"text": "Thanks!"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_reply_returns_200_with_valid_auth(self):
         """Authenticated POST reply returns 200 with reply data."""
@@ -285,6 +286,7 @@ class TestIssueReportEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_report_requires_auth(self):
         """POST report without auth returns 401 when users exist."""
@@ -295,6 +297,7 @@ class TestIssueReportEndpoint:
                 json={"type": "spam", "description": "Spam listing"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_report_validates_description_max_length(self):
         """POST report with description > 1000 chars returns 422."""
@@ -306,6 +309,7 @@ class TestIssueReportEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

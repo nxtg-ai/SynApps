@@ -154,6 +154,7 @@ class TestFeaturedEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 403
+            assert "error" in resp.json()
 
     def test_delete_feature_returns_204_when_admin(self):
         with TestClient(app) as client:
@@ -180,6 +181,7 @@ class TestFeaturedEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 403
+            assert "error" in resp.json()
 
     def test_get_featured_returns_200_no_auth(self):
         with TestClient(app) as client:

@@ -93,6 +93,8 @@ class TestFlowOutputTransformPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -175,6 +177,7 @@ class TestFlowOutputTransformPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_enabled_false(self):
         with TestClient(app) as client:
@@ -209,6 +212,7 @@ class TestFlowOutputTransformPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -219,6 +223,7 @@ class TestFlowOutputTransformPut:
                 json={"expression": ".x", "output_format": "json"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -243,12 +248,14 @@ class TestFlowOutputTransformGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/output-transform", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/output-transform", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -257,6 +264,7 @@ class TestFlowOutputTransformGet:
             _set_transform(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/output-transform")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +293,7 @@ class TestFlowOutputTransformDelete:
             client.delete(f"/api/v1/flows/{flow_id}/output-transform", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/output-transform", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_config(self):
         with TestClient(app) as client:
@@ -294,6 +303,7 @@ class TestFlowOutputTransformDelete:
                 f"/api/v1/flows/{flow_id}/output-transform", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -302,6 +312,7 @@ class TestFlowOutputTransformDelete:
                 "/api/v1/flows/nonexistent/output-transform", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -310,3 +321,4 @@ class TestFlowOutputTransformDelete:
             _set_transform(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/output-transform")
         assert resp.status_code == 401
+        assert "error" in resp.json()

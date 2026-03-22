@@ -420,6 +420,7 @@ class TestUsageDetailEndpoint:
     def test_usage_detail_not_found(self, client):
         resp = client.get("/api/v1/usage/nonexistent-key")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_usage_detail_found(self, client):
         usage_tracker.record("detail-key-1", "/api/v1/health", 200)
@@ -492,6 +493,7 @@ class TestSetQuotaEndpoint:
             json={"monthly_limit": 0},
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_set_quota_validates_max(self, client):
         resp = client.put(
@@ -499,6 +501,7 @@ class TestSetQuotaEndpoint:
             json={"monthly_limit": 99_999_999},
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_quota_persists_and_visible(self, client):
         client.put("/api/v1/quotas/persist-key", json={"monthly_limit": 500})
@@ -550,6 +553,8 @@ class TestQuotaEnforcementMiddleware:
         for _ in range(5):
             resp = client.get("/api/v1/health")
             assert resp.status_code == 200
+            data = resp.json()
+            assert isinstance(data, (dict, list))
 
     def test_under_quota_allowed(self, client):
         key_id = "test-user:ghi"
@@ -557,6 +562,8 @@ class TestQuotaEnforcementMiddleware:
         with self._mock_user(key_id):
             resp = client.get("/api/v1/health")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_quota_exceeded_message_includes_counts(self, client):
         key_id = "test-user:msg"
@@ -574,6 +581,8 @@ class TestQuotaEnforcementMiddleware:
         # Even if somehow a quota exists for the anonymous key, skip it
         resp = client.get("/api/v1/health")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
 
 class TestQuotaWarningHeader:

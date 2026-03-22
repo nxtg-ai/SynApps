@@ -68,6 +68,8 @@ class TestCreateShareLink:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/share", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_create_response_shape(self):
         with TestClient(app) as client:
@@ -102,6 +104,7 @@ class TestCreateShareLink:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_create_ttl_above_max_422(self):
         with TestClient(app) as client:
@@ -113,12 +116,14 @@ class TestCreateShareLink:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_create_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.post("/api/v1/flows/nonexistent/share", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_create_requires_auth(self):
         with TestClient(app) as client:
@@ -126,6 +131,7 @@ class TestCreateShareLink:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/share")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +150,8 @@ class TestGetSharedFlow:
             share_token = share_resp.json()["token"]
             resp = client.get(f"/api/v1/flows/shared/{share_token}")
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow"]["id"] == flow_id
 
     def test_get_shared_response_shape(self):
         with TestClient(app) as client:
@@ -164,6 +172,7 @@ class TestGetSharedFlow:
             _register(client)
             resp = client.get("/api/v1/flows/shared/doesnotexist")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_shared_expired_token_404(self):
         with TestClient(app) as client:
@@ -181,6 +190,7 @@ class TestGetSharedFlow:
                 flow_share_store._tokens[share_token]["expires_at"] = time.time() - 1
             resp = client.get(f"/api/v1/flows/shared/{share_token}")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +222,7 @@ class TestListShareLinks:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/shares", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_requires_auth(self):
         with TestClient(app) as client:
@@ -219,6 +230,7 @@ class TestListShareLinks:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/shares")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +266,7 @@ class TestRevokeShareLink:
             )
             resp = client.get(f"/api/v1/flows/shared/{share_token}")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_revoke_unknown_token_404(self):
         with TestClient(app) as client:
@@ -263,6 +276,7 @@ class TestRevokeShareLink:
                 f"/api/v1/flows/{flow_id}/share/ghost", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_revoke_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -271,6 +285,7 @@ class TestRevokeShareLink:
                 "/api/v1/flows/nonexistent/share/tok", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_revoke_requires_auth(self):
         with TestClient(app) as client:
@@ -282,3 +297,4 @@ class TestRevokeShareLink:
             share_token = share_resp.json()["token"]
             resp = client.delete(f"/api/v1/flows/{flow_id}/share/{share_token}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

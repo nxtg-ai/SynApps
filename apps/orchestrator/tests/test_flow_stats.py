@@ -82,6 +82,8 @@ class TestFlowStats:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/stats", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_response_shape(self):
         with TestClient(app) as client:
@@ -184,6 +186,7 @@ class TestFlowStats:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/stats", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_requires_auth(self):
         with TestClient(app) as client:
@@ -191,3 +194,4 @@ class TestFlowStats:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/stats")
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -65,6 +65,8 @@ class TestFlowTagAdd:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert "tags" in data
 
     def test_add_tag_appears_in_response(self):
         with TestClient(app) as client:
@@ -143,6 +145,7 @@ class TestFlowTagAdd:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_add_tag_requires_auth(self):
         with TestClient(app) as client:
@@ -153,6 +156,7 @@ class TestFlowTagAdd:
                 json={"tag": "x"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFlowTagGet:
@@ -184,6 +188,7 @@ class TestFlowTagGet:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_tags_requires_auth(self):
         with TestClient(app) as client:
@@ -191,6 +196,7 @@ class TestFlowTagGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/tags")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFlowTagDelete:
@@ -236,6 +242,7 @@ class TestFlowTagDelete:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_tag_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -245,6 +252,7 @@ class TestFlowTagDelete:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_tag_requires_auth(self):
         with TestClient(app) as client:
@@ -257,6 +265,7 @@ class TestFlowTagDelete:
             )
             resp = client.delete(f"/api/v1/flows/{flow_id}/tags/x")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_delete_tag_case_insensitive(self):
         """Tags are stored lowercase; deleting with original case must work."""

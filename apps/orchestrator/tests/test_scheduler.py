@@ -262,6 +262,7 @@ class TestSchedulerEndpoints:
             json={"flow_id": "nonexistent-flow", "cron_expr": "* * * * *"},
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_create_schedule_invalid_cron(self, client, flow_id):
         resp = client.post(
@@ -269,6 +270,7 @@ class TestSchedulerEndpoints:
             json={"flow_id": flow_id, "cron_expr": "not valid cron"},
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_list_schedules_empty(self, client):
         resp = client.get("/api/v1/schedules")
@@ -335,6 +337,7 @@ class TestSchedulerEndpoints:
     def test_get_schedule_not_found(self, client):
         resp = client.get("/api/v1/schedules/ghost-id")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_update_schedule_pause(self, client, flow_id):
         created = client.post(
@@ -358,6 +361,7 @@ class TestSchedulerEndpoints:
             json={},
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_update_schedule_not_found(self, client):
         resp = client.patch(
@@ -365,6 +369,7 @@ class TestSchedulerEndpoints:
             json={"enabled": False},
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_schedule_success(self, client, flow_id):
         created = client.post(

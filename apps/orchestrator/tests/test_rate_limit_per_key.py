@@ -75,6 +75,7 @@ def test_create_admin_key_endpoint_rate_limit_validation(client):
             headers={"X-API-Key": MASTER_KEY},
         )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 def test_create_admin_key_endpoint_rate_limit_too_high(client):
@@ -86,6 +87,7 @@ def test_create_admin_key_endpoint_rate_limit_too_high(client):
             headers={"X-API-Key": MASTER_KEY},
         )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +154,8 @@ def test_per_key_rate_limit_independent(client):
     # Key B should still work
     resp_b = client.get("/api/v1/flows", headers={"X-API-Key": key_b["api_key"]})
     assert resp_b.status_code == 200
+    data = resp_b.json()
+    assert isinstance(data, (dict, list))
 
 
 def test_default_rate_limit_used_when_no_custom(client, monkeypatch):

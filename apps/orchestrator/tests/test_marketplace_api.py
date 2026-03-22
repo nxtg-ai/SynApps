@@ -370,6 +370,7 @@ class TestMarketplacePublishEndpoint:
             },
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_publish_all_valid_categories(self, client):
         """POST /marketplace/publish accepts all MARKETPLACE_CATEGORIES."""
@@ -403,6 +404,7 @@ class TestMarketplacePublishEndpoint:
             },
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -601,6 +603,7 @@ class TestMarketplaceInstallEndpoint:
         )
         resp = client.post(f"/api/v1/marketplace/install/{listing['id']}", json={})
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_install_increments_install_count(self, client):
         """POST /marketplace/install/{id} increments install_count on the listing."""

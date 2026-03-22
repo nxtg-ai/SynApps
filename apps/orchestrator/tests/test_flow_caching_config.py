@@ -94,6 +94,8 @@ class TestFlowCachingConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -165,6 +167,8 @@ class TestFlowCachingConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_ttl_max_allowed(self):
         with TestClient(app) as client:
@@ -176,6 +180,8 @@ class TestFlowCachingConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_ttl_too_large_422(self):
         with TestClient(app) as client:
@@ -187,6 +193,7 @@ class TestFlowCachingConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_too_many_key_fields_422(self):
         with TestClient(app) as client:
@@ -198,6 +205,7 @@ class TestFlowCachingConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_replaces_existing(self):
         with TestClient(app) as client:
@@ -220,6 +228,7 @@ class TestFlowCachingConfigPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -230,6 +239,7 @@ class TestFlowCachingConfigPut:
                 json={"enabled": True},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +263,7 @@ class TestFlowCachingConfigGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/caching-config", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -261,6 +272,7 @@ class TestFlowCachingConfigGet:
                 "/api/v1/flows/nonexistent/caching-config", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -269,6 +281,7 @@ class TestFlowCachingConfigGet:
             _set_caching(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/caching-config")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +310,7 @@ class TestFlowCachingConfigDelete:
             client.delete(f"/api/v1/flows/{flow_id}/caching-config", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/caching-config", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_config(self):
         with TestClient(app) as client:
@@ -306,6 +320,7 @@ class TestFlowCachingConfigDelete:
                 f"/api/v1/flows/{flow_id}/caching-config", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -314,6 +329,7 @@ class TestFlowCachingConfigDelete:
                 "/api/v1/flows/nonexistent/caching-config", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -322,3 +338,4 @@ class TestFlowCachingConfigDelete:
             _set_caching(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/caching-config")
         assert resp.status_code == 401
+        assert "error" in resp.json()

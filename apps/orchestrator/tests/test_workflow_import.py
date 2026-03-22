@@ -323,6 +323,7 @@ class TestImportEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 422  # Gate 2
+            assert "error" in resp.json()
 
     def test_save_flag_persists_workflow(self):
         with TestClient(app) as client:
@@ -359,6 +360,7 @@ class TestImportEndpoint:
             _register(client)  # create a user to disable anonymous bootstrap
             resp = client.post("/api/v1/workflows/import", json={"data": N8N_WORKFLOW})
             assert resp.status_code in (401, 403)  # Gate 2
+            assert "error" in resp.json()
 
     def test_workflow_contains_valid_nodes(self):
         with TestClient(app) as client:

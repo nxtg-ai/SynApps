@@ -168,6 +168,7 @@ def test_require_master_key_wrong_key(client):
             headers={"X-API-Key": "wrong-key"},
         )
     assert resp.status_code == 403
+    assert "error" in resp.json()
 
 
 def test_require_master_key_no_header(client):
@@ -175,6 +176,7 @@ def test_require_master_key_no_header(client):
     with patch("apps.orchestrator.main.SYNAPPS_MASTER_KEY", MASTER_KEY):
         resp = client.post("/api/v1/admin/keys", json={"name": "test"})
     assert resp.status_code == 403
+    assert "error" in resp.json()
 
 
 def test_require_master_key_via_bearer(client):
@@ -232,6 +234,7 @@ def test_create_admin_key_invalid_scope(client):
             headers={"X-API-Key": MASTER_KEY},
         )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 def test_create_admin_key_empty_name(client):
@@ -243,6 +246,7 @@ def test_create_admin_key_empty_name(client):
             headers={"X-API-Key": MASTER_KEY},
         )
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +320,7 @@ def test_delete_admin_key_not_found(client):
             headers={"X-API-Key": MASTER_KEY},
         )
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -333,12 +338,16 @@ def test_providers_endpoint_wired(client):
     """GET /providers is accessible (auth dependency wired)."""
     resp = client.get("/api/v1/providers")
     assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, (dict, list))
 
 
 def test_provider_health_wired(client):
     """GET /providers/{name}/health returns 200 or 404 (auth wired)."""
     resp = client.get("/api/v1/providers/openai/health")
     assert resp.status_code in (200, 404)
+    data = resp.json()
+    assert isinstance(data, (dict, list))
 
 
 def test_templates_validate_wired(client):
@@ -355,6 +364,8 @@ def test_templates_validate_wired(client):
         },
     )
     assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, (dict, list))
 
 
 def test_webhooks_endpoint_wired(client):
@@ -367,9 +378,13 @@ def test_webhooks_endpoint_wired(client):
         },
     )
     assert resp.status_code == 201
+    data = resp.json()
+    assert isinstance(data, (dict, list))
 
 
 def test_tasks_endpoint_wired(client):
     """GET /tasks is accessible (auth dependency wired)."""
     resp = client.get("/api/v1/tasks")
     assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, (dict, list))

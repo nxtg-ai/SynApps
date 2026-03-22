@@ -97,6 +97,8 @@ class TestFlowSnapshotPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -155,6 +157,7 @@ class TestFlowSnapshotPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -165,6 +168,7 @@ class TestFlowSnapshotPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -175,6 +179,7 @@ class TestFlowSnapshotPost:
                 json={"label": "no-auth"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +233,7 @@ class TestFlowSnapshotList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/snapshots", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -235,6 +241,7 @@ class TestFlowSnapshotList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/snapshots")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +280,7 @@ class TestFlowSnapshotGetOne:
                 f"/api/v1/flows/{flow_id}/snapshots/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_single_requires_auth(self):
         with TestClient(app) as client:
@@ -281,6 +289,7 @@ class TestFlowSnapshotGetOne:
             snap = _add_snapshot(client, token, flow_id, "Auth Test")
             resp = client.get(f"/api/v1/flows/{flow_id}/snapshots/{snap['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +328,7 @@ class TestFlowSnapshotDelete:
                 f"/api/v1/flows/{flow_id}/snapshots/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -327,6 +337,7 @@ class TestFlowSnapshotDelete:
                 "/api/v1/flows/nonexistent/snapshots/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -335,6 +346,7 @@ class TestFlowSnapshotDelete:
             snap = _add_snapshot(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/snapshots/{snap['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +388,7 @@ class TestFlowSnapshotRestore:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_restore_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -385,6 +398,7 @@ class TestFlowSnapshotRestore:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_restore_requires_auth(self):
         with TestClient(app) as client:
@@ -395,3 +409,4 @@ class TestFlowSnapshotRestore:
                 f"/api/v1/flows/{flow_id}/snapshots/{snap['id']}/restore",
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()

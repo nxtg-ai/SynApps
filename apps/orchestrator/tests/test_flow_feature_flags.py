@@ -99,6 +99,8 @@ class TestFlowFeatureFlagPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -160,6 +162,8 @@ class TestFlowFeatureFlagPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_rollout_100_allowed(self):
         with TestClient(app) as client:
@@ -171,6 +175,8 @@ class TestFlowFeatureFlagPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_rollout_over_100_422(self):
         with TestClient(app) as client:
@@ -182,6 +188,7 @@ class TestFlowFeatureFlagPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_rollout_negative_422(self):
         with TestClient(app) as client:
@@ -193,6 +200,7 @@ class TestFlowFeatureFlagPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_description_stored(self):
         with TestClient(app) as client:
@@ -226,6 +234,7 @@ class TestFlowFeatureFlagPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -236,6 +245,7 @@ class TestFlowFeatureFlagPut:
                 json={"enabled": True},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +277,7 @@ class TestFlowFeatureFlagList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/feature-flags", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_list_requires_auth(self):
         with TestClient(app) as client:
@@ -274,6 +285,7 @@ class TestFlowFeatureFlagList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/feature-flags")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +313,7 @@ class TestFlowFeatureFlagGet:
                 f"/api/v1/flows/{flow_id}/feature-flags/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -309,6 +322,7 @@ class TestFlowFeatureFlagGet:
                 "/api/v1/flows/nonexistent/feature-flags/any", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -317,6 +331,7 @@ class TestFlowFeatureFlagGet:
             _set_flag(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/feature-flags/my-feature")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +363,7 @@ class TestFlowFeatureFlagDelete:
                 f"/api/v1/flows/{flow_id}/feature-flags/gone", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_not_found(self):
         with TestClient(app) as client:
@@ -357,6 +373,7 @@ class TestFlowFeatureFlagDelete:
                 f"/api/v1/flows/{flow_id}/feature-flags/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -365,6 +382,7 @@ class TestFlowFeatureFlagDelete:
                 "/api/v1/flows/nonexistent/feature-flags/any", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -373,3 +391,4 @@ class TestFlowFeatureFlagDelete:
             _set_flag(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/feature-flags/my-feature")
         assert resp.status_code == 401
+        assert "error" in resp.json()

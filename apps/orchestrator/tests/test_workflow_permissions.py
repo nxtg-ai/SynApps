@@ -167,6 +167,7 @@ class TestPermissionEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_create_flow_sets_owner(self):
         with TestClient(app) as client:
@@ -223,6 +224,7 @@ class TestPermissionEndpoints:
                 headers=auth,
             )
             assert resp.status_code == 422
+            assert "error" in resp.json()
 
     def test_owner_can_revoke_access(self):
         with TestClient(app) as client:
@@ -274,6 +276,8 @@ class TestPermissionEnforcement:
                 headers=editor_auth,
             )
             assert resp.status_code == 200  # Gate 2: editor can edit
+            data = resp.json()
+            assert isinstance(data, (dict, list))
 
     def test_viewer_cannot_update_flow(self):
         with TestClient(app) as client:
@@ -299,6 +303,7 @@ class TestPermissionEnforcement:
                 headers=viewer_auth,
             )
             assert resp.status_code == 403  # Gate 2: viewer blocked
+            assert "error" in resp.json()
 
     def test_non_member_cannot_update_flow(self):
         with TestClient(app) as client:
@@ -319,6 +324,7 @@ class TestPermissionEnforcement:
                 headers=stranger_auth,
             )
             assert resp.status_code == 403  # Gate 2: non-member blocked
+            assert "error" in resp.json()
 
     def test_editor_cannot_share(self):
         with TestClient(app) as client:
@@ -341,3 +347,4 @@ class TestPermissionEnforcement:
                 headers=editor_auth,
             )
             assert resp.status_code == 403  # Gate 2: editor cannot share
+            assert "error" in resp.json()

@@ -349,6 +349,8 @@ class TestWebhookEndpointsNewEvents:
             },
         )
         assert resp.status_code == 201
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_register_request_failed(self, client):
         resp = client.post(
@@ -359,6 +361,8 @@ class TestWebhookEndpointsNewEvents:
             },
         )
         assert resp.status_code == 201
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_register_key_rotated(self, client):
         resp = client.post(
@@ -369,6 +373,8 @@ class TestWebhookEndpointsNewEvents:
             },
         )
         assert resp.status_code == 201
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_register_key_expiring_soon(self, client):
         resp = client.post(
@@ -379,6 +385,8 @@ class TestWebhookEndpointsNewEvents:
             },
         )
         assert resp.status_code == 201
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_register_mixed_events(self, client):
         resp = client.post(
@@ -407,6 +415,7 @@ class TestWebhookEndpointsNewEvents:
             },
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_list_includes_new_hooks(self, client):
         client.post(

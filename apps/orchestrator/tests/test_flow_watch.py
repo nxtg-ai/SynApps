@@ -65,6 +65,8 @@ class TestFlowWatchCrud:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/watch", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["watching"] is True
 
     def test_watch_response_shape(self):
         with TestClient(app) as client:
@@ -83,6 +85,7 @@ class TestFlowWatchCrud:
             client.post(f"/api/v1/flows/{flow_id}/watch", headers=_auth(token))
             resp = client.post(f"/api/v1/flows/{flow_id}/watch", headers=_auth(token))
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_unwatch_returns_200(self):
         with TestClient(app) as client:
@@ -91,6 +94,8 @@ class TestFlowWatchCrud:
             client.post(f"/api/v1/flows/{flow_id}/watch", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/watch", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["watching"] is False
 
     def test_unwatch_response_watching_false(self):
         with TestClient(app) as client:
@@ -106,18 +111,21 @@ class TestFlowWatchCrud:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/watch", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_watch_404_unknown_flow(self):
         with TestClient(app) as client:
             token, _ = _register(client)
             resp = client.post("/api/v1/flows/nonexistent/watch", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_unwatch_404_unknown_flow(self):
         with TestClient(app) as client:
             token, _ = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/watch", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_watch_requires_auth(self):
         with TestClient(app) as client:
@@ -125,6 +133,7 @@ class TestFlowWatchCrud:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/watch")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_unwatch_requires_auth(self):
         with TestClient(app) as client:
@@ -132,6 +141,7 @@ class TestFlowWatchCrud:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/watch")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +194,7 @@ class TestFlowWatchers:
             token, _ = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/watchers", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_watchers_requires_auth(self):
         with TestClient(app) as client:
@@ -191,6 +202,7 @@ class TestFlowWatchers:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/watchers")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -238,3 +250,4 @@ class TestFlowsWatchedList:
             _register(client)
             resp = client.get("/api/v1/flows/watched")
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -90,6 +90,8 @@ class TestFlowAnnotationPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -132,6 +134,7 @@ class TestFlowAnnotationPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_empty_content_422(self):
         with TestClient(app) as client:
@@ -143,6 +146,7 @@ class TestFlowAnnotationPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -153,6 +157,7 @@ class TestFlowAnnotationPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -163,6 +168,7 @@ class TestFlowAnnotationPost:
                 json={"content": "test", "x": 0.0, "y": 0.0},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +207,7 @@ class TestFlowAnnotationGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/annotations", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -208,6 +215,7 @@ class TestFlowAnnotationGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/annotations")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +285,7 @@ class TestFlowAnnotationPatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_patch_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -287,6 +296,7 @@ class TestFlowAnnotationPatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_patch_requires_auth(self):
         with TestClient(app) as client:
@@ -298,6 +308,7 @@ class TestFlowAnnotationPatch:
                 json={"content": "no-auth"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +347,7 @@ class TestFlowAnnotationDelete:
                 f"/api/v1/flows/{flow_id}/annotations/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -344,6 +356,7 @@ class TestFlowAnnotationDelete:
                 "/api/v1/flows/nonexistent/annotations/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -352,3 +365,4 @@ class TestFlowAnnotationDelete:
             ann = _add_annotation(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/annotations/{ann['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -85,6 +85,8 @@ class TestFlowRunPresetPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -124,6 +126,7 @@ class TestFlowRunPresetPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -134,6 +137,7 @@ class TestFlowRunPresetPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -144,6 +148,7 @@ class TestFlowRunPresetPost:
                 json={"name": "x", "input": {}},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +189,7 @@ class TestFlowRunPresetList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/presets", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -191,6 +197,7 @@ class TestFlowRunPresetList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/presets")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +215,8 @@ class TestFlowRunPresetGetOne:
                 f"/api/v1/flows/{flow_id}/presets/{preset['id']}", headers=_auth(token)
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_get_single_correct_data(self):
         with TestClient(app) as client:
@@ -229,6 +238,7 @@ class TestFlowRunPresetGetOne:
                 f"/api/v1/flows/{flow_id}/presets/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_single_requires_auth(self):
         with TestClient(app) as client:
@@ -237,6 +247,7 @@ class TestFlowRunPresetGetOne:
             preset = _add_preset(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/presets/{preset['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +286,7 @@ class TestFlowRunPresetDelete:
                 f"/api/v1/flows/{flow_id}/presets/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -283,6 +295,7 @@ class TestFlowRunPresetDelete:
                 "/api/v1/flows/nonexistent/presets/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -291,6 +304,7 @@ class TestFlowRunPresetDelete:
             preset = _add_preset(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/presets/{preset['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +324,8 @@ class TestFlowRunWithPreset:
                 headers=_auth(token),
             )
         assert resp.status_code == 202
+        data = resp.json()
+        assert "run_id" in data
 
     def test_run_unknown_preset_404(self):
         with TestClient(app) as client:
@@ -321,3 +337,4 @@ class TestFlowRunWithPreset:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()

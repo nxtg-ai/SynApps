@@ -76,6 +76,7 @@ class TestFlowLabelGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/label", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -83,6 +84,7 @@ class TestFlowLabelGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/label")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +103,8 @@ class TestFlowLabelSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_contains_label(self):
         with TestClient(app) as client:
@@ -166,6 +170,7 @@ class TestFlowLabelSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_icon_too_long_422(self):
         with TestClient(app) as client:
@@ -177,6 +182,7 @@ class TestFlowLabelSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -187,6 +193,7 @@ class TestFlowLabelSet:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -197,6 +204,7 @@ class TestFlowLabelSet:
                 json={"color": "#ff0000"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -237,12 +245,14 @@ class TestFlowLabelDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/label", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/label", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -255,3 +265,4 @@ class TestFlowLabelDelete:
             )
             resp = client.delete(f"/api/v1/flows/{flow_id}/label")
         assert resp.status_code == 401
+        assert "error" in resp.json()

@@ -330,6 +330,7 @@ class TestCreateEndpoint:
     def test_create_requires_master_key(self, client):
         resp = client.post("/api/v1/managed-keys", json={"name": "bad"})
         assert resp.status_code in (401, 403, 503)
+        assert "error" in resp.json()
 
     def test_create_with_expiry(self, client):
         with patch("apps.orchestrator.main.SYNAPPS_MASTER_KEY", MASTER_KEY):
@@ -349,6 +350,7 @@ class TestCreateEndpoint:
                 headers={"X-API-Key": MASTER_KEY},
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +396,7 @@ class TestGetEndpoint:
                 headers={"X-API-Key": MASTER_KEY},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +425,7 @@ class TestRotateEndpoint:
                 headers={"X-API-Key": MASTER_KEY},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +442,8 @@ class TestRevokeDeleteEndpoints:
                 headers={"X-API-Key": MASTER_KEY},
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert "message" in data or "id" in data
 
     def test_delete_success(self, client):
         created = api_key_manager.create("deletable")
@@ -447,6 +453,8 @@ class TestRevokeDeleteEndpoints:
                 headers={"X-API-Key": MASTER_KEY},
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert "message" in data or "id" in data
 
     def test_delete_not_found(self, client):
         with patch("apps.orchestrator.main.SYNAPPS_MASTER_KEY", MASTER_KEY):
@@ -455,6 +463,7 @@ class TestRevokeDeleteEndpoints:
                 headers={"X-API-Key": MASTER_KEY},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -470,6 +479,8 @@ class TestAuthIntegration:
             headers={"X-API-Key": created["api_key"]},
         )
         assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data or isinstance(data, (list, dict))
 
     def test_revoked_managed_key_rejected(self, client):
         created = api_key_manager.create("revoked-auth")
@@ -480,3 +491,4 @@ class TestAuthIntegration:
         )
         # Should fall through to other auth methods and fail
         assert resp.status_code in (401, 403)
+        assert "error" in resp.json()

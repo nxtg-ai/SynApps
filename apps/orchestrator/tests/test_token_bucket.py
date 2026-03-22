@@ -325,6 +325,8 @@ class TestMiddlewareTokenBucket:
 
         resp = client.get("/api/v1/health")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_burst_allows_spike(self):
         """Token bucket burst allows short request spikes."""

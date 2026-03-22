@@ -127,6 +127,7 @@ class TestFlowPriorityCrud:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_delete_removes_priority(self):
         with TestClient(app) as client:
@@ -160,12 +161,14 @@ class TestFlowPriorityCrud:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/priority", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/priority", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -176,6 +179,7 @@ class TestFlowPriorityCrud:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -183,6 +187,7 @@ class TestFlowPriorityCrud:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/priority")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -190,6 +195,7 @@ class TestFlowPriorityCrud:
             flow_id = _create_flow(client, token)
             resp = client.put(f"/api/v1/flows/{flow_id}/priority", json={"priority": "high"})
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

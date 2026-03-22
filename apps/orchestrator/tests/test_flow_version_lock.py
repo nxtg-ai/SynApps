@@ -89,6 +89,8 @@ class TestFlowVersionLockPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -138,6 +140,7 @@ class TestFlowVersionLockPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_replaces_existing_lock(self):
         with TestClient(app) as client:
@@ -160,6 +163,7 @@ class TestFlowVersionLockPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -170,6 +174,7 @@ class TestFlowVersionLockPost:
                 json={"locked_version": "1.0.0"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -201,12 +206,14 @@ class TestFlowVersionLockGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/version-lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/version-lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -215,6 +222,7 @@ class TestFlowVersionLockGet:
             _lock_version(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/version-lock")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +251,7 @@ class TestFlowVersionLockDelete:
             client.delete(f"/api/v1/flows/{flow_id}/version-lock", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/version-lock", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_not_locked(self):
         with TestClient(app) as client:
@@ -252,6 +261,7 @@ class TestFlowVersionLockDelete:
                 f"/api/v1/flows/{flow_id}/version-lock", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -260,6 +270,7 @@ class TestFlowVersionLockDelete:
                 "/api/v1/flows/nonexistent/version-lock", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -268,3 +279,4 @@ class TestFlowVersionLockDelete:
             _lock_version(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/version-lock")
         assert resp.status_code == 401
+        assert "error" in resp.json()

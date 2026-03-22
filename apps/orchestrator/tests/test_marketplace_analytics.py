@@ -301,6 +301,7 @@ class TestRateListingEndpoint:
                 json={"stars": 3},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_rate_listing_404_unknown(self):
         """POST to rate with an unknown listing_id returns 404."""
@@ -312,6 +313,7 @@ class TestRateListingEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_rate_updates_avg_rating(self):
         """Rating with 5 stars produces avg_rating == 5.0 in the response."""
@@ -360,6 +362,7 @@ class TestReviewListingEndpoints:
                 json={"text": "Should be blocked"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_list_reviews_returns_200_no_auth(self):
         """GET reviews for a listing returns 200 without any auth header."""
@@ -402,6 +405,8 @@ class TestTrendingEndpoint:
         with TestClient(app) as client:
             resp = client.get("/api/v1/marketplace/trending")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_trending_has_items_key(self):
         """Response includes an 'items' list and 'total' (Gate 2 when listings exist)."""
@@ -452,6 +457,7 @@ class TestPublisherDashboard:
             _register(client)  # disable anonymous bootstrap
             resp = client.get("/api/v1/marketplace/publisher/dashboard")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_publisher_dashboard_shows_published_listings(self):
         """Dashboard lists only listings published by the current user (Gate 2)."""

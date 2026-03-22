@@ -188,6 +188,7 @@ class TestWebhookDebugEndpoints:
             token = _register(client)
             resp = client.get("/api/v1/webhooks/debug/no-such-id", headers=_auth(token))
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_delete_returns_204_and_clears(self) -> None:
         with TestClient(app) as client:
@@ -204,6 +205,7 @@ class TestWebhookDebugEndpoints:
             _register(client)
             resp = client.get("/api/v1/webhooks/debug")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_get_requires_auth(self) -> None:
         with TestClient(app) as client:
@@ -211,6 +213,7 @@ class TestWebhookDebugEndpoints:
             _register(client)
             resp = client.get("/api/v1/webhooks/debug/any-id")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_retry_increments_retry_count(self) -> None:
         with TestClient(app) as client:

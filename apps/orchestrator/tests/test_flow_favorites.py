@@ -61,6 +61,8 @@ class TestFavoriteAdd:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["favorited"] is True
 
     def test_add_favorite_response_body(self):
         with TestClient(app) as client:
@@ -78,12 +80,15 @@ class TestFavoriteAdd:
             client.post(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
             resp = client.post(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["favorited"] is True
 
     def test_add_favorite_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.post("/api/v1/flows/nonexistent/favorite", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_add_favorite_requires_auth(self):
         with TestClient(app) as client:
@@ -91,6 +96,7 @@ class TestFavoriteAdd:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/favorite")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFavoriteList:
@@ -150,6 +156,7 @@ class TestFavoriteList:
             _register(client)
             resp = client.get("/api/v1/flows/favorites")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 class TestFavoriteRemove:
@@ -160,6 +167,8 @@ class TestFavoriteRemove:
             client.post(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["favorited"] is False
 
     def test_remove_favorite_response_body(self):
         with TestClient(app) as client:
@@ -186,12 +195,14 @@ class TestFavoriteRemove:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_remove_favorite_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/favorite", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_remove_favorite_requires_auth(self):
         with TestClient(app) as client:
@@ -200,3 +211,4 @@ class TestFavoriteRemove:
             client.post(f"/api/v1/flows/{flow_id}/favorite", headers=_auth(token))
             resp = client.delete(f"/api/v1/flows/{flow_id}/favorite")
         assert resp.status_code == 401
+        assert "error" in resp.json()

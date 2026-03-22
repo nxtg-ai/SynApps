@@ -118,6 +118,7 @@ async def test_delete_flow_404():
     client = TestClient(app)
     response = client.delete("/api/v1/flows/non-existent-flow")
     assert response.status_code == 404
+    assert "error" in response.json()
 
 
 @pytest.mark.asyncio
@@ -125,6 +126,7 @@ async def test_get_run_404():
     client = TestClient(app)
     response = client.get("/api/v1/runs/non-existent-run")
     assert response.status_code == 404
+    assert "error" in response.json()
 
 
 @pytest.mark.asyncio
@@ -465,6 +467,7 @@ async def test_export_flow_not_found():
     client = TestClient(app)
     resp = client.get("/api/v1/flows/no-such-flow/export")
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 @pytest.mark.asyncio
@@ -511,6 +514,7 @@ async def test_import_flow_invalid():
     # Missing 'name'
     resp = client.post("/api/v1/flows/import", json={"nodes": [], "edges": []})
     assert resp.status_code == 422
+    assert "error" in resp.json()
 
 
 @pytest.mark.asyncio

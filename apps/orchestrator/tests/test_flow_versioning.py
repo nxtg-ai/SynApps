@@ -285,6 +285,7 @@ class TestFlowVersioningEndpoints:
         headers = _auth_headers(client)
         resp = client.get("/api/v1/flows/nonexistent-flow-xyz/versions", headers=headers)
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_version_success(self, client):
         headers = _auth_headers(client)
@@ -316,6 +317,7 @@ class TestFlowVersioningEndpoints:
         )
         resp = client.get(f"/api/v1/flows/{fid}/versions/no-such-version", headers=headers)
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_version_snapshot_contains_nodes(self, client):
         headers = _auth_headers(client)
@@ -376,6 +378,7 @@ class TestFlowVersioningEndpoints:
             f"/api/v1/flows/{fid}/rollback?version_id=bad-version-id", headers=headers
         )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_rollback_creates_snapshot_of_current(self, client):
         headers = _auth_headers(client)

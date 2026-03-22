@@ -226,6 +226,7 @@ class TestSLAPolicyEndpoints:
                 headers=_auth(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_delete_returns_204(self):
         with TestClient(app) as client:
@@ -272,6 +273,7 @@ class TestSLAPolicyEndpoints:
                 json={"max_duration_seconds": 10.0},
             )
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
 
 # ===========================================================================
@@ -379,6 +381,7 @@ class TestSLADashboard:
             _register(client)
             resp = client.get("/api/v1/sla/dashboard")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_by_flow_breakdown_present(self):
         with TestClient(app) as client:

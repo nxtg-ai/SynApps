@@ -1153,10 +1153,12 @@ class TestAPIEndpoints:
     def test_get_run_not_found(self, client):
         resp = client.get("/api/v1/runs/nonexistent")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_ai_suggest_not_implemented(self, client):
         resp = client.post("/api/v1/ai/suggest", json={"prompt": "test"})
         assert resp.status_code == 501
+        assert "error" in resp.json()
 
     def test_llm_providers(self, client):
         resp = client.get("/api/v1/llm/providers")
@@ -1248,6 +1250,7 @@ class TestAuthEndpoints:
             },
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_login_nonexistent_user(self, client):
         resp = client.post(
@@ -1258,6 +1261,7 @@ class TestAuthEndpoints:
             },
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_register_duplicate_email(self, client):
         email = f"dup-{uuid.uuid4().hex[:8]}@example.com"
@@ -1276,6 +1280,7 @@ class TestAuthEndpoints:
             },
         )
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_register_invalid_email(self, client):
         resp = client.post(
@@ -1286,6 +1291,7 @@ class TestAuthEndpoints:
             },
         )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_me_with_token(self, client):
         email = f"me-{uuid.uuid4().hex[:8]}@example.com"
@@ -1320,6 +1326,7 @@ class TestAuthEndpoints:
         )
         resp = client.get("/api/v1/auth/me")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_refresh_token(self, client):
         email = f"refresh-{uuid.uuid4().hex[:8]}@example.com"
@@ -1359,6 +1366,8 @@ class TestAuthEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
+        data = resp.json()
+        assert "message" in data or "detail" in data
 
     def test_api_keys_crud(self, client):
         email = f"apikey-{uuid.uuid4().hex[:8]}@example.com"
@@ -1596,7 +1605,9 @@ class TestTraceAndDiffEndpoints:
     def test_get_trace_not_found(self, client):
         resp = client.get("/api/v1/runs/nonexistent/trace")
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_diff_not_found(self, client):
         resp = client.get("/api/v1/runs/nonexistent/diff?other_run_id=also-missing")
         assert resp.status_code == 404
+        assert "error" in resp.json()

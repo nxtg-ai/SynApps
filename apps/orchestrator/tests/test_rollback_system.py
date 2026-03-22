@@ -227,6 +227,7 @@ class TestRollbackEndpoint:
                 json={"reason": "no auth"},
             )
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_rollback_404_when_flow_not_found(self) -> None:
         with TestClient(app) as client:
@@ -238,6 +239,7 @@ class TestRollbackEndpoint:
                 headers=_auth(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_rollback_404_when_version_not_found(self) -> None:
         with TestClient(app) as client:
@@ -250,6 +252,7 @@ class TestRollbackEndpoint:
                 headers=_auth(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_audit_entry_has_correct_fields(self) -> None:
         with TestClient(app) as client:
@@ -307,6 +310,8 @@ class TestRollbackEndpoint:
             # Verify the flow was restored
             flow_resp = client.get(f"/api/v1/flows/{flow_id}", headers=_auth(token))
             assert flow_resp.status_code == 200
+            data = flow_resp.json()
+            assert data["id"] == flow_id
 
     def test_second_rollback_records_another_audit_entry(self) -> None:
         with TestClient(app) as client:
@@ -379,6 +384,7 @@ class TestRollbackHistory:
             _register(client)
             resp = client.get("/api/v1/flows/fake-id/rollback/history")
             assert resp.status_code in (401, 403)
+            assert "error" in resp.json()
 
     def test_flow_rollback_history_filters_by_flow(self) -> None:
         with TestClient(app) as client:

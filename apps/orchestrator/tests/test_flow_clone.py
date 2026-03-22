@@ -82,6 +82,8 @@ class TestFlowCloneSuccess:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/clone", headers=_auth(token))
         assert resp.status_code == 201
+        data = resp.json()
+        assert "id" in data
 
     def test_clone_returns_new_id(self):
         with TestClient(app) as client:
@@ -207,6 +209,8 @@ class TestFlowCloneIndependence:
             # Delete original
             del_resp = client.delete(f"/api/v1/flows/{flow_id}", headers=_auth(token))
             assert del_resp.status_code == 200
+            data = del_resp.json()
+            assert "message" in data  # DELETE flow returns {"message": "Flow deleted"}
             # Clone still exists
             clone_resp = client.get(f"/api/v1/flows/{clone_id}", headers=_auth(token))
         assert clone_resp.status_code == 200
@@ -259,6 +263,7 @@ class TestFlowCloneEdgeCases:
             token = _register(client)
             resp = client.post("/api/v1/flows/nonexistent-flow-id/clone", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_clone_requires_auth(self):
         with TestClient(app) as client:
@@ -266,6 +271,7 @@ class TestFlowCloneEdgeCases:
             flow_id = _create_flow(client, token)
             resp = client.post(f"/api/v1/flows/{flow_id}/clone")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_clone_blank_name_uses_default(self):
         """Blank name string should fall back to 'Copy of {original_name}'."""

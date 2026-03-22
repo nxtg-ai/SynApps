@@ -203,6 +203,7 @@ class TestCreditEarnedOnInstall:
                 headers=_auth_headers(token),
             )
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_credit_count_after_multiple_installs(self):
         """Gate 2: confirm ledger has correct entry count after 3 installs."""
@@ -258,6 +259,7 @@ class TestCreditsEndpoints:
             _register(client)
             resp = client.get("/api/v1/marketplace/publisher/credits")
             assert resp.status_code == 401
+            assert "error" in resp.json()
 
     def test_ledger_includes_entries(self):
         """GET /marketplace/publisher/credits/ledger shows credit entries."""

@@ -91,6 +91,8 @@ class TestFlowExecutionModePut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_response_shape(self):
         with TestClient(app) as client:
@@ -150,6 +152,7 @@ class TestFlowExecutionModePut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_debug_true(self):
         with TestClient(app) as client:
@@ -194,6 +197,7 @@ class TestFlowExecutionModePut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -204,6 +208,7 @@ class TestFlowExecutionModePut:
                 json={"mode": "async"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +237,7 @@ class TestFlowExecutionModeGet:
                 f"/api/v1/flows/{flow_id}/execution-mode", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -240,6 +246,7 @@ class TestFlowExecutionModeGet:
                 "/api/v1/flows/nonexistent/execution-mode", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -248,6 +255,7 @@ class TestFlowExecutionModeGet:
             _set_mode(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/execution-mode")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +284,7 @@ class TestFlowExecutionModeDelete:
             client.delete(f"/api/v1/flows/{flow_id}/execution-mode", headers=_auth(token))
             resp = client.get(f"/api/v1/flows/{flow_id}/execution-mode", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_when_no_mode(self):
         with TestClient(app) as client:
@@ -285,6 +294,7 @@ class TestFlowExecutionModeDelete:
                 f"/api/v1/flows/{flow_id}/execution-mode", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -293,6 +303,7 @@ class TestFlowExecutionModeDelete:
                 "/api/v1/flows/nonexistent/execution-mode", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -301,3 +312,4 @@ class TestFlowExecutionModeDelete:
             _set_mode(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/execution-mode")
         assert resp.status_code == 401
+        assert "error" in resp.json()

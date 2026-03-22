@@ -215,6 +215,8 @@ class TestSuggestNextEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_suggest_next_has_suggestions_key(self):
         with TestClient(app) as client:
@@ -248,6 +250,7 @@ class TestSuggestNextEndpoint:
                 json={"current_node_type": "start"},
             )
         assert resp.status_code in (401, 403)
+        assert "error" in resp.json()
 
     def test_suggest_next_item_structure(self):
         with TestClient(app) as client:
@@ -307,6 +310,8 @@ class TestAutocompleteEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_autocomplete_has_matches_key(self):
         with TestClient(app) as client:
@@ -340,6 +345,7 @@ class TestAutocompleteEndpoint:
                 json={"description": "llm node"},
             )
         assert resp.status_code in (401, 403)
+        assert "error" in resp.json()
 
     def test_autocomplete_no_match(self):
         with TestClient(app) as client:
@@ -396,6 +402,8 @@ class TestPatternsEndpoint:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_patterns_has_expected_keys(self):
         with TestClient(app) as client:
@@ -448,6 +456,7 @@ class TestPatternsEndpoint:
             _register(client)
             resp = client.get("/api/v1/ai-assist/patterns")
         assert resp.status_code in (401, 403)
+        assert "error" in resp.json()
 
     def test_patterns_item_structure(self):
         with TestClient(app) as client:

@@ -430,6 +430,8 @@ class TestAutocompleteEndpoint:
         """Autocomplete endpoint does not require authentication."""
         resp = client.get("/api/v1/marketplace/autocomplete?q=test")
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
 
 # ---------------------------------------------------------------------------

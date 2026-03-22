@@ -23,6 +23,7 @@ def test_redoc_accessible(client):
     """ReDoc at /api/v1/redoc returns 200."""
     resp = client.get("/api/v1/redoc")
     assert resp.status_code == 200
+    assert "redoc" in resp.text.lower() or len(resp.content) > 100
 
 
 def test_openapi_json_accessible(client):

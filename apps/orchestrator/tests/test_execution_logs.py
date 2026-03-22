@@ -261,6 +261,7 @@ class TestGetExecutionLogsEndpoint:
         with TestClient(app) as client:
             resp = client.get("/api/v1/executions/nonexistent-run/logs")
             assert resp.status_code == 404
+            assert "error" in resp.json()
 
     def test_200_with_logs_after_run(self):
         with TestClient(app) as client:

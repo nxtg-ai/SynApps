@@ -169,6 +169,7 @@ def test_history_filter_invalid_status(client):
     """GET /history?status=invalid returns 400."""
     resp = client.get("/api/v1/history?status=invalid")
     assert resp.status_code == 400
+    assert "error" in resp.json()
 
 
 @pytest.mark.asyncio
@@ -267,6 +268,7 @@ def test_history_detail_not_found(client):
     """GET /history/{run_id} returns 404 for unknown run."""
     resp = client.get("/api/v1/history/nonexistent-run-id")
     assert resp.status_code == 404
+    assert "error" in resp.json()
 
 
 @pytest.mark.asyncio

@@ -81,6 +81,7 @@ class TestFlowAliasGet:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/alias", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -88,6 +89,7 @@ class TestFlowAliasGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/alias")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +108,8 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_stores_alias(self):
         with TestClient(app) as client:
@@ -164,6 +168,8 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_put_invalid_slug_422(self):
         with TestClient(app) as client:
@@ -175,6 +181,7 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_slug_with_spaces_422(self):
         with TestClient(app) as client:
@@ -186,6 +193,7 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_slug_starting_with_hyphen_422(self):
         with TestClient(app) as client:
@@ -197,6 +205,7 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_put_conflict_409(self):
         """Same alias on two different flows → 409."""
@@ -215,6 +224,7 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_put_old_alias_freed_after_update(self):
         """After updating alias, the old slug can be claimed by another flow."""
@@ -239,6 +249,8 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_put_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -249,6 +261,7 @@ class TestFlowAliasPut:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_put_requires_auth(self):
         with TestClient(app) as client:
@@ -259,6 +272,7 @@ class TestFlowAliasPut:
                 json={"alias": "no-auth"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -299,12 +313,14 @@ class TestFlowAliasDelete:
             flow_id = _create_flow(client, token)
             resp = client.delete(f"/api/v1/flows/{flow_id}/alias", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
             token = _register(client)
             resp = client.delete("/api/v1/flows/nonexistent/alias", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -317,6 +333,7 @@ class TestFlowAliasDelete:
             )
             resp = client.delete(f"/api/v1/flows/{flow_id}/alias")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +353,8 @@ class TestFlowByAlias:
             )
             resp = client.get("/api/v1/flows/by-alias/lookup-alias", headers=_auth(token))
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == flow_id
 
     def test_by_alias_returns_correct_flow(self):
         with TestClient(app) as client:
@@ -354,6 +373,7 @@ class TestFlowByAlias:
             token = _register(client)
             resp = client.get("/api/v1/flows/by-alias/no-such-alias", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_by_alias_requires_auth(self):
         with TestClient(app) as client:
@@ -366,6 +386,7 @@ class TestFlowByAlias:
             )
             resp = client.get("/api/v1/flows/by-alias/needs-auth")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_by_alias_404_after_delete(self):
         """Once the alias is deleted, by-alias lookup returns 404."""
@@ -380,3 +401,4 @@ class TestFlowByAlias:
             client.delete(f"/api/v1/flows/{flow_id}/alias", headers=_auth(token))
             resp = client.get("/api/v1/flows/by-alias/gone-alias", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()

@@ -99,6 +99,8 @@ class TestFlowWebhookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -132,6 +134,7 @@ class TestFlowWebhookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_unknown_event_422(self):
         with TestClient(app) as client:
@@ -143,6 +146,7 @@ class TestFlowWebhookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_empty_events_422(self):
         with TestClient(app) as client:
@@ -154,6 +158,7 @@ class TestFlowWebhookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -164,6 +169,7 @@ class TestFlowWebhookPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -174,6 +180,7 @@ class TestFlowWebhookPost:
                 json={"url": "https://hook.example.com", "events": ["run.completed"]},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +227,7 @@ class TestFlowWebhookList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/webhooks", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -227,6 +235,7 @@ class TestFlowWebhookList:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/webhooks")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +263,7 @@ class TestFlowWebhookGetOne:
                 f"/api/v1/flows/{flow_id}/webhooks/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_single_requires_auth(self):
         with TestClient(app) as client:
@@ -262,6 +272,7 @@ class TestFlowWebhookGetOne:
             hook = _add_webhook(client, token, flow_id)
             resp = client.get(f"/api/v1/flows/{flow_id}/webhooks/{hook['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +329,7 @@ class TestFlowWebhookPatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_patch_unknown_event_422(self):
         with TestClient(app) as client:
@@ -330,6 +342,7 @@ class TestFlowWebhookPatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_patch_404_unknown_hook(self):
         with TestClient(app) as client:
@@ -341,6 +354,7 @@ class TestFlowWebhookPatch:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_patch_requires_auth(self):
         with TestClient(app) as client:
@@ -352,6 +366,7 @@ class TestFlowWebhookPatch:
                 json={"enabled": False},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +405,7 @@ class TestFlowWebhookDelete:
                 f"/api/v1/flows/{flow_id}/webhooks/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -398,6 +414,7 @@ class TestFlowWebhookDelete:
                 "/api/v1/flows/nonexistent/webhooks/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -406,3 +423,4 @@ class TestFlowWebhookDelete:
             hook = _add_webhook(client, token, flow_id)
             resp = client.delete(f"/api/v1/flows/{flow_id}/webhooks/{hook['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

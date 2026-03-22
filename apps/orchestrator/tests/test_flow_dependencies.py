@@ -87,6 +87,8 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -117,6 +119,7 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_post_cycle_detection_409(self):
         """A→B then B→A should be rejected as a cycle."""
@@ -131,6 +134,7 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_post_transitive_cycle_409(self):
         """A→B→C then C→A should be rejected."""
@@ -147,6 +151,7 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 409
+        assert "error" in resp.json()
 
     def test_post_self_loop_422(self):
         with TestClient(app) as client:
@@ -158,6 +163,7 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_dep_flow_not_found_404(self):
         with TestClient(app) as client:
@@ -169,6 +175,7 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -180,6 +187,7 @@ class TestFlowDependencyPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -191,6 +199,7 @@ class TestFlowDependencyPost:
                 json={"to_flow_id": f2},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +242,7 @@ class TestFlowDependencyList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/dependencies", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -240,6 +250,7 @@ class TestFlowDependencyList:
             f1 = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{f1}/dependencies")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +284,7 @@ class TestFlowDependentsList:
             token = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/dependents", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_dependents_requires_auth(self):
         with TestClient(app) as client:
@@ -280,6 +292,7 @@ class TestFlowDependentsList:
             f1 = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{f1}/dependents")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +341,8 @@ class TestFlowDependencyDelete:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert isinstance(data, (dict, list))
 
     def test_delete_404_unknown_dep(self):
         with TestClient(app) as client:
@@ -337,6 +352,7 @@ class TestFlowDependencyDelete:
                 f"/api/v1/flows/{f1}/dependencies/nonexistent", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -345,6 +361,7 @@ class TestFlowDependencyDelete:
                 "/api/v1/flows/nonexistent/dependencies/any-id", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -354,3 +371,4 @@ class TestFlowDependencyDelete:
             dep = _add_dep(client, token, f1, f2)
             resp = client.delete(f"/api/v1/flows/{f1}/dependencies/{dep['id']}")
         assert resp.status_code == 401
+        assert "error" in resp.json()

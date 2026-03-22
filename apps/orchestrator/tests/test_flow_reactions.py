@@ -84,6 +84,8 @@ class TestFlowReactionPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 201
+        data = resp.json()
+        assert data["flow_id"] == flow_id
 
     def test_post_response_shape(self):
         with TestClient(app) as client:
@@ -109,6 +111,7 @@ class TestFlowReactionPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_post_same_emoji_idempotent(self):
         """Reacting with the same emoji twice keeps count at 1."""
@@ -130,6 +133,7 @@ class TestFlowReactionPost:
                 headers=_auth(token),
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_post_requires_auth(self):
         with TestClient(app) as client:
@@ -140,6 +144,7 @@ class TestFlowReactionPost:
                 json={"emoji": "👍"},
             )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +206,7 @@ class TestFlowReactionGet:
             token, _ = _register(client)
             resp = client.get("/api/v1/flows/nonexistent/reactions", headers=_auth(token))
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_get_requires_auth(self):
         with TestClient(app) as client:
@@ -208,6 +214,7 @@ class TestFlowReactionGet:
             flow_id = _create_flow(client, token)
             resp = client.get(f"/api/v1/flows/{flow_id}/reactions")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +252,7 @@ class TestFlowReactionDelete:
                 f"/api/v1/flows/{flow_id}/reactions/👍", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_unsupported_emoji_422(self):
         with TestClient(app) as client:
@@ -254,6 +262,7 @@ class TestFlowReactionDelete:
                 f"/api/v1/flows/{flow_id}/reactions/🐉", headers=_auth(token)
             )
         assert resp.status_code == 422
+        assert "error" in resp.json()
 
     def test_delete_404_unknown_flow(self):
         with TestClient(app) as client:
@@ -262,6 +271,7 @@ class TestFlowReactionDelete:
                 "/api/v1/flows/nonexistent/reactions/👍", headers=_auth(token)
             )
         assert resp.status_code == 404
+        assert "error" in resp.json()
 
     def test_delete_requires_auth(self):
         with TestClient(app) as client:
@@ -270,6 +280,7 @@ class TestFlowReactionDelete:
             _react(client, token, flow_id, "👍")
             resp = client.delete(f"/api/v1/flows/{flow_id}/reactions/👍")
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_two_users_same_emoji_count_two(self):
         """Two distinct users reacting with 👍 yields count 2; deleting one → count 1."""
