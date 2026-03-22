@@ -12731,6 +12731,61 @@ class FlowExecutionHookStore:
 
 flow_execution_hook_store = FlowExecutionHookStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowCustomDomainStore — N-193 Flow Custom Domain
+# ---------------------------------------------------------------------------
+
+
+class FlowCustomDomainStore:
+    """Per-flow custom domain configuration."""
+
+    def __init__(self) -> None:
+        self._domains: dict[str, dict[str, Any]] = {}  # flow_id → record
+        self._domain_index: dict[str, str] = {}  # domain → flow_id (uniqueness)
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, domain: str, enabled: bool) -> dict[str, Any]:
+        with self._lock:
+            # Release old domain mapping if replacing
+            old = self._domains.get(flow_id)
+            if old and old["domain"] != domain:
+                self._domain_index.pop(old["domain"], None)
+            # Check uniqueness across flows
+            existing_flow = self._domain_index.get(domain)
+            if existing_flow and existing_flow != flow_id:
+                raise ValueError(f"Domain '{domain}' is already in use by another flow")
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "domain": domain,
+                "enabled": enabled,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._domains[flow_id] = record
+            self._domain_index[domain] = flow_id
+            return record.copy()
+
+    def get(self, flow_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._domains.get(flow_id)
+            return rec.copy() if rec else None
+
+    def delete(self, flow_id: str) -> bool:
+        with self._lock:
+            rec = self._domains.pop(flow_id, None)
+            if rec:
+                self._domain_index.pop(rec["domain"], None)
+                return True
+            return False
+
+    def reset(self) -> None:
+        with self._lock:
+            self._domains.clear()
+            self._domain_index.clear()
+
+
+flow_custom_domain_store = FlowCustomDomainStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22329,6 +22384,59 @@ async def delete_flow_execution_hook(
     if not deleted:
         raise HTTPException(status_code=404, detail="Execution hook not found")
     return {"deleted": True, "hook_id": hook_id, "flow_id": flow_id}
+
+
+# N-193 Flow Custom Domain — PUT/GET/DELETE /flows/{id}/custom-domain
+# ---------------------------------------------------------------------------
+
+
+class FlowCustomDomainBody(BaseModel):
+    domain: str = Field(..., min_length=3, max_length=253)
+    enabled: bool = True
+
+
+@v1.put("/flows/{flow_id}/custom-domain", tags=["Flows"])
+async def set_flow_custom_domain(
+    flow_id: str,
+    body: FlowCustomDomainBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_custom_domain_store.set(flow_id, body.domain, body.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/custom-domain", tags=["Flows"])
+async def get_flow_custom_domain(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_custom_domain_store.get(flow_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No custom domain configured")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/custom-domain", tags=["Flows"])
+async def delete_flow_custom_domain(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_custom_domain_store.delete(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No custom domain configured")
+    return {"deleted": True, "flow_id": flow_id}
 
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive

@@ -201,6 +201,7 @@
 | N-190 | Flow Notification Channels — POST/GET/DELETE /flows/{id}/notification-channels/{channel_id} (email/slack/webhook/pagerduty, events) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-191 | Flow Feature Flags — PUT/GET/DELETE /flows/{id}/feature-flags/{flag_name} (enabled, rollout_percentage 0-100, description, max 50 per flow) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 | N-192 | Flow Execution Hooks — POST/GET/DELETE /flows/{id}/execution-hooks/{hook_id} (pre_execution/post_execution/on_error, url, event, headers, max 20) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
+| N-193 | Flow Custom Domain — PUT/GET/DELETE /flows/{id}/custom-domain (domain, enabled, global uniqueness enforced) | PLATFORM | SHIPPED | P1 | 2026-03-21 |
 
 ---
 
@@ -3078,4 +3079,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-21 (cycle 92) — N-174–N-192 shipped (19 features); 3,957 backend tests; CI green; OpenAPI spec fixed
+> Last updated: 2026-03-21 (cycle 92) — N-174–N-193 shipped (20 features); 3,978 backend tests; CI green; OpenAPI spec fixed
