@@ -29,6 +29,7 @@ from apps.orchestrator.main import (
     flow_caching_config_store,
     flow_changelog_store,
     flow_circuit_breaker_store,
+    flow_collaborator_role_store,
     flow_collaborator_store,
     flow_concurrency_store,
     flow_contact_store,
@@ -216,6 +217,7 @@ def _reset_all_stores() -> None:
     flow_annotation_store.reset()
     flow_bookmark_store.reset()
     flow_changelog_store.reset()
+    flow_collaborator_role_store.reset()
     flow_collaborator_store.reset()
     flow_custom_domain_store.reset()
     flow_custom_field_store.reset()

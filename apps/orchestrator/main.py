@@ -12895,6 +12895,58 @@ class FlowAuditExportStore:
 
 flow_audit_export_store = FlowAuditExportStore()
 
+
+# ---------------------------------------------------------------------------
+# FlowCollaboratorRoleStore — N-196 Flow Collaborator Roles
+# ---------------------------------------------------------------------------
+
+
+class FlowCollaboratorRoleStore:
+    """Per-flow role assignments (viewer | editor | admin) per user_id."""
+
+    _ALLOWED_ROLES: frozenset[str] = frozenset({"viewer", "editor", "admin"})
+    _MAX_COLLABORATORS: int = 50
+
+    def __init__(self) -> None:
+        self._roles: dict[str, dict[str, dict[str, Any]]] = {}  # flow_id → user_id → record
+        self._lock = threading.Lock()
+
+    def set(self, flow_id: str, user_id: str, role: str) -> dict[str, Any]:
+        if role not in self._ALLOWED_ROLES:
+            raise ValueError(f"role must be one of {sorted(self._ALLOWED_ROLES)}")
+        with self._lock:
+            flow_roles = self._roles.setdefault(flow_id, {})
+            if user_id not in flow_roles and len(flow_roles) >= self._MAX_COLLABORATORS:
+                raise ValueError(f"Maximum {self._MAX_COLLABORATORS} collaborators per flow")
+            record: dict[str, Any] = {
+                "flow_id": flow_id,
+                "user_id": user_id,
+                "role": role,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            flow_roles[user_id] = record
+            return record.copy()
+
+    def get(self, flow_id: str, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            rec = self._roles.get(flow_id, {}).get(user_id)
+            return rec.copy() if rec else None
+
+    def list(self, flow_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [r.copy() for r in self._roles.get(flow_id, {}).values()]
+
+    def delete(self, flow_id: str, user_id: str) -> bool:
+        with self._lock:
+            return self._roles.get(flow_id, {}).pop(user_id, None) is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._roles.clear()
+
+
+flow_collaborator_role_store = FlowCollaboratorRoleStore()
+
 # WorkflowImportService — N-31 Import from External Tools
 # ---------------------------------------------------------------------------
 
@@ -22673,6 +22725,81 @@ async def get_flow_audit_export(
     if record is None or record.get("flow_id") != flow_id:
         raise HTTPException(status_code=404, detail="Export job not found")
     return record
+
+
+# N-196 Flow Collaborator Roles — PUT/GET/DELETE /flows/{id}/collaborator-roles/{user_id}
+# ---------------------------------------------------------------------------
+
+
+class FlowCollaboratorRoleBody(BaseModel):
+    role: str = Field(..., description="viewer | editor | admin")
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        allowed = {"viewer", "editor", "admin"}
+        if v not in allowed:
+            raise ValueError(f"role must be one of {sorted(allowed)}")
+        return v
+
+
+@v1.put("/flows/{flow_id}/collaborator-roles/{user_id}", tags=["Flows"])
+async def set_flow_collaborator_role(
+    flow_id: str,
+    user_id: str,
+    body: FlowCollaboratorRoleBody,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    try:
+        record = flow_collaborator_role_store.set(flow_id, user_id, body.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return record
+
+
+@v1.get("/flows/{flow_id}/collaborator-roles", tags=["Flows"])
+async def list_flow_collaborator_roles(
+    flow_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    roles = flow_collaborator_role_store.list(flow_id)
+    return {"flow_id": flow_id, "collaborators": roles, "total": len(roles)}
+
+
+@v1.get("/flows/{flow_id}/collaborator-roles/{user_id}", tags=["Flows"])
+async def get_flow_collaborator_role(
+    flow_id: str,
+    user_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    record = flow_collaborator_role_store.get(flow_id, user_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Collaborator role not found")
+    return record
+
+
+@v1.delete("/flows/{flow_id}/collaborator-roles/{user_id}", tags=["Flows"])
+async def delete_flow_collaborator_role(
+    flow_id: str,
+    user_id: str,
+    current_user: dict[str, Any] = Depends(get_authenticated_user),
+) -> dict:
+    flow = await FlowRepository.get_by_id(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    deleted = flow_collaborator_role_store.delete(flow_id, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Collaborator role not found")
+    return {"deleted": True, "user_id": user_id, "flow_id": flow_id}
 
 
 # N-135 Flow Archiving — POST/DELETE /flows/{id}/archive
