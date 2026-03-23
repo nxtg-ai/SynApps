@@ -106,9 +106,11 @@ from apps.orchestrator.models import (
 )
 from apps.orchestrator.repositories import (
     AdminKeyRepository,
+    AuditLogRepository,
     FlowRepository,
     FlowTagRepository,
     MarketplaceListingRepository,
+    WorkflowPermissionRepository,
     WorkflowRunRepository,
 )
 from apps.orchestrator.stores import (
@@ -1142,16 +1144,29 @@ async def lifespan(app: FastAPI):
     # Skip for in-memory SQLite (test mode) — concurrent sessions on :memory:
     # each get an isolated database, breaking cross-session visibility.
     import apps.orchestrator.db as _db_mod
-    from apps.orchestrator.stores import admin_key_registry, flow_tag_store, marketplace_registry
+    from apps.orchestrator.stores import (
+        admin_key_registry,
+        audit_log_store,
+        flow_tag_store,
+        marketplace_registry,
+        workflow_permission_store,
+    )
 
     if ":memory:" not in _db_mod.DATABASE_URL:
         flow_tag_store.set_repository(FlowTagRepository)
         admin_key_registry.set_repository(AdminKeyRepository)
         marketplace_registry.set_repository(MarketplaceListingRepository)
+        workflow_permission_store.set_repository(WorkflowPermissionRepository)
+        audit_log_store.set_repository(AuditLogRepository)
         await flow_tag_store.hydrate()
         await admin_key_registry.hydrate()
         await marketplace_registry.hydrate()
-        logger.info("M-2: store hydration complete (flow_tags, admin_keys, marketplace_listings)")
+        await workflow_permission_store.hydrate()
+        await audit_log_store.hydrate()
+        logger.info(
+            "M-2: store hydration complete "
+            "(flow_tags, admin_keys, marketplace_listings, workflow_permissions, audit_log)"
+        )
     # Start background key-expiry watcher
     expiry_task = asyncio.create_task(_key_expiry_watcher())
     await SchedulerService.start()

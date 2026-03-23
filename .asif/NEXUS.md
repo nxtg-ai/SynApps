@@ -3086,4 +3086,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-22 (cycle 97) — **M-2 COMPLETE**: PostgreSQL persistence for FlowTagStore, AdminKeyRegistry, MarketplaceRegistry. Dual-write + startup hydration via injected repositories. Alembic migration a1b2c3d4e5f6 creates flow_tags, admin_keys, marketplace_listings tables. In-memory SQLite test mode skips repo injection (per-connection isolation fix). 4,124 tests pass, 0 failures. ruff clean.
+> Last updated: 2026-03-22 (cycle 97) — **M-2 IN PROGRESS (3/93 stores migrated)**: FlowTagStore, AdminKeyRegistry, MarketplaceRegistry now have DB persistence (dual-write + hydration). Note: FlowRepository (core flows) + WorkflowRunRepository were already persisted since N-06. Next: WorkflowPermissionStore (auth), AuditLogStore (compliance).

@@ -302,6 +302,54 @@ class AdminKey(Base):
         }
 
 
+class WorkflowPermission(Base):
+    """ORM model for per-flow ownership and access grants (M-2 persistence)."""
+
+    __tablename__ = "workflow_permissions"
+
+    flow_id: Mapped[str] = mapped_column(
+        String, ForeignKey("flows.id", ondelete="CASCADE"), primary_key=True
+    )
+    owner_id: Mapped[str] = mapped_column(String, nullable=False)
+    # grants: {user_id: role}  stored as JSON
+    grants: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "flow_id": self.flow_id,
+            "owner_id": self.owner_id,
+            "grants": self.grants or {},
+        }
+
+
+class AuditLogEntry(Base):
+    """ORM model for compliance audit log entries (M-2 persistence)."""
+
+    __tablename__ = "audit_log_entries"
+    __table_args__ = (
+        Index("ix_audit_log_entries_resource", "resource_type", "resource_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    timestamp: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    actor: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
+    resource_id: Mapped[str] = mapped_column(String, nullable=False)
+    detail: Mapped[str] = mapped_column(String, nullable=False, default="")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp,
+            "actor": self.actor,
+            "action": self.action,
+            "resource_type": self.resource_type,
+            "resource_id": self.resource_id,
+            "detail": self.detail,
+        }
+
+
 class MarketplaceListing(Base):
     """ORM model for marketplace / template listings (M-2 persistence)."""
 

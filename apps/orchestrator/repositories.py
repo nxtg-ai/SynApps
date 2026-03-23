@@ -16,11 +16,13 @@ from sqlalchemy.orm import selectinload
 from apps.orchestrator.db import get_db_session
 from apps.orchestrator.models import (
     AdminKey,
+    AuditLogEntry,
     Flow,
     FlowEdge,
     FlowNode,
     FlowTag,
     MarketplaceListing,
+    WorkflowPermission,
     WorkflowRun,
 )
 
@@ -446,5 +448,94 @@ class MarketplaceListingRepository:
                     MarketplaceListing.published_at.desc(),
                 )
                 .limit(10)
+            )
+            return [r.to_dict() for r in result.scalars().all()]
+
+
+class WorkflowPermissionRepository:
+    """Async repository for WorkflowPermission persistence (M-2)."""
+
+    @staticmethod
+    async def upsert(flow_id: str, owner_id: str, grants: dict[str, str]) -> None:
+        """Insert or update the permission record for a flow."""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(WorkflowPermission).where(WorkflowPermission.flow_id == flow_id)
+            )
+            row = result.scalars().first()
+            if row:
+                row.owner_id = owner_id
+                row.grants = grants
+            else:
+                session.add(
+                    WorkflowPermission(flow_id=flow_id, owner_id=owner_id, grants=grants)
+                )
+            await session.commit()
+
+    @staticmethod
+    async def get(flow_id: str) -> dict[str, Any] | None:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(WorkflowPermission).where(WorkflowPermission.flow_id == flow_id)
+            )
+            row = result.scalars().first()
+            return row.to_dict() if row else None
+
+    @staticmethod
+    async def delete(flow_id: str) -> None:
+        async with get_db_session() as session:
+            await session.execute(
+                delete(WorkflowPermission).where(WorkflowPermission.flow_id == flow_id)
+            )
+            await session.commit()
+
+    @staticmethod
+    async def list_all() -> list[dict[str, Any]]:
+        """Return all permission records (used for store hydration)."""
+        async with get_db_session() as session:
+            result = await session.execute(select(WorkflowPermission))
+            return [r.to_dict() for r in result.scalars().all()]
+
+
+class AuditLogRepository:
+    """Async repository for AuditLogEntry persistence (M-2)."""
+
+    @staticmethod
+    async def append(entry: dict[str, Any]) -> None:
+        """Insert one audit log entry."""
+        async with get_db_session() as session:
+            session.add(
+                AuditLogEntry(
+                    id=entry["id"],
+                    timestamp=entry["timestamp"],
+                    actor=entry["actor"],
+                    action=entry["action"],
+                    resource_type=entry["resource_type"],
+                    resource_id=entry["resource_id"],
+                    detail=entry.get("detail", ""),
+                )
+            )
+            await session.commit()
+
+    @staticmethod
+    async def purge_before(cutoff_timestamp: str) -> int:
+        """Delete entries with timestamp < cutoff. Returns count deleted."""
+        async with get_db_session() as session:
+            result = await session.execute(
+                delete(AuditLogEntry)
+                .where(AuditLogEntry.timestamp < cutoff_timestamp)
+                .returning(AuditLogEntry.id)
+            )
+            await session.commit()
+            return result.rowcount
+
+    @staticmethod
+    async def list_all(max_entries: int = 50_000) -> list[dict[str, Any]]:
+        """Return all audit log entries in chronological order (used for hydration)."""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(AuditLogEntry)
+                .order_by(AuditLogEntry.timestamp.asc())
+                .limit(max_entries)
             )
             return [r.to_dict() for r in result.scalars().all()]

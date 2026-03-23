@@ -1502,12 +1502,48 @@ class WorkflowPermissionStore:
     Backwards compatible: if no permissions are set for a flow, all access is
     allowed (open). Permissions are set when a flow is created with an
     authenticated user.
+
+    M-2: Supports DB persistence via an injected repository.
+    Call ``set_repository(WorkflowPermissionRepository)`` during app startup,
+    then ``await hydrate()`` to load existing permissions from the database.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         # flow_id → {"owner": str, "grants": {user_id: role}}
         self._perms: dict[str, dict[str, Any]] = {}
+        self._repo: Any = None  # injected at startup
+
+    def set_repository(self, repo: Any) -> None:
+        """Inject the DB repository. Called once during app lifespan startup."""
+        self._repo = repo
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        """Schedule a DB write coroutine if an event loop is running; no-op otherwise."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(coro)
+            # In sync unit-test context (no running loop): in-memory only, intentional
+        except RuntimeError:
+            pass
+
+    async def hydrate(self) -> None:
+        """Load all permissions from DB into the in-memory store (called at startup)."""
+        if self._repo is None:
+            return
+        try:
+            rows = await self._repo.list_all()
+            with self._lock:
+                for row in rows:
+                    self._perms[row["flow_id"]] = {
+                        "owner": row["owner_id"],
+                        "grants": row["grants"] or {},
+                    }
+        except Exception as exc:
+            logging.getLogger("orchestrator").warning(
+                "WorkflowPermissionStore.hydrate failed: %s", exc
+            )
 
     def set_owner(self, flow_id: str, user_id: str) -> None:
         with self._lock:
@@ -1515,16 +1551,33 @@ class WorkflowPermissionStore:
                 self._perms[flow_id] = {"owner": user_id, "grants": {}}
             else:
                 self._perms[flow_id]["owner"] = user_id
+            current = self._perms[flow_id]
+        if self._repo is not None:
+            self._fire_and_forget(
+                self._repo.upsert(flow_id, current["owner"], dict(current["grants"]))
+            )
 
     def grant(self, flow_id: str, user_id: str, role: str) -> None:
         with self._lock:
-            if flow_id in self._perms:
-                self._perms[flow_id]["grants"][user_id] = role
+            if flow_id not in self._perms:
+                return
+            self._perms[flow_id]["grants"][user_id] = role
+            current = self._perms[flow_id]
+        if self._repo is not None:
+            self._fire_and_forget(
+                self._repo.upsert(flow_id, current["owner"], dict(current["grants"]))
+            )
 
     def revoke(self, flow_id: str, user_id: str) -> None:
         with self._lock:
-            if flow_id in self._perms:
-                self._perms[flow_id]["grants"].pop(user_id, None)
+            if flow_id not in self._perms:
+                return
+            self._perms[flow_id]["grants"].pop(user_id, None)
+            current = self._perms[flow_id]
+        if self._repo is not None:
+            self._fire_and_forget(
+                self._repo.upsert(flow_id, current["owner"], dict(current["grants"]))
+            )
 
     def get_role(self, flow_id: str, user_id: str) -> str | None:
         """Return role for user: 'owner', 'editor', 'viewer', or None."""
@@ -1550,6 +1603,8 @@ class WorkflowPermissionStore:
     def delete(self, flow_id: str) -> None:
         with self._lock:
             self._perms.pop(flow_id, None)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.delete(flow_id))
 
     def reset(self) -> None:
         with self._lock:
@@ -1562,12 +1617,44 @@ class AuditLogStore:
 
     Records every workflow edit, execution, and permission change with
     timestamp, actor, action, resource type, and resource ID.
+
+    M-2: Supports DB persistence via an injected repository.
+    Call ``set_repository(AuditLogRepository)`` during app startup, then
+    ``await hydrate()`` to load existing entries from the database.
     """
 
     def __init__(self, retention_days: int = 90) -> None:
         self._lock = threading.Lock()
         self._entries: list[dict[str, Any]] = []
         self._retention_days = retention_days
+        self._repo: Any = None  # injected at startup
+
+    def set_repository(self, repo: Any) -> None:
+        """Inject the DB repository. Called once during app lifespan startup."""
+        self._repo = repo
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        """Schedule a DB write coroutine if an event loop is running; no-op otherwise."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(coro)
+            # In sync unit-test context (no running loop): in-memory only, intentional
+        except RuntimeError:
+            pass
+
+    async def hydrate(self) -> None:
+        """Load all audit entries from DB into the in-memory store (called at startup)."""
+        if self._repo is None:
+            return
+        try:
+            rows = await self._repo.list_all()
+            with self._lock:
+                self._entries = rows
+        except Exception as exc:
+            logging.getLogger("orchestrator").warning(
+                "AuditLogStore.hydrate failed: %s", exc
+            )
 
     def record(
         self,
@@ -1588,6 +1675,8 @@ class AuditLogStore:
         }
         with self._lock:
             self._entries.append(entry)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.append(entry))
         return entry
 
     def query(
@@ -1629,7 +1718,10 @@ class AuditLogStore:
         with self._lock:
             before = len(self._entries)
             self._entries = [e for e in self._entries if e["timestamp"] >= cutoff]
-            return before - len(self._entries)
+            deleted = before - len(self._entries)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.purge_before(cutoff))
+        return deleted
 
     def count(self) -> int:
         with self._lock:
