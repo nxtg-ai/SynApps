@@ -262,7 +262,7 @@ const CreditsPage: React.FC = () => {
         </div>
 
         {/* Per-listing breakdown */}
-        {report && report.per_listing.length > 0 && (
+        {report && report.per_listing?.length > 0 && (
           <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
             <h2 className="mb-4 text-lg font-semibold text-white">Per-Listing Breakdown</h2>
             <table className="w-full text-left text-sm">
