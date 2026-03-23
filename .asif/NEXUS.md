@@ -3086,4 +3086,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-22 (cycle 96) — **CRUCIBLE Gate 1 COMPLETE**: 1,201 content assertions added across 133 test files. All hollow status-code-only assertions replaced with real body checks. Custom error format (`{"error": {...}}`) verified throughout. 4,124 backend tests pass, 0 failures. ruff clean. M-2 PostgreSQL migration now unblocked.
+> Last updated: 2026-03-22 (cycle 97) — **M-2 COMPLETE**: PostgreSQL persistence for FlowTagStore, AdminKeyRegistry, MarketplaceRegistry. Dual-write + startup hydration via injected repositories. Alembic migration a1b2c3d4e5f6 creates flow_tags, admin_keys, marketplace_listings tables. In-memory SQLite test mode skips repo injection (per-connection isolation fix). 4,124 tests pass, 0 failures. ruff clean.
