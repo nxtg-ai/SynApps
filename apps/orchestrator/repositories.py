@@ -4,16 +4,25 @@ Repository classes for database operations.
 This module provides repository classes that handle database operations for the various models.
 """
 
+import hashlib
 import logging
 import time
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import selectinload
 
 from apps.orchestrator.db import get_db_session
-from apps.orchestrator.models import Flow, FlowEdge, FlowNode, WorkflowRun
+from apps.orchestrator.models import (
+    AdminKey,
+    Flow,
+    FlowEdge,
+    FlowNode,
+    FlowTag,
+    MarketplaceListing,
+    WorkflowRun,
+)
 
 # Configure logging
 logger = logging.getLogger("repositories")
@@ -159,3 +168,283 @@ class WorkflowRunRepository:
             result = await session.execute(select(WorkflowRun))
             runs = result.scalars().all()
             return [run.to_dict() for run in runs]
+
+
+class FlowTagRepository:
+    """Async repository for FlowTag persistence (M-2)."""
+
+    @staticmethod
+    async def add(flow_id: str, tag: str) -> None:
+        """Add a tag to a flow; no-op if already exists."""
+        tag = tag.strip().lower()
+        async with get_db_session() as session:
+            exists = await session.execute(
+                select(FlowTag).where(FlowTag.flow_id == flow_id, FlowTag.tag == tag)
+            )
+            if not exists.scalars().first():
+                session.add(FlowTag(flow_id=flow_id, tag=tag))
+                await session.commit()
+
+    @staticmethod
+    async def remove(flow_id: str, tag: str) -> bool:
+        """Remove a tag from a flow. Returns True if the tag existed."""
+        tag = tag.strip().lower()
+        async with get_db_session() as session:
+            result = await session.execute(
+                delete(FlowTag)
+                .where(FlowTag.flow_id == flow_id, FlowTag.tag == tag)
+                .returning(FlowTag.tag)
+            )
+            await session.commit()
+            return result.rowcount > 0
+
+    @staticmethod
+    async def get(flow_id: str) -> list[str]:
+        """Return sorted list of tags for a flow."""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(FlowTag.tag).where(FlowTag.flow_id == flow_id).order_by(FlowTag.tag)
+            )
+            return list(result.scalars().all())
+
+    @staticmethod
+    async def delete_flow(flow_id: str) -> None:
+        """Remove all tags for a flow (called on flow deletion)."""
+        async with get_db_session() as session:
+            await session.execute(delete(FlowTag).where(FlowTag.flow_id == flow_id))
+            await session.commit()
+
+    @staticmethod
+    async def list_all() -> list[dict[str, Any]]:
+        """Return all flow-tag pairs (used for store hydration)."""
+        async with get_db_session() as session:
+            result = await session.execute(select(FlowTag))
+            return [r.to_dict() for r in result.scalars().all()]
+
+
+class AdminKeyRepository:
+    """Async repository for AdminKey persistence (M-2)."""
+
+    @staticmethod
+    def _hash_key(plain_key: str) -> str:
+        return hashlib.sha256(plain_key.encode()).hexdigest()
+
+    @staticmethod
+    async def create(key_data: dict[str, Any], plain_key: str) -> dict[str, Any]:
+        """Persist a new admin key. plain_key is hashed before storage."""
+        async with get_db_session() as session:
+            row = AdminKey(
+                id=key_data["id"],
+                name=key_data["name"],
+                key_prefix=key_data["key_prefix"],
+                key_hash=AdminKeyRepository._hash_key(plain_key),
+                scopes=key_data.get("scopes", ["read", "write"]),
+                rate_limit=key_data.get("rate_limit"),
+                is_active=key_data.get("is_active", True),
+                created_at=key_data.get("created_at", time.time()),
+                last_used_at=key_data.get("last_used_at"),
+                expires_at=key_data.get("expires_at"),
+            )
+            session.add(row)
+            await session.commit()
+            return row.to_dict()
+
+    @staticmethod
+    async def get(key_id: str) -> dict[str, Any] | None:
+        async with get_db_session() as session:
+            result = await session.execute(select(AdminKey).where(AdminKey.id == key_id))
+            row = result.scalars().first()
+            return row.to_dict() if row else None
+
+    @staticmethod
+    async def list_keys() -> list[dict[str, Any]]:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(AdminKey).where(AdminKey.is_active == True).order_by(AdminKey.created_at)  # noqa: E712
+            )
+            return [r.to_dict() for r in result.scalars().all()]
+
+    @staticmethod
+    async def revoke(key_id: str) -> bool:
+        async with get_db_session() as session:
+            result = await session.execute(
+                update(AdminKey)
+                .where(AdminKey.id == key_id)
+                .values(is_active=False)
+                .returning(AdminKey.id)
+            )
+            await session.commit()
+            return result.rowcount > 0
+
+    @staticmethod
+    async def delete(key_id: str) -> bool:
+        async with get_db_session() as session:
+            result = await session.execute(
+                delete(AdminKey).where(AdminKey.id == key_id).returning(AdminKey.id)
+            )
+            await session.commit()
+            return result.rowcount > 0
+
+    @staticmethod
+    async def touch_last_used(key_id: str) -> None:
+        async with get_db_session() as session:
+            await session.execute(
+                update(AdminKey).where(AdminKey.id == key_id).values(last_used_at=time.time())
+            )
+            await session.commit()
+
+    @staticmethod
+    async def validate_key(plain_key: str) -> dict[str, Any] | None:
+        """Look up an active key by prefix then verify the hash."""
+        if not plain_key.startswith("sk-"):
+            return None
+        prefix = plain_key[:12]
+        key_hash = AdminKeyRepository._hash_key(plain_key)
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(AdminKey).where(
+                    AdminKey.key_prefix == prefix,
+                    AdminKey.key_hash == key_hash,
+                    AdminKey.is_active == True,  # noqa: E712
+                )
+            )
+            row = result.scalars().first()
+            return row.to_dict() if row else None
+
+    @staticmethod
+    async def list_all() -> list[dict[str, Any]]:
+        """Return all admin keys (used for store hydration)."""
+        async with get_db_session() as session:
+            result = await session.execute(select(AdminKey))
+            return [r.to_dict() for r in result.scalars().all()]
+
+
+class MarketplaceListingRepository:
+    """Async repository for MarketplaceListing persistence (M-2)."""
+
+    @staticmethod
+    async def publish(data: dict[str, Any]) -> dict[str, Any]:
+        """Insert or update a marketplace listing."""
+        async with get_db_session() as session:
+            listing_id = data.get("id") or str(uuid.uuid4())
+            result = await session.execute(
+                select(MarketplaceListing).where(MarketplaceListing.id == listing_id)
+            )
+            row = result.scalars().first()
+            if row:
+                for field in [
+                    "name", "description", "category", "tags", "author",
+                    "publisher_id", "nodes", "edges", "featured",
+                ]:
+                    if field in data:
+                        setattr(row, field, data[field])
+            else:
+                row = MarketplaceListing(
+                    id=listing_id,
+                    name=data.get("name", "Untitled"),
+                    description=data.get("description", ""),
+                    category=data.get("category", "general"),
+                    tags=data.get("tags", []),
+                    author=data.get("author", "anonymous"),
+                    publisher_id=data.get("publisher_id"),
+                    nodes=data.get("nodes", []),
+                    edges=data.get("edges", []),
+                    install_count=data.get("install_count", 0),
+                    install_timestamps=data.get("install_timestamps", []),
+                    featured=data.get("featured", False),
+                    published_at=data.get("published_at", time.time()),
+                    is_builtin=data.get("is_builtin", False),
+                )
+                session.add(row)
+            await session.commit()
+            return row.to_dict()
+
+    @staticmethod
+    async def get(listing_id: str) -> dict[str, Any] | None:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(MarketplaceListing).where(MarketplaceListing.id == listing_id)
+            )
+            row = result.scalars().first()
+            return row.to_dict() if row else None
+
+    @staticmethod
+    async def list_all() -> list[dict[str, Any]]:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(MarketplaceListing).order_by(MarketplaceListing.published_at.desc())
+            )
+            return [r.to_dict() for r in result.scalars().all()]
+
+    @staticmethod
+    async def search(
+        q: str = "",
+        category: str = "",
+        tags: list[str] | None = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Search listings; returns (results, total_count)."""
+        async with get_db_session() as session:
+            stmt = select(MarketplaceListing)
+            if q:
+                q_lower = f"%{q.lower()}%"
+                stmt = stmt.where(
+                    or_(
+                        func.lower(MarketplaceListing.name).like(q_lower),
+                        func.lower(MarketplaceListing.description).like(q_lower),
+                    )
+                )
+            if category:
+                stmt = stmt.where(
+                    func.lower(MarketplaceListing.category) == category.lower()
+                )
+            # Total count
+            count_result = await session.execute(
+                select(func.count()).select_from(stmt.subquery())
+            )
+            total = count_result.scalar() or 0
+            # Paginate
+            stmt = (
+                stmt.order_by(
+                    MarketplaceListing.featured.desc(),
+                    MarketplaceListing.install_count.desc(),
+                    MarketplaceListing.published_at.desc(),
+                )
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            # Filter by tags (JSON column — done in Python for SQLite compat)
+            if tags:
+                tag_set = {t.lower() for t in tags}
+                rows = [r for r in rows if tag_set.issubset({t.lower() for t in (r.tags or [])})]
+            return [r.to_dict() for r in rows], total
+
+    @staticmethod
+    async def increment_install(listing_id: str, ts: float) -> bool:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(MarketplaceListing).where(MarketplaceListing.id == listing_id)
+            )
+            row = result.scalars().first()
+            if not row:
+                return False
+            row.install_count += 1
+            row.install_timestamps = list(row.install_timestamps or []) + [ts]
+            await session.commit()
+            return True
+
+    @staticmethod
+    async def featured() -> list[dict[str, Any]]:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(MarketplaceListing)
+                .order_by(
+                    MarketplaceListing.install_count.desc(),
+                    MarketplaceListing.published_at.desc(),
+                )
+                .limit(10)
+            )
+            return [r.to_dict() for r in result.scalars().all()]

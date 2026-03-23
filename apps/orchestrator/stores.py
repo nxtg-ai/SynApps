@@ -1049,11 +1049,55 @@ task_queue = TaskQueue()
 
 
 class AdminKeyRegistry:
-    """In-memory admin API key store, protected by master key."""
+    """In-memory admin API key store, protected by master key.
+
+    M-2: Supports DB persistence via an injected repository.
+    Call ``set_repository(AdminKeyRepository)`` during app startup, then
+    ``await hydrate()`` to load existing keys from the database.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._keys: dict[str, dict[str, Any]] = {}  # id -> key data
+        self._repo: Any = None  # injected at startup (AdminKeyRepository)
+
+    def set_repository(self, repo: Any) -> None:
+        """Inject the DB repository. Called once during app lifespan startup."""
+        self._repo = repo
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        """Schedule a DB write coroutine if an event loop is running; no-op otherwise."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(coro)
+            # In sync unit-test context (no running loop): in-memory only, intentional
+        except RuntimeError:
+            pass
+
+    async def hydrate(self) -> None:
+        """Load all admin keys from DB into the in-memory store (called at startup)."""
+        if self._repo is None:
+            return
+        try:
+            rows = await self._repo.list_all()
+            with self._lock:
+                for r in rows:
+                    # Re-hydrate without _plain_key (hashed in DB; plain key is not recoverable)
+                    self._keys[r["id"]] = {
+                        "id": r["id"],
+                        "name": r["name"],
+                        "key_prefix": r["key_prefix"],
+                        "scopes": r.get("scopes", []),
+                        "rate_limit": r.get("rate_limit"),
+                        "is_active": r.get("is_active", True),
+                        "created_at": r.get("created_at", 0.0),
+                        "last_used_at": r.get("last_used_at"),
+                        "expires_at": r.get("expires_at"),
+                        # _plain_key intentionally omitted — hash-only in DB
+                    }
+        except Exception as exc:
+            logging.getLogger("orchestrator").warning("AdminKeyRegistry.hydrate failed: %s", exc)
 
     def create(
         self,
@@ -1076,6 +1120,8 @@ class AdminKeyRegistry:
         }
         with self._lock:
             self._keys[key_id] = {**entry, "_plain_key": plain_key}
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.create(entry, plain_key))
         return {**entry, "api_key": plain_key}
 
     def get(self, key_id: str) -> dict[str, Any] | None:
@@ -1097,11 +1143,16 @@ class AdminKeyRegistry:
             if not k:
                 return False
             k["is_active"] = False
-            return True
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.revoke(key_id))
+        return True
 
     def delete(self, key_id: str) -> bool:
         with self._lock:
-            return self._keys.pop(key_id, None) is not None
+            existed = self._keys.pop(key_id, None) is not None
+        if existed and self._repo is not None:
+            self._fire_and_forget(self._repo.delete(key_id))
+        return existed
 
     def validate_key(self, plain_key: str) -> dict[str, Any] | None:
         """Validate a plain API key and return its data if active."""
@@ -1591,24 +1642,62 @@ audit_log_store = AuditLogStore(retention_days=int(os.getenv("AUDIT_LOG_RETENTIO
 
 
 class FlowTagStore:
-    """In-memory store for flow tags. Each flow has a set of string tags."""
+    """In-memory store for flow tags. Each flow has a set of string tags.
+
+    M-2: Supports DB persistence via an injected repository.
+    Call ``set_repository(FlowTagRepository)`` during app startup, then
+    ``await hydrate()`` to load existing tags from the database.
+    """
 
     def __init__(self) -> None:
         self._tags: dict[str, set[str]] = {}
         self._lock = threading.Lock()
+        self._repo: Any = None  # injected at startup (FlowTagRepository)
+
+    def set_repository(self, repo: Any) -> None:
+        """Inject the DB repository. Called once during app lifespan startup."""
+        self._repo = repo
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        """Schedule a DB write coroutine if an event loop is running; no-op otherwise."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(coro)
+            # In sync unit-test context (no running loop): in-memory only, intentional
+        except RuntimeError:
+            pass
+
+    async def hydrate(self) -> None:
+        """Load all flow tags from DB into the in-memory store (called at startup)."""
+        if self._repo is None:
+            return
+        try:
+            pairs = await self._repo.list_all()
+            with self._lock:
+                for p in pairs:
+                    self._tags.setdefault(p["flow_id"], set()).add(p["tag"])
+        except Exception as exc:
+            logging.getLogger("orchestrator").warning("FlowTagStore.hydrate failed: %s", exc)
 
     def add(self, flow_id: str, tag: str) -> None:
+        tag = tag.lower().strip()
         with self._lock:
-            self._tags.setdefault(flow_id, set()).add(tag.lower().strip())
+            self._tags.setdefault(flow_id, set()).add(tag)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.add(flow_id, tag))
 
     def remove(self, flow_id: str, tag: str) -> bool:
         """Returns True if the tag existed and was removed."""
+        tag = tag.lower().strip()
         with self._lock:
             tags = self._tags.get(flow_id, set())
-            if tag.lower().strip() in tags:
-                tags.discard(tag.lower().strip())
-                return True
-            return False
+            if tag not in tags:
+                return False
+            tags.discard(tag)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.remove(flow_id, tag))
+        return True
 
     def get(self, flow_id: str) -> list[str]:
         with self._lock:
@@ -1617,6 +1706,8 @@ class FlowTagStore:
     def delete_flow(self, flow_id: str) -> None:
         with self._lock:
             self._tags.pop(flow_id, None)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.delete_flow(flow_id))
 
     def reset(self) -> None:
         with self._lock:
@@ -5135,11 +5226,43 @@ template_registry = TemplateRegistry()
 
 
 class MarketplaceRegistry:
-    """Thread-safe in-memory store for marketplace listings."""
+    """Thread-safe in-memory store for marketplace listings.
+
+    M-2: Supports DB persistence via an injected repository.
+    Call ``set_repository(MarketplaceListingRepository)`` during app startup,
+    then ``await hydrate()`` to load existing listings from the database.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._listings: dict[str, dict[str, Any]] = {}
+        self._repo: Any = None  # injected at startup (MarketplaceListingRepository)
+
+    def set_repository(self, repo: Any) -> None:
+        """Inject the DB repository. Called once during app lifespan startup."""
+        self._repo = repo
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        """Schedule a DB write coroutine if an event loop is running; no-op otherwise."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(coro)
+            # In sync unit-test context (no running loop): in-memory only, intentional
+        except RuntimeError:
+            pass
+
+    async def hydrate(self) -> None:
+        """Load all listings from DB into the in-memory store (called at startup)."""
+        if self._repo is None:
+            return
+        try:
+            rows = await self._repo.list_all()
+            with self._lock:
+                for r in rows:
+                    self._listings[r["id"]] = r
+        except Exception as exc:
+            logging.getLogger("orchestrator").warning("MarketplaceRegistry.hydrate failed: %s", exc)
 
     def publish(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a new marketplace listing. Raises ValueError on ID collision."""
@@ -5163,6 +5286,8 @@ class MarketplaceRegistry:
             if listing_id in self._listings:
                 raise ValueError(f"Listing ID '{listing_id}' already exists")
             self._listings[listing_id] = entry
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.publish(entry))
         return entry
 
     def search(
@@ -5221,13 +5346,16 @@ class MarketplaceRegistry:
 
     def increment_install(self, listing_id: str) -> bool:
         """Increment install_count for a listing. Returns False if not found."""
+        ts = time.time()
         with self._lock:
             listing = self._listings.get(listing_id)
             if listing is None:
                 return False
             listing["install_count"] += 1
-            listing.setdefault("install_timestamps", []).append(time.time())
-            return True
+            listing.setdefault("install_timestamps", []).append(ts)
+        if self._repo is not None:
+            self._fire_and_forget(self._repo.increment_install(listing_id, ts))
+        return True
 
     def get_install_timestamps(self, listing_id: str) -> list[float]:
         """Return the list of install timestamps for a listing."""

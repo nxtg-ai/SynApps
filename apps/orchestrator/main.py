@@ -104,7 +104,13 @@ from apps.orchestrator.models import (
 from apps.orchestrator.models import (
     UserAPIKey as AuthUserAPIKey,
 )
-from apps.orchestrator.repositories import FlowRepository, WorkflowRunRepository
+from apps.orchestrator.repositories import (
+    AdminKeyRepository,
+    FlowRepository,
+    FlowTagRepository,
+    MarketplaceListingRepository,
+    WorkflowRunRepository,
+)
 from apps.orchestrator.stores import (
     ConnectorError,
     ConnectorStatus,
@@ -1132,6 +1138,20 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database initialization complete")
+    # M-2: Inject DB repositories into stores for dual-write + hydration.
+    # Skip for in-memory SQLite (test mode) — concurrent sessions on :memory:
+    # each get an isolated database, breaking cross-session visibility.
+    import apps.orchestrator.db as _db_mod
+    from apps.orchestrator.stores import admin_key_registry, flow_tag_store, marketplace_registry
+
+    if ":memory:" not in _db_mod.DATABASE_URL:
+        flow_tag_store.set_repository(FlowTagRepository)
+        admin_key_registry.set_repository(AdminKeyRepository)
+        marketplace_registry.set_repository(MarketplaceListingRepository)
+        await flow_tag_store.hydrate()
+        await admin_key_registry.hydrate()
+        await marketplace_registry.hydrate()
+        logger.info("M-2: store hydration complete (flow_tags, admin_keys, marketplace_listings)")
     # Start background key-expiry watcher
     expiry_task = asyncio.create_task(_key_expiry_watcher())
     await SchedulerService.start()

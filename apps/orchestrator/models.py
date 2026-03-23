@@ -11,7 +11,17 @@ import time
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    Text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -242,6 +252,97 @@ class WorkflowRun(Base):
             "error_details": self.error_details or {},
             "input_data": self.input_data,
             "completed_applets": self.completed_applets or [],
+        }
+
+
+class FlowTag(Base):
+    """ORM model for flow tags (M-2 persistence)."""
+
+    __tablename__ = "flow_tags"
+    __table_args__ = (PrimaryKeyConstraint("flow_id", "tag"),)
+
+    flow_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("flows.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tag: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"flow_id": self.flow_id, "tag": self.tag}
+
+
+class AdminKey(Base):
+    """ORM model for system-level admin API keys (M-2 persistence)."""
+
+    __tablename__ = "admin_keys"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String, nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    rate_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[float] = mapped_column(Float, nullable=False)
+    last_used_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "key_prefix": self.key_prefix,
+            "scopes": self.scopes or [],
+            "rate_limit": self.rate_limit,
+            "is_active": self.is_active,
+            "created_at": self.created_at,
+            "last_used_at": self.last_used_at,
+            "expires_at": self.expires_at,
+        }
+
+
+class MarketplaceListing(Base):
+    """ORM model for marketplace / template listings (M-2 persistence)."""
+
+    __tablename__ = "marketplace_listings"
+    __table_args__ = (Index("ix_marketplace_listings_category", "category"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    author: Mapped[str] = mapped_column(String, nullable=False, default="anonymous")
+    publisher_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    nodes: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    edges: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    install_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    install_timestamps: Mapped[list[float]] = mapped_column(JSON, nullable=False, default=list)
+    featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    published_at: Mapped[float] = mapped_column(Float, nullable=False)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "tags": self.tags or [],
+            "author": self.author,
+            "publisher_id": self.publisher_id,
+            "nodes": self.nodes or [],
+            "edges": self.edges or [],
+            "install_count": self.install_count,
+            "install_timestamps": self.install_timestamps or [],
+            "featured": self.featured,
+            "published_at": self.published_at,
+            "is_builtin": self.is_builtin,
         }
 
 
