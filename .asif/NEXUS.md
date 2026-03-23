@@ -3086,4 +3086,4 @@ python -c "from apps.orchestrator.main import app; import json; open('docs/opena
 
 ---
 
-> Last updated: 2026-03-22 (cycle 97) — **M-2 IN PROGRESS (3/93 stores migrated)**: FlowTagStore, AdminKeyRegistry, MarketplaceRegistry now have DB persistence (dual-write + hydration). Note: FlowRepository (core flows) + WorkflowRunRepository were already persisted since N-06. Next: WorkflowPermissionStore (auth), AuditLogStore (compliance).
+> Last updated: 2026-03-23 (cycle 98) — **M-2 IN PROGRESS (5/93 stores migrated)**: FlowTagStore, AdminKeyRegistry, MarketplaceRegistry, WorkflowPermissionStore, AuditLogStore now have dual-write + startup hydration. FlowRepository + WorkflowRunRepository were already persisted since N-06. 4,124 tests pass. Pushed to master.
